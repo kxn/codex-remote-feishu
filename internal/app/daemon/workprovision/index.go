@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -26,6 +27,23 @@ func (s *Service) index(ctx context.Context, state snapshot) (HomeIndex, error) 
 		}
 		result.ProjectName = project.Name
 		result.ProjectState = project.State
+		team, err := tx.GetTeam(project.TeamID)
+		if err != nil && !errors.Is(err, workstore.ErrNotFound) {
+			return err
+		}
+		if team.Materials != nil && team.Materials.State == "ready" && team.Materials.URL != "" {
+			channel, err := tx.GetProjectChannelBinding(state.request.Tenant, state.request.ChatID)
+			if err != nil {
+				return err
+			}
+			allowed, err := tx.TeamMaterialsProjectAllowed(team, channel)
+			if err != nil {
+				return err
+			}
+			if allowed {
+				result.Resources = append(result.Resources, HomeResource{Label: "团队共享资料（原件）", URL: team.Materials.URL})
+			}
+		}
 		members, err := tx.ListProjectMembers(project.ID)
 		if err != nil {
 			return err

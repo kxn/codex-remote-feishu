@@ -147,6 +147,20 @@ func (t *Tx) GetWorker(id string) (work.WorkerSession, error) {
 	err := t.read("workers", id, &v)
 	return v, err
 }
+
+func (t *Tx) CurrentContextWorker(contextID string) (work.WorkerSession, error) {
+	workers, err := listRecords[work.WorkerSession](t, "workers", " WHERE context_id=? AND state<>'retired'", contextID)
+	if err != nil {
+		return work.WorkerSession{}, err
+	}
+	if len(workers) == 0 {
+		return work.WorkerSession{}, ErrNotFound
+	}
+	if len(workers) != 1 {
+		return work.WorkerSession{}, fmt.Errorf("work context has multiple current workers")
+	}
+	return workers[0], nil
+}
 func (t *Tx) ListWorkers(scopeID string) ([]work.WorkerSession, error) {
 	return listRecords[work.WorkerSession](t, "workers", " WHERE scope_id=?", scopeID)
 }
@@ -192,6 +206,11 @@ func (t *Tx) putTask(v work.Task, expected int64) error {
 		if v.RequirementsRevision != want {
 			return fmt.Errorf("requirements revision must reflect semantic changes")
 		}
+		if changed || v.AssignmentGeneration != old.AssignmentGeneration || (old.State != v.State && v.State != work.TaskWaiting) {
+			if err = t.checkTaskParticipation(old, v); err != nil {
+				return err
+			}
+		}
 		if changed || v.AssignmentGeneration != old.AssignmentGeneration {
 			if err = t.invalidateDependentConclusions(v.ID, old.RequirementsRevision, old.AssignmentGeneration, v.UpdatedAt); err != nil {
 				return err
@@ -216,6 +235,11 @@ func (t *Tx) putTask(v work.Task, expected int64) error {
 	}
 	if err := t.record("tasks", v.ID, v.Revision, expected, v); err != nil {
 		return err
+	}
+	if expected > 0 {
+		if err := t.refreshTaskParticipation(v); err != nil {
+			return err
+		}
 	}
 	_, err := t.tx.ExecContext(t.ctx, "INSERT INTO task_requirements(task_id,requirements_revision,payload) VALUES(?,?,?) ON CONFLICT(task_id,requirements_revision) DO NOTHING", v.ID, v.RequirementsRevision, mustJSON(v))
 	return err

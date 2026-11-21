@@ -159,3 +159,48 @@ Codex 维护入口新鲜 UI 验证见 `/tmp/team-upgrade-ui-tests-second.log` �
 资料恢复最终六包完整普通／race 验证分别见 `/tmp/team-resource-recovery-final-six-normal.log` 与 `/tmp/team-resource-recovery-final-six-race.log`。它们覆盖四类写入的实际 UI→读取→真人确认→归档、伪造或过期证明拒绝、正常在途调用不出恢复卡、重开与迟到结果、纯读遗留以及飞书卡片大小上限。全部子 Agent 已停止写入，主代理对冻结代码再次运行全仓测试和完整 Windows 构建，均通过。
 
 提交检查使用 `scripts/check/pre-commit.sh`；其有效树哈希保存在仓库 Git 元数据的 `codex-remote/pre-commit-tree`，仅对同一提交树有效。提交和推送按 `safe-push` 执行，最终提交标识与远端同步状态以 Git 分支为准。
+
+### 独立复核后的完整修复（2026-11-21）
+
+本轮复核暴露九项缺陷及三项设计缺口，先前“通过”仅代表当时测试基线，不代表以下场景已闭环。修复依原产品合同，不缩小范围：
+
+| 工作包 | 范围 | 完成证据要求 |
+| --- | --- | --- |
+| 原生运行 | 后端替换身份、pool 会话延续、空闲重连、Hello 前失败恢复 | 实际 Host/Coordinator/wrapper 接线与恢复、并发和重启回归 |
+| 任务与参与 | 私聊采纳归属、任务记忆通知、多方约定冲突、新参与点原子迁移 | 真实调度/准备与人决策入口，无绕过授权或审批默认化 |
+| 项目交互 | 暂停归档收尾、首页状态、Tab/Pin 检测和明确恢复 | 生产周期入口、已发/未发/未知区分、旧卡与归档回归 |
+| 团队资料 | 独立稳定原件、已选 Drive/Wiki 或托管首页、共享入口和待连接恢复 | 两项目复用同一原件，归档不删，真实来源及持久外部步骤 |
+
+本轮根代理负责公共接线与团队资料，子 Agent 分别实施前三包；完成后交叉审查、双状态机审计及整仓验证，最后再记录实际结果。
+
+
+本轮十二项逐项接线如下；最终验证证据另列，不能把测试替身当成生产租户验收。
+
+| 原复核项 | 修复及实际接线 | 回归载体 |
+| --- | --- | --- |
+| 暂停／归档停在中间态 | daemon 周期执行生命周期收尾，区分业务写入、纯读取与展示 | `app_work_project_lifecycle_test.go`、`project_lifecycle_fixture_test.go` |
+| Hello 前失败永久占池 | wrapper 持久失败收据，Host 验证进程退出后回收及退避 | `app_work_startup_test.go`、`native_lifecycle_test.go` |
+| 切换后端工作上下文失效 | 新 worker 身份承接原 WorkContext，prepared 替换原子提交 | `workhost/native_lifecycle_test.go` |
+| 空闲断连无法继续 | 独立 idle carrier 核查通道，三类执行证据后恢复 | `workruntime/recovery_test.go` |
+| 池回收丢原生上下文 | 兼容会话 resume，确证缺失且有检查点才自动重建 | `native_lifecycle_test.go`、`workruntime/recovery_test.go` |
+| 私聊采纳缺 TaskID | 独立任务上下文／输入关联，支持冷目标 | `workstore/private_adopt_test.go` |
+| 多人约定覆盖 | 同条款复用原事实，不同人变更进入原发起人协调 | `agreement_participation_test.go`、`agreement_revision_test.go` |
+| 任务记忆更正无法调度 | 真实 TaskID 定向通知，旧确定性坏输入幂等修复 | `memory_notices_test.go` |
+| 暂停／归档首页不更新 | 展示刷新与建立副作用 guard 分离，保留人工块 | `workprovision/recovery_test.go`、`navigation_fixed_test.go` |
+| Tab／Pin 移除无出口 | 周期读证、明确恢复、未知不重放、旧纯文本导航升级 | `app_work_project_navigation_test.go`、`navigation_fixed_test.go` |
+| 团队共享资料原件缺失 | 独立 team home runner，真实选择／共享入口、跨项目引用与原件恢复 | `workteamhome/*_test.go`、`app_work_team_materials_test.go` |
+| 新参与点未影响已有任务 | 完整影响／排除清单，同事务保存决定与门禁 | `agreement_participation_test.go` |
+
+交叉复核继续发现并修复：同条款换 ID 取得修改权、将决定转给没有项目访问的人、旧审批阻止新要求保存、外部成员检查期间导航卡失效的竞态，以及旧项目建立记录隐式授权未来团队原件。后续根代理复核又补上资料权限撤销后的明确重连、只读权限更新而非重复新建、冻结 Bot 停用限制及明确权限拒绝可重试。最后核对 CLI 实际入口时，又修正了内部 ConversationID 与平台 ChatID 的混用，并通过实际管理调用及重放验证；项目资料查询不返回私人选择来源、父目录链接或其他项目共享清单。上述修复没有恢复已取消的人工接管、Cron 或历史改写命令。
+
+类别和阶段不是新的硬编码项目流程：由负责人理解语义并提交逐项事实。系统阻止已知重叠参与点的责任冲突；未知语义冲突仍要求负责人协调，不能声称字符串标签具备自动自然语言判定能力。
+
+
+本轮冻结代码验证：
+
+- `go test ./...` 完整通过，记录 `/tmp/team-repair-verified-all.log`。
+- Store／Service／Engine／Host／Runtime／Transport／Provision／TeamHome／UI／Publish／Wrapper／RuntimeJournal 十二包完整 `-race -count=1` 通过，记录 `/tmp/team-repair-final-race.log`。此后仅对 CLI 平台来源与资料投影有代码修订，已再跑完整 Service 和最终 UI／领域定向 race，记录 `/tmp/team-cli-audience-final-fixed.log`、`/tmp/team-repair-final-ui-domain-race.log`，并重新跑上述全仓测试。
+- 完整 Windows 主程序交叉构建通过，记录 `/tmp/team-repair-verified-windows.log`。
+- 双状态机按新入口重查了生产周期接线、未知副作用、旧卡并发、退出证据和恢复出口；本轮行为已同步两份 canonical 文档。`scripts/check/pre-commit.sh` 通过，最终提交树另由 Git 元数据中的检查哈希约束。
+
+未向生产飞书写入、未部署或升级本机 daemon。受控进程／SDK／HTTP 验证和本机 Codex 缺失会话协议观察，不等于真实模型团队长期协作及生产租户 UAT。

@@ -14,6 +14,7 @@ import (
 
 type InspectionRequest struct {
 	StopBackground     bool
+	ResumeRejected     bool
 	SubjectCommandID   string
 	Carrier            workstore.CarrierRegistration
 	Binding            agentproto.ExecutionBinding
@@ -88,7 +89,11 @@ func (c *Coordinator) inspectionRequest(tx *workstore.Tx, attempt work.Execution
 		if !carrier.Matches(worker) {
 			return InspectionRequest{}, fmt.Errorf("rejected command carrier is historical")
 		}
-		return InspectionRequest{SubjectCommandID: attempt.CommandID, Carrier: carrier, Binding: command.Binding, SessionID: command.SessionID, LocationID: worker.LocationID, LocationGeneration: worker.LocationGeneration}, nil
+		resumeRejected, e := tx.IsNativeResumeRejection(command)
+		if e != nil {
+			return InspectionRequest{}, e
+		}
+		return InspectionRequest{SubjectCommandID: attempt.CommandID, Carrier: carrier, Binding: command.Binding, SessionID: command.SessionID, LocationID: worker.LocationID, LocationGeneration: worker.LocationGeneration, ResumeRejected: resumeRejected}, nil
 	}
 	turn := turns[0]
 	for _, candidate := range turns {
@@ -180,7 +185,8 @@ func (c *Coordinator) ReconcileContinuation(ctx context.Context, incarnation, se
 
 func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 	var request InspectionRequest
-	var ready, missingReport bool
+	var ready bool
+	var unresolvedOutcome string
 	err := c.store.Within(ctx, func(tx *workstore.Tx) error {
 		if _, err := tx.GetQuiescenceReceipt(attemptID); err == nil {
 			return nil
@@ -279,7 +285,14 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		if e != nil && !errors.Is(e, workstore.ErrNotFound) {
 			return e
 		}
-		missingReport = e == nil && gate.Reason == "missing_processing_report"
+		if e == nil {
+			for _, reason := range []string{gate.Reason, gate.RecoveryReason} {
+				if reason == "missing_processing_report" || reason == "native_resume_rejected" {
+					unresolvedOutcome = reason
+					break
+				}
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -322,7 +335,13 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		if err := tx.ReconcileQuiescence(workstore.ReconcileQuiescenceRequest{Evidence: proof, ExpectedWorkerRevision: worker.Revision}); err != nil {
 			return err
 		}
-		if !missingReport {
+		if unresolvedOutcome == "native_resume_rejected" && request.ResumeRejected {
+			recovering, err := c.queueMissingResumeRecovery(tx, worker, request, proof)
+			if err != nil || recovering {
+				return err
+			}
+		}
+		if unresolvedOutcome == "" {
 			wc, e := tx.GetContext(worker.ContextID)
 			if e != nil {
 				return e
@@ -333,11 +352,11 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 				}
 			}
 		}
-		if missingReport {
+		if unresolvedOutcome != "" {
 			if err := c.completeFailedReview(tx, attemptID, request); err != nil {
 				return err
 			}
-			if err := tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, AttemptID: attemptID, Reason: "missing_processing_report", CreatedAt: c.options.Clock()}); err != nil {
+			if err := tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, AttemptID: attemptID, Reason: unresolvedOutcome, CreatedAt: c.options.Clock()}); err != nil {
 				return err
 			}
 			worker, err = tx.GetWorker(worker.ID)

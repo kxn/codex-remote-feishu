@@ -35,7 +35,7 @@ func (t *Tx) PutRuntimeGate(v RuntimeGate) error {
 		previous = &old
 		if old.RecoveryReason != "" {
 			v.RecoveryReason = old.RecoveryReason
-		} else if old.Reason == "missing_processing_report" && v.Reason != old.Reason {
+		} else if (old.Reason == "missing_processing_report" || old.Reason == "native_resume_rejected") && v.Reason != old.Reason {
 			v.RecoveryReason = old.Reason
 		}
 		if old.Reason == v.Reason {
@@ -76,6 +76,17 @@ func (t *Tx) GetRuntimeGate(workerID string) (RuntimeGate, error) {
 func (t *Tx) ClearRuntimeGate(workerID, reason string) error {
 	_, err := t.tx.ExecContext(t.ctx, `DELETE FROM runtime_gates WHERE worker_id=? AND reason=?`, workerID, reason)
 	return err
+}
+
+func (t *Tx) ListConnectedIdleRecoveryWorkers(limit int) ([]work.WorkerSession, error) {
+	return listRecords[work.WorkerSession](t, "workers",
+		" WHERE id IN (SELECT id FROM workers WHERE state='recovering' AND EXISTS(SELECT 1 FROM runtime_gates g JOIN carrier_registrations c ON c.worker_id=g.worker_id WHERE g.worker_id=workers.id AND g.reason='carrier_disconnected_reconcile' AND coalesce(json_extract(g.payload,'$.attempt_id'),'')='' AND coalesce(json_extract(g.payload,'$.recovery_reason'),'')='' AND c.incarnation=json_extract(workers.payload,'$.carrier_incarnation') AND c.connected=1) ORDER BY json_extract(payload,'$.updated_at'),id LIMIT ?)", limit)
+}
+
+func (t *Tx) CarrierConnected(incarnation string) (bool, error) {
+	var connected bool
+	err := t.tx.QueryRowContext(t.ctx, "SELECT connected FROM carrier_registrations WHERE incarnation=?", incarnation).Scan(&connected)
+	return connected, err
 }
 
 func (t *Tx) QuarantineRuntimeEvent(event agentproto.Event, reason string) error {

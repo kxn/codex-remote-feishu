@@ -51,8 +51,7 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 	}
 	scope, err := a.bindWorkProcess(cmd)
 	if err != nil {
-		childCancel()
-		_ = cmd.Wait()
+		abortNativeStartup(cmd, childCancel, scope, childStdin, childStdout, childStderr)
 		return nil, err
 	}
 	a.debugf("opencode child started: binary=%s pid=%d cwd=%s", openCodeBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
@@ -61,8 +60,7 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 		return a.bootstrapOpenCodeACP(translator, childStdin, childStdout, rawLogger, reportProblem)
 	})
 	if err != nil {
-		childCancel()
-		_ = cmd.Wait()
+		abortNativeStartup(cmd, childCancel, scope, childStdin, childStdout, childStderr)
 		return nil, err
 	}
 

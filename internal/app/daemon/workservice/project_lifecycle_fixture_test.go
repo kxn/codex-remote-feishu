@@ -10,7 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-func lifecycleProjectService(t *testing.T, bootstrap bool) (*Service, string, string) {
+func lifecycleProjectService(t *testing.T, bootstrap bool, admittedHumans ...string) (*Service, string, string) {
 	t.Helper()
 	s, _, _ := runningService(t)
 	scope := work.WorkScope{ID: "project-scope", Kind: work.ScopeProject, ProjectID: "project", TeamID: "team", Revision: 1}
@@ -71,7 +71,38 @@ func lifecycleProjectService(t *testing.T, bootstrap bool) (*Service, string, st
 		if _, _, err := tx.AcceptMessage(message, []work.Inbox{inbox}); err != nil {
 			return err
 		}
-		attempt := work.ExecutionAttempt{ID: "lifecycle-attempt", ScopeID: scope.ID, ContextID: worker.ContextID, RunRef: work.RunRef{WorkerID: worker.ID, Generation: 1, RunID: "lifecycle-run"}, CommandID: "lifecycle-start", State: work.AttemptDispatchPending, InputIDs: []string{inbox.ID}, Revision: 1}
+		inputIDs := []string{inbox.ID}
+		for _, name := range admittedHumans {
+			binding, e := tx.GetRoleBotBinding("leader")
+			if e != nil {
+				return e
+			}
+			gateway := work.IngressGateway{RoleID: binding.RoleID, GatewayRef: binding.GatewayRef, AppID: binding.AppID, BotGeneration: binding.IdentityGeneration}
+			raw := work.RawIngressEnvelope{GatewayRef: binding.GatewayRef, AppID: binding.AppID, EventID: name, Tenant: "tenant", ChatID: "group", ChatType: "group", MessageID: name, SenderType: "user", SenderIDs: work.SenderIDs{OpenID: name}, MessageType: "text", RawContent: `{"text":"Participation instruction"}`, MessageCreatedAt: s.now(), ReceivedAt: s.now()}
+			record, _, e := tx.AcceptRawIngress(raw, gateway)
+			if e != nil {
+				return e
+			}
+			person, _, e := tx.ResolvePrincipal(work.IdentityEvidence{Tenant: raw.Tenant, AppID: raw.AppID, Generation: gateway.BotGeneration, IDs: raw.SenderIDs, ObservationRef: record.ID})
+			if e != nil {
+				return e
+			}
+			if e = tx.GrantProjectAccessFromIngress(scope.ID, person.ID, record.ID, s.now().Add(time.Hour)); e != nil {
+				return e
+			}
+			personMessage := message
+			personMessage.ID = name
+			personMessage.Source.ID = person.ID
+			personMessage.ConversationID = "conversation:" + name
+			personMessage.PlatformKey = &work.MessageKey{Tenant: raw.Tenant, ChatID: raw.ChatID, MessageID: raw.MessageID}
+			personInbox := inbox
+			personInbox.ID, personInbox.EventID = "input-"+name, name
+			if _, _, e = tx.AcceptMessage(personMessage, []work.Inbox{personInbox}); e != nil {
+				return e
+			}
+			inputIDs = append(inputIDs, personInbox.ID)
+		}
+		attempt := work.ExecutionAttempt{ID: "lifecycle-attempt", ScopeID: scope.ID, ContextID: worker.ContextID, RunRef: work.RunRef{WorkerID: worker.ID, Generation: 1, RunID: "lifecycle-run"}, CommandID: "lifecycle-start", State: work.AttemptDispatchPending, InputIDs: inputIDs, Revision: 1}
 		op := work.Operation{ID: attempt.CommandID, ScopeID: scope.ID, ContextID: worker.ContextID, Actor: work.Actor{Kind: work.ActorSystem, ID: "scheduler"}, Kind: "native.start", TargetID: worker.ID, TargetGeneration: 1, IdempotencyKey: attempt.CommandID, RequestHash: "start", State: work.OperationPrepared, Revision: 1}
 		if err := tx.ClaimAttempt(workstore.ClaimRequest{Attempt: attempt, ExpectedWorkerRevision: 1, ControllerGeneration: 1, InstanceID: worker.InstanceID, InstanceGeneration: 1, ProcessGeneration: 1, StartOperation: op, Now: s.now()}); err != nil {
 			return err

@@ -6,8 +6,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-// Retire stops only this verified, quiescent carrier. Its durable rebuild
-// receipt allows the next safe Prepare to create a fresh immutable carrier.
+// Retire stops only this verified, quiescent carrier, retaining a compatible
+// native history for the next carrier. Explicit history rebuilds opt out.
 func (h *Host) Retire(ctx context.Context, workerID string) error {
 	var worker work.WorkerSession
 	var carrier workstore.CarrierRegistration
@@ -41,5 +41,5 @@ func (h *Host) Retire(ctx context.Context, workerID string) error {
 	if err != nil {
 		return err
 	}
-	return h.rebuildCarrier(ctx, &worker, carrier)
+	return h.rebuildCarrier(ctx, &worker, carrier, ctx.Value(freshHistoryKey{}) == nil)
 }

@@ -24,7 +24,7 @@ type CarrierRegistration struct {
 }
 
 func (v CarrierRegistration) Matches(worker work.WorkerSession) bool {
-	return v.Incarnation == worker.CarrierIncarnation && v.OriginInstanceID == worker.InstanceID && v.Backend == worker.Backend && v.InstanceGeneration == worker.InstanceGeneration && v.ProcessGeneration == worker.ProcessGeneration && v.LocationGeneration == worker.LocationGeneration && v.Owner.WorkerSessionID == worker.ID && v.Owner.ScopeID == worker.ScopeID && v.Owner.ContextID == worker.ContextID && v.Owner.RoleID == worker.RoleID && v.Owner.SessionGeneration == worker.Generation && v.Owner.ControllerGeneration == worker.ControllerGeneration
+	return worker.State != work.WorkerRetired && v.Incarnation == worker.CarrierIncarnation && v.OriginInstanceID == worker.InstanceID && v.Backend == worker.Backend && v.InstanceGeneration == worker.InstanceGeneration && v.ProcessGeneration == worker.ProcessGeneration && v.LocationGeneration == worker.LocationGeneration && v.Owner.WorkerSessionID == worker.ID && v.Owner.ScopeID == worker.ScopeID && v.Owner.ContextID == worker.ContextID && v.Owner.RoleID == worker.RoleID && v.Owner.SessionGeneration == worker.Generation && v.Owner.ControllerGeneration == worker.ControllerGeneration
 }
 
 func (v CarrierRegistration) MatchesPhysical(worker work.WorkerSession) bool {
@@ -116,6 +116,23 @@ type NativeCommand struct {
 	Kind              agentproto.CommandKind      `json:"kind"`
 	RequestRef        string                      `json:"request_ref"`
 	SessionID         string                      `json:"session_id"`
+}
+
+// IsNativeResumeRejection distinguishes exact pre-turn rejection of a
+// registered resume from an absent result or an ambiguous write.
+func (t *Tx) IsNativeResumeRejection(command NativeCommand) (bool, error) {
+	canonical, err := t.NativeCommandPayload(command.CommandID, command.Incarnation)
+	if err != nil {
+		return false, err
+	}
+	if canonical.Kind != agentproto.CommandPromptSend || canonical.Target.EffectivePromptExecutionMode() != agentproto.PromptExecutionModeResumeExisting || canonical.Target.ThreadID == "" {
+		return false, nil
+	}
+	if command.TerminalRejection != nil && command.TerminalRejection.TurnCompletionOrigin == agentproto.TurnCompletionOriginThreadResumeRejected {
+		return true, nil
+	}
+	ack := command.Ack
+	return ack != nil && !ack.Accepted && ack.RuntimeReceipt != nil && ack.RuntimeReceipt.Stage == "prepared" && ack.RuntimeReceipt.PreparedFrames == 0, nil
 }
 
 // RegisterNativeCommand indexes the canonical operation request; it never

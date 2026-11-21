@@ -171,6 +171,10 @@ func (a *App) processTeamInteraction(ctx context.Context, interaction workstore.
 			err = a.handleTeamPublicationRecovery(ctx, interaction, view, action)
 		case view.Kind == "resource.write.recovery" || view.Kind == "resource.write.recovery.confirm":
 			err = a.handleTeamResourceWriteRecovery(ctx, interaction, view, action)
+		case view.Kind == "team.materials" || action == "team.materials.open":
+			err = a.handleTeamMaterials(ctx, interaction, view, action)
+		case view.Kind == "project.navigation" || action == "project.navigation.restore":
+			err = a.handleTeamProjectNavigation(ctx, interaction, view, action)
 		case view.Kind == "project.recovery":
 			err = a.handleTeamProvisionRecovery(ctx, interaction, view, action)
 		case view.Kind == "business.decision" || view.Kind == "project.artifacts":
@@ -180,7 +184,10 @@ func (a *App) processTeamInteraction(ctx context.Context, interaction workstore.
 		case action == "native.respond":
 			err = r.requests.HandleForm(ctx, interaction.ID, viewID)
 		case strings.HasPrefix(action, "project."):
-			err = a.handleHumanProjectLifecycle(ctx, interaction, view, strings.TrimPrefix(action, "project."))
+			err = a.verifyWorkMembershipWithInvitedLeader(ctx, interaction.PrincipalID, view.ScopeID, interaction.Envelope.Tenant, interaction.Envelope.SenderIDs, interaction.Gateway, action == "project.archive")
+			if err == nil {
+				err = a.handleHumanProjectLifecycle(ctx, interaction, view, strings.TrimPrefix(action, "project."))
+			}
 		default:
 			err = a.handleTeamViewAction(ctx, interaction, view, action)
 		}
@@ -238,6 +245,7 @@ func (a *App) handleHumanProjectLifecycle(ctx context.Context, interaction works
 		} else if !errors.Is(e, workstore.ErrNotFound) {
 			return e
 		}
+		instruction := "Human selected project action: " + action
 		proof, e := json.Marshal(interaction)
 		if e != nil {
 			return e
@@ -246,7 +254,7 @@ func (a *App) handleHumanProjectLifecycle(ctx context.Context, interaction works
 		if e = tx.PutContent(content); e != nil {
 			return e
 		}
-		body := work.NewContent(messageID+":body", view.ScopeID, "text/plain", []byte("Human selected project action: "+action), time.Now().UTC())
+		body := work.NewContent(messageID+":body", view.ScopeID, "text/plain", []byte(instruction), time.Now().UTC())
 		if e = tx.PutContent(body); e != nil {
 			return e
 		}

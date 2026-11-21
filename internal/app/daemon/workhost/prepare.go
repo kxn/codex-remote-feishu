@@ -79,9 +79,10 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 	workerID := idFor("worker", wc.ID)
 	var previous *work.WorkerSession
 	err = h.store.Within(ctx, func(tx *workstore.Tx) error {
-		worker, err := tx.GetWorker(workerID)
+		worker, err := tx.CurrentContextWorker(wc.ID)
 		if err == nil {
 			previous = &worker
+			workerID = worker.ID
 			return nil
 		}
 		if errors.Is(err, workstore.ErrNotFound) {
@@ -125,14 +126,24 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 		return err
 	}
 	bundle = composeLaunchInstructions(settings, reviewInstructionBundle(wc, bundle))
+	var rebuilt existingPreparation
 	if previous != nil {
-		rebuild, err := h.prepareExisting(ctx, previous, role, binding, settings, bundle)
-		if err != nil || !rebuild {
+		rebuilt, err = h.prepareExisting(ctx, previous, role, binding, settings, bundle)
+		if err != nil || !rebuilt.replace {
 			return err
 		}
 	}
-	if err = h.ensurePoolCapacity(ctx, wc.ID, wc.Purpose); err != nil {
-		return err
+	switchBackend := previous != nil && previous.Backend != settings.Backend
+	if switchBackend {
+		workerID, err = opaqueID("worker")
+		if err != nil {
+			return err
+		}
+	}
+	if rebuilt.unsentLaunch == nil {
+		if err = h.ensurePoolCapacity(ctx, wc.ID, wc.Purpose); err != nil {
+			return err
+		}
 	}
 	incarnation, err := opaqueID("carrier")
 	if err != nil {
@@ -143,13 +154,17 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 		return err
 	}
 	worker := work.WorkerSession{ID: workerID, ContextID: wc.ID, ScopeID: scope.ID, RoleID: role.ID, Backend: settings.Backend, State: work.WorkerPreparing, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: instanceID, CarrierIncarnation: incarnation, InstanceGeneration: 1, ProcessGeneration: 1, LocationID: settings.Location.ID, LocationGeneration: settings.Location.Generation, DesiredSettingsRevision: role.SettingsRevision, AppliedSettingsRevision: role.SettingsRevision, Revision: 1, UpdatedAt: h.config.Now()}
-	if previous != nil {
+	if previous != nil && !switchBackend {
 		worker.Generation = previous.Generation + 1
 		worker.ControllerGeneration = previous.ControllerGeneration + 1
 		worker.InstanceGeneration = previous.InstanceGeneration + 1
 		worker.ProcessGeneration = previous.ProcessGeneration + 1
 		worker.Revision = previous.Revision + 1
 		worker.State = work.WorkerRecovering
+		if rebuilt.preserveNativeSession {
+			worker.NativeSessionID = previous.NativeSessionID
+			worker.NativeNamespace = previous.NativeNamespace
+		}
 	}
 	owner := agentproto.ExecutionBinding{Version: agentproto.WorkerProtocolVersion, ScopeID: scope.ID, ContextID: wc.ID, RoleID: role.ID, WorkerSessionID: worker.ID, SessionGeneration: worker.Generation, ControllerGeneration: worker.ControllerGeneration, BotGeneration: binding.IdentityGeneration}
 	snapshot := agentproto.RuntimeLaunchSnapshot{NativeBinaryPath: settings.NativeBinaryPath, NativeBinaryVersion: settings.NativeBinaryVersion, ReadOnly: settings.ReadOnly, HostID: h.config.HostID, NativeMemoryPolicyVersion: agentproto.NativeMemoryPolicyVersion, Version: agentproto.WorkerProtocolVersion, Owner: owner, CWD: settings.Location.Cwd, InstructionBundle: bundle, ToolEndpoint: h.config.ToolEndpoint, SessionCredentialRef: "env:" + config.WorkSessionTokenEnv, JournalPath: filepath.Join(h.config.Paths.StateDir, "workers", worker.ID, "runtime.db"), CarrierIncarnation: incarnation, InstanceGeneration: worker.InstanceGeneration, ProcessGeneration: worker.ProcessGeneration, LocationGeneration: settings.Location.Generation}
@@ -184,8 +199,24 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 		} else if existing.Generation != settings.Location.Generation || existing.Cwd != settings.Location.Cwd || existing.HostID != settings.Location.HostID {
 			return workstore.ErrConflict
 		}
+		if rebuilt.unsentLaunch != nil {
+			if e := h.supersedeUnsentLaunch(tx, *rebuilt.unsentLaunch); e != nil {
+				return e
+			}
+		}
 		expected := int64(0)
-		if previous != nil {
+		if switchBackend {
+			old := *previous
+			old.State = work.WorkerRetired
+			old.Revision++
+			old.UpdatedAt = h.config.Now()
+			if e := tx.PutWorker(old, previous.Revision); e != nil {
+				return e
+			}
+			if e := tx.ClearRuntimeGate(old.ID, "snapshot_rebuild_required"); e != nil {
+				return e
+			}
+		} else if previous != nil {
 			expected = previous.Revision
 		}
 		count, e := tx.CountNativePoolCarriers(h.config.HostID)

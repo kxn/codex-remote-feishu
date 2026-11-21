@@ -77,7 +77,7 @@ func (e *Engine) snapshot(ctx context.Context) (candidates []Candidate, deferred
 				exists := false
 				for i := range workers {
 					worker := workers[i]
-					if worker.RoleID != target.RoleID {
+					if worker.RoleID != target.RoleID || worker.State == work.WorkerRetired {
 						continue
 					}
 					owner, ok := contextByID[worker.ContextID]

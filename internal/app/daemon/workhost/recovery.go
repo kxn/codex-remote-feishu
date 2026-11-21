@@ -34,14 +34,25 @@ func (h *Host) checkDesiredLocation(ctx context.Context, worker work.WorkerSessi
 	})
 }
 
-func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession, role work.Role, binding work.RoleBotBinding, settings LaunchSettings, bundle agentproto.InstructionBundle) (bool, error) {
+type existingPreparation struct {
+	replace               bool
+	preserveNativeSession bool
+	unsentLaunch          *work.Operation
+}
+
+func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession, role work.Role, binding work.RoleBotBinding, settings LaunchSettings, bundle agentproto.InstructionBundle) (existingPreparation, error) {
 	var record LaunchRecord
 	var operation work.Operation
+	var rebuilt work.Operation
 	var carrier workstore.CarrierRegistration
 	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
 		var err error
 		operation, err = tx.GetOperation(launchID(*previous))
 		if err != nil {
+			return err
+		}
+		rebuilt, err = tx.GetOperation(rebuildID(*previous))
+		if err != nil && !errors.Is(err, workstore.ErrNotFound) {
 			return err
 		}
 		// Reading the original record intentionally permits a newer controller
@@ -63,45 +74,37 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 		return err
 	})
 	if err != nil {
-		return false, err
+		return existingPreparation{}, err
 	}
 	same := record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.HostID == h.config.HostID && sameRuntimePolicy(record, settings) && record.Snapshot.NativeMemoryPolicyVersion == agentproto.NativeMemoryPolicyVersion && record.SettingsRevision == role.SettingsRevision && record.RoleDescriptionVersion == role.DescriptionVersion && record.Snapshot.Owner.BotGeneration == binding.IdentityGeneration && record.Snapshot.Owner.ControllerGeneration == previous.ControllerGeneration && record.Snapshot.InstructionBundle.Revision == bundle.Revision && record.ProfileID == settings.ProfileID && record.Backend == settings.Backend && record.Snapshot.CWD == settings.Location.Cwd && previous.LocationID == settings.Location.ID && previous.LocationGeneration == settings.Location.Generation
+	if rebuilt.State == work.OperationConfirmed && rebuilt.NextAttemptAt != nil {
+		if h.config.Now().Before(*rebuilt.NextAttemptAt) {
+			return existingPreparation{}, nil
+		}
+		return existingPreparation{replace: true, preserveNativeSession: same && previous.NativeSessionID != "" && ctx.Value(freshHistoryKey{}) == nil}, nil
+	}
 	if operation.State == work.OperationSending || operation.State == work.OperationUnknown {
 		if err = h.confirmObservedLaunch(ctx, *previous, &operation); err != nil {
-			return false, err
+			return existingPreparation{}, err
 		}
 	}
+	compatibleSnapshot := same
 	switch operation.State {
 	case work.OperationPrepared:
 		if same {
 			carrier = workstore.CarrierRegistration{Incarnation: previous.CarrierIncarnation, OriginInstanceID: previous.InstanceID, Owner: record.Snapshot.Owner, Backend: previous.Backend, InstanceGeneration: previous.InstanceGeneration, ProcessGeneration: previous.ProcessGeneration, LocationGeneration: previous.LocationGeneration}
 			if err = h.config.Registry.RegisterCarrier(ctx, carrier); err != nil {
-				return false, err
+				return existingPreparation{}, err
 			}
 			token, err := h.issueToken(record.Snapshot.Owner)
 			if err != nil {
-				return false, err
+				return existingPreparation{}, err
 			}
-			return false, h.startPrepared(ctx, *previous, operation, record, settings, token)
+			return existingPreparation{}, h.startPrepared(ctx, *previous, operation, record, settings, token)
 		}
-		// Prepared means no launch side effect was attempted, so supersession does
-		// not need to infer whether a native process survived.
-		err = h.store.Within(ctx, func(tx *workstore.Tx) error {
-			current, e := tx.GetOperation(operation.ID)
-			if e != nil {
-				return e
-			}
-			if current.Revision != operation.Revision || current.State != work.OperationPrepared {
-				return workstore.ErrConflict
-			}
-			current.State = work.OperationTerminal
-			current.Revision++
-			current.LastError = "superseded before launch"
-			current.UpdatedAt = h.config.Now()
-			_, _, e = tx.PutOperation(current, operation.Revision)
-			return e
-		})
-		return err == nil, err
+		// Supersede the provably unsent launch only in the transaction that
+		// replaces its reservation. A failed replacement leaves it prepared.
+		return existingPreparation{replace: true, unsentLaunch: &operation}, nil
 	case work.OperationConfirmed:
 		if previous.State == work.WorkerRecovering {
 			if err = h.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -114,33 +117,76 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 				}
 				return nil
 			}); err != nil {
-				return false, err
+				return existingPreparation{}, err
 			}
 		}
 		if same {
-			return false, nil
+			return existingPreparation{}, nil
 		}
 	default:
-		return false, fmt.Errorf("worker launch state cannot be recovered: %s", operation.State)
-	}
-	if settings.Backend != previous.Backend {
-		return false, fmt.Errorf("backend change requires a replacement worker identity")
+		return existingPreparation{}, fmt.Errorf("worker launch state cannot be recovered: %s", operation.State)
 	}
 	if h.config.Runtime == nil || h.config.StopCarrier == nil {
-		return false, fmt.Errorf("verified safe rebuild requires native inspector and exact carrier stop")
+		return existingPreparation{}, fmt.Errorf("verified safe rebuild requires native inspector and exact carrier stop")
 	}
-	if err = h.rebuildCarrier(ctx, previous, carrier); err != nil {
-		return false, err
+	if err = h.rebuildCarrier(ctx, previous, carrier, false); err != nil {
+		return existingPreparation{}, err
 	}
-	return true, nil
+	var preserve bool
+	if compatibleSnapshot && previous.NativeSessionID != "" && ctx.Value(freshHistoryKey{}) == nil {
+		err = h.store.Within(ctx, func(tx *workstore.Tx) error {
+			rebuild, e := tx.GetOperation(rebuildID(*previous))
+			if e != nil {
+				return e
+			}
+			body, e := tx.GetContent(previous.ScopeID, rebuild.RequestRef)
+			if e != nil {
+				return e
+			}
+			var request carrierRebuildRequest
+			if e = json.Unmarshal(body.Data, &request); e != nil {
+				return e
+			}
+			preserve = rebuild.State == work.OperationConfirmed && request.ReuseNativeSession
+			return nil
+		})
+	}
+	return existingPreparation{replace: err == nil, preserveNativeSession: preserve}, err
+}
+
+func (h *Host) supersedeUnsentLaunch(tx *workstore.Tx, launch work.Operation) error {
+	current, err := tx.GetOperation(launch.ID)
+	if err != nil {
+		return err
+	}
+	if current.Revision != launch.Revision || current.State != work.OperationPrepared {
+		return workstore.ErrConflict
+	}
+	current.State = work.OperationTerminal
+	current.Revision++
+	current.LastError = "superseded before launch"
+	current.UpdatedAt = h.config.Now()
+	_, _, err = tx.PutOperation(current, launch.Revision)
+	return err
 }
 
 func (h *Host) issueToken(owner agentproto.ExecutionBinding) (string, error) {
 	return h.signer.Issue(workauth.Claims{Purpose: "worker", RoleID: owner.RoleID, BotGeneration: owner.BotGeneration, ScopeID: owner.ScopeID, ContextID: owner.ContextID, WorkerID: owner.WorkerSessionID, SessionGeneration: owner.SessionGeneration, ControllerGeneration: owner.ControllerGeneration}, 30*24*time.Hour)
 }
 
-func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, carrier workstore.CarrierRegistration) error {
-	id := idFor("rebuild", worker.ID, fmt.Sprint(worker.Generation))
+type freshHistoryKey struct{}
+
+type carrierRebuildRequest struct {
+	workstore.CarrierRegistration
+	ReuseNativeSession bool `json:"reuse_native_session,omitempty"`
+}
+
+func rebuildID(worker work.WorkerSession) string {
+	return idFor("rebuild", worker.ID, fmt.Sprint(worker.Generation))
+}
+
+func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, carrier workstore.CarrierRegistration, reuseNativeSession bool) error {
+	id := rebuildID(*worker)
 	var operation work.Operation
 	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
 		current, err := tx.GetWorker(worker.ID)
@@ -191,7 +237,7 @@ func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, c
 		if err = tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, Reason: "snapshot_rebuild_required", CreatedAt: h.config.Now()}); err != nil {
 			return err
 		}
-		requestData, e := json.Marshal(carrier)
+		requestData, e := json.Marshal(carrierRebuildRequest{CarrierRegistration: carrier, ReuseNativeSession: reuseNativeSession})
 		if e != nil {
 			return e
 		}

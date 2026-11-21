@@ -96,6 +96,12 @@ func (d *Driver) Inspect(ctx context.Context, request workruntime.InspectionRequ
 		return workruntime.NativeObservation{}, err
 	}
 	id := "inspection_" + hex.EncodeToString(random)
+	if request.ResumeRejected {
+		// The correlated pre-turn rejection is durable on the Attempt. Check
+		// the physical carrier's live inventory without probing the rejected
+		// target as if it had been successfully loaded.
+		request.Binding = request.Carrier.Owner
+	}
 	binding := request.Binding
 	command := agentproto.Command{CommandID: id, IssuedAt: d.now(), Kind: agentproto.CommandRuntimeInspect, Execution: &binding, Target: agentproto.Target{ThreadID: request.SessionID, TurnID: request.TurnID}, RuntimeInspection: &agentproto.RuntimeInspectionRequest{Version: agentproto.RuntimeInspectionProtocolVersion, ExpectedInstanceGeneration: request.Carrier.InstanceGeneration, ExpectedProcessGeneration: request.Carrier.ProcessGeneration, ExpectedLocationGeneration: request.LocationGeneration, StopBackground: request.StopBackground, SubjectCommandID: request.SubjectCommandID}}
 	if err := d.persistInspection(ctx, command); err != nil {

@@ -25,22 +25,24 @@ const (
 )
 
 type DecisionRequest struct {
-	Presentation        *DecisionPresentation `json:"presentation,omitempty"`
-	ID                  string                `json:"id"`
-	ScopeID             string                `json:"scope_id"`
-	TaskID              string                `json:"task_id,omitempty"`
-	Kind                DecisionKind          `json:"kind"`
-	State               DecisionState         `json:"state"`
-	Owner               Actor                 `json:"owner"`
-	AllowedActors       []Actor               `json:"allowed_actors"`
-	AgreementID         string                `json:"agreement_id,omitempty"`
-	AgreementRevision   int64                 `json:"agreement_revision"`
-	RequestGeneration   int64                 `json:"request_generation"`
-	AttemptID           string                `json:"attempt_id,omitempty"`
-	SupersededBy        string                `json:"superseded_by,omitempty"`
-	ResponseOperationID string                `json:"response_operation_id,omitempty"`
-	Revision            int64                 `json:"revision"`
-	CreatedAt           time.Time             `json:"created_at"`
+	ParticipationGateID  string                `json:"participation_gate_id,omitempty"`
+	AgreementProposalRef string                `json:"agreement_proposal_ref,omitempty"`
+	Presentation         *DecisionPresentation `json:"presentation,omitempty"`
+	ID                   string                `json:"id"`
+	ScopeID              string                `json:"scope_id"`
+	TaskID               string                `json:"task_id,omitempty"`
+	Kind                 DecisionKind          `json:"kind"`
+	State                DecisionState         `json:"state"`
+	Owner                Actor                 `json:"owner"`
+	AllowedActors        []Actor               `json:"allowed_actors"`
+	AgreementID          string                `json:"agreement_id,omitempty"`
+	AgreementRevision    int64                 `json:"agreement_revision"`
+	RequestGeneration    int64                 `json:"request_generation"`
+	AttemptID            string                `json:"attempt_id,omitempty"`
+	SupersededBy         string                `json:"superseded_by,omitempty"`
+	ResponseOperationID  string                `json:"response_operation_id,omitempty"`
+	Revision             int64                 `json:"revision"`
+	CreatedAt            time.Time             `json:"created_at"`
 }
 
 func (v DecisionRequest) Validate() error {
@@ -83,6 +85,12 @@ func (v DecisionRequest) Validate() error {
 	}
 	if (v.AgreementID == "") != (v.AgreementRevision == 0) || v.AgreementRevision < 0 {
 		return fmt.Errorf("agreement reference requires positive revision")
+	}
+	if v.ParticipationGateID != "" && (v.Kind != DecisionBusiness || v.AgreementID == "" || v.TaskID == "" || v.Presentation == nil) {
+		return fmt.Errorf("participation gate requires a presented task decision under an agreement")
+	}
+	if v.AgreementProposalRef != "" && (v.Kind != DecisionBusiness || v.AgreementID != "" || v.TaskID != "" || v.Owner.Kind != ActorPrincipal || v.Presentation == nil) {
+		return fmt.Errorf("agreement conflict requires a presented decision owned by the existing human authority")
 	}
 	if v.State == DecisionSuperseded && (v.SupersededBy == "" || v.SupersededBy == v.ID) {
 		return fmt.Errorf("superseded request requires replacement")

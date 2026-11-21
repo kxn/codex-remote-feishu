@@ -67,6 +67,9 @@ func (s *Service) finish(ctx context.Context, state snapshot, blockers []string)
 		if err != nil {
 			return err
 		}
+		if err = s.allowEstablishmentEffect(tx, state); err != nil {
+			return err
+		}
 		members, err := tx.ListProjectMembers(project.ID)
 		if err != nil {
 			return err

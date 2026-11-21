@@ -12,7 +12,7 @@ func extendedCommandDTOs() map[string]any {
 		"memory.list": KnowledgeListRequest{}, "memory.read": KnowledgeObjectRequest{}, "memory.write": MemoryWriteRequest{}, "memory.invalidate": MemoryInvalidateRequest{},
 		"practice.discover": KnowledgeListRequest{}, "practice.read": PracticeReadRequest{}, "practice.adopt": PracticeAdoptRequest{}, "practice.publish": PracticePublishRequest{},
 		"resource.register": RegisterResourceRequest{}, "resource.capture": CaptureResourceRequest{}, "resource.read-version": ReadResourceVersionRequest{}, "resource.reconcile": ReconcileResourceRequest{}, "delivery.publish": PublishDeliveryRequest{},
-		"decision.list": KnowledgeListRequest{}, "decision.respond": DecisionRespondRequest{}, "agreement.list": KnowledgeListRequest{}, "agreement.apply": AgreementApplyRequest{},
+		"decision.list": KnowledgeListRequest{}, "decision.mine": KnowledgeListRequest{}, "decision.respond": DecisionRespondRequest{}, "agreement.list": KnowledgeListRequest{}, "agreement.apply": AgreementApplyRequest{},
 	}
 	dtos["decision.request"] = RequestDecisionRequest{}
 	dtos["session.goal"] = SessionGoalRequest{}
@@ -84,6 +84,8 @@ func (s *Service) executeExtended(ctx context.Context, token string, req workcmd
 		return executeDTO(ctx, token, req, s.PublishDelivery)
 	case "decision.list":
 		return executeDTO(ctx, token, req, s.DecisionList)
+	case "decision.mine":
+		return executeDTO(ctx, token, req, s.DecisionMine)
 	case "decision.respond":
 		return executeDTO(ctx, token, req, s.DecisionRespond)
 	case "agreement.list":

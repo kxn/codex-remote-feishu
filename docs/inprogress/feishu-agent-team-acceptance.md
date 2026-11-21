@@ -33,6 +33,19 @@
 | 57：重复入站、回显和话题丢失 | SDK 多 Bot 合并、真实平台消息映射；原根撤回／首次发送未知时真实人点击新锚点，保留旧 unknown 和旧话题版本 | `workingress/ingress_test.go`、`workingress/topic_test.go`、`workpublish/reanchor_test.go`、`workpublish/topic_observation_test.go`、`workpublish/recovery_observation_test.go` |
 | 58：旧控制和旧批准 | 旧人工状态仅迁移隔离；卡片按真实对象／代次重新核对；无领取／归还原生控制权入口 | `workruntime/historical_human_test.go`、`workruntime/request_delivery_review_test.go`、`workpublish/ui_delivery_test.go` |
 
+## 本轮十二项复核回归
+
+九项缺陷与三项设计缺口的逐项修复、实际生产接线和测试文件见[实施账本本轮记录](./feishu-agent-team-implementation.md#独立复核后的完整修复2026-11-21)。本轮补充验收重点：
+
+- 暂停／归档必须经 daemon 周期真正收尾；暂停及归档后首页仍能刷新托管状态。
+- 后端切换创建新执行身份，容量回滚可重试；池回收复用兼容原生会话，确证缺失且检查点可用时自动接回原待办。
+- Hello 前失败核查实际进程退出；空闲重连核查原生、Goal、后台工作，不以网络重连直接放行。
+- 冷项目中的私聊采纳和任务记忆更正必须真正可领取，旧输入修复有确定来源且幂等。
+- 同条款换 ID 不能取得别人的约定修改权；无项目访问的人不能接收决定责任；新参与点覆盖全部未完成任务或明确排除。
+- 修改待决定任务保存新要求，旧卡失效，新问题保持参与门禁直到当前决定完成。
+- Tab／Pin 的移除可发现、明确恢复，未知创建不会换键重做；卡片在外部成员核查中失效也不能继续暂停项目。
+- 团队首页只有一个原件，Drive／Wiki／已有首页及失败恢复均有入口；共享按当前原件和实际群明确记录，历史项目创建不授权未来资料。归档不删原件，访问撤销后需要明确重连。
+
 ## 完整执行链证据
 
 `internal/app/wrapper/work_pipeline_integration_test.go` 在 Codex 与 Claude 后端运行真实 Engine→Host→Driver→WebSocket→受控原生子进程→CLI 业务服务→持久 journal→三域停止核查→原对话发布，覆盖首轮准入而不是绕开 Host 的组件拼接。`work_pipeline_group_test.go` 用同一链路完成负责人委派、专家处理和内部回复、负责人继续及群内结果发布；容量 1 验证交接无死锁，容量 2 以实际同时打开的 native turn 和 HTTP 屏障验证独立进程并行。

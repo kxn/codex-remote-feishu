@@ -22,6 +22,12 @@ func (t *Tx) CountBusinessNativePoolCarriers(hostID string) (int, error) {
 	return count, err
 }
 
+func (t *Tx) IsRebuiltNativeCarrier(worker work.WorkerSession) (bool, error) {
+	var rebuilt bool
+	err := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS(SELECT 1 FROM operations WHERE kind='worker.rebuild' AND json_extract(payload,'$.target_id')=? AND json_extract(payload,'$.target_generation')=? AND state='confirmed')`, worker.ID, worker.Generation).Scan(&rebuilt)
+	return rebuilt, err
+}
+
 func (t *Tx) NativePoolRetirementCandidates(hostID string, limit int) ([]work.WorkerSession, error) {
 	if limit <= 0 || limit > 64 {
 		limit = 32
@@ -44,4 +50,28 @@ func (t *Tx) NativePoolRetirementCandidates(hostID string, limit int) ([]work.Wo
 		values = append(values, w)
 	}
 	return values, rows.Err()
+}
+
+func (t *Tx) NativeStartupCandidates(hostID string) ([]work.WorkerSession, error) {
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT w.payload`+nativePoolPredicate+`
+		AND w.state IN ('preparing','recovering')
+		AND EXISTS (SELECT 1 FROM carrier_registrations c WHERE c.incarnation=json_extract(w.payload,'$.carrier_incarnation') AND c.connected=0)
+		ORDER BY json_extract(w.payload,'$.updated_at'),w.id`, hostID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var workers []work.WorkerSession
+	for rows.Next() {
+		var raw string
+		if err = rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var worker work.WorkerSession
+		if err = json.Unmarshal([]byte(raw), &worker); err != nil {
+			return nil, err
+		}
+		workers = append(workers, worker)
+	}
+	return workers, rows.Err()
 }

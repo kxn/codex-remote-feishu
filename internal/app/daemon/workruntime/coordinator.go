@@ -98,6 +98,13 @@ func (c *Coordinator) HandleHello(ctx context.Context, hello agentproto.Hello) e
 		if err != nil {
 			return err
 		}
+		rebuilt, err := tx.IsRebuiltNativeCarrier(worker)
+		if err != nil {
+			return err
+		}
+		if rebuilt {
+			return fmt.Errorf("hello arrived after verified carrier exit")
+		}
 		if hello.CarrierProcess != nil {
 			if hello.CarrierProcess.PID != hello.Instance.PID {
 				return fmt.Errorf("hello carrier PID mismatch")

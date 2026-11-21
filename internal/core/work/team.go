@@ -17,15 +17,21 @@ func (v Principal) Validate() error {
 }
 
 type Team struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	LeaderRoleID string `json:"leader_role_id"`
-	Revision     int64  `json:"revision"`
+	Materials    *TeamMaterials `json:"materials,omitempty"`
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	LeaderRoleID string         `json:"leader_role_id"`
+	Revision     int64          `json:"revision"`
 }
 
 func (v Team) Validate() error {
 	if err := required(v.ID, v.Name, v.LeaderRoleID); err != nil {
 		return err
+	}
+	if v.Materials != nil {
+		if err := v.Materials.Validate(); err != nil {
+			return err
+		}
 	}
 	return positive("team revision", v.Revision)
 }

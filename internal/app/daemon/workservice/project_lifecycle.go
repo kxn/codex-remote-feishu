@@ -96,7 +96,8 @@ func projectQuiescent(tx *workstore.Tx, project work.Project, archive bool) (boo
 			return false, err
 		}
 		for _, op := range ops {
-			if workstore.ResourceReadHasNoExternalWrite(op.Kind) {
+			if workstore.ResourceReadHasNoExternalWrite(op.Kind) || op.Kind == "feishu.membership.query" ||
+				op.Kind == "feishu.publish" && op.Actor == (work.Actor{Kind: work.ActorSystem, ID: "team-ui"}) {
 				continue
 			}
 			if strings.HasPrefix(op.Kind, "feishu.") || strings.HasPrefix(op.Kind, "resource.") || op.Kind == "project.provision" || op.Kind == "project.member.provision" {

@@ -395,3 +395,35 @@ func TestHelloRequiresPreregisteredManagedDurableCarrier(t *testing.T) {
 		return nil
 	})
 }
+
+func TestEmptyOutcomeCheckpointKeepsPriorCheckpoint(t *testing.T) {
+	f := newFixture(t, work.BackendClaude)
+	f.start()
+	f.tx(func(tx *workstore.Tx) error {
+		wc, err := tx.GetContext("context")
+		if err != nil {
+			return err
+		}
+		wc.Checkpoint = "prior pending decision"
+		wc.Revision++
+		if err = tx.PutContext(wc, wc.Revision-1); err != nil {
+			return err
+		}
+		return tx.PutProcessingReport(workstore.ProcessingReport{AttemptID: "attempt",
+			RunRef:            work.RunRef{WorkerID: "worker", Generation: 1, RunID: "run"},
+			ProcessedInputIDs: []string{"input"}, OutcomeRef: "report-outcome", Revision: 1}, 0)
+	})
+	if err := f.handle(agentproto.Event{Kind: agentproto.EventTurnCompleted, ThreadID: "session", TurnID: "turn-1", Status: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		wc, err := tx.GetContext("context")
+		if err != nil {
+			return err
+		}
+		if wc.Checkpoint != "prior pending decision" {
+			t.Fatalf("report erased durable recovery context: %q", wc.Checkpoint)
+		}
+		return nil
+	})
+}

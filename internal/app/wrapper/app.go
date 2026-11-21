@@ -83,7 +83,16 @@ type Config struct {
 	RawLogPath                string
 }
 
-func LoadConfig(args []string, version, branch string) (Config, error) {
+func LoadConfig(args []string, version, branch string) (_ Config, resultErr error) {
+	snapshot, err := readWorkLaunchSnapshot(os.Getenv(config.WorkLaunchSnapshotEnv))
+	if err != nil {
+		return Config{}, err
+	}
+	defer func() {
+		if resultErr != nil {
+			recordUnstartedWorkFailure(snapshot, "wrapper_config")
+		}
+	}()
 	loaded, err := config.LoadWrapperConfig()
 	if err != nil {
 		return Config{}, err
@@ -145,10 +154,6 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	backend := agentproto.Backend(strings.TrimSpace(os.Getenv(config.CodexRemoteInstanceBackendEnv)))
 	if parsed, ok := agentproto.ParseBackend(backend); ok {
 		backend = parsed
-	}
-	snapshot, err := readWorkLaunchSnapshot(os.Getenv(config.WorkLaunchSnapshotEnv))
-	if err != nil {
-		return Config{}, err
 	}
 	return Config{
 		WorkLaunchSnapshot:        snapshot,
@@ -218,6 +223,7 @@ func (a *App) debugf(format string, args ...any) {
 
 func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if a.workErr != nil {
+		recordUnstartedWorkFailure(a.config.WorkLaunchSnapshot, "work_state_init")
 		return 1, a.workErr
 	}
 	rawLogger, err := a.openRawLogger()
@@ -246,6 +252,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		MismatchAction:       relayruntime.ProbeMismatchRefuseReplace,
 	})
 	if err := manager.EnsureReady(ctx); err != nil {
+		a.recordWorkStartupFailure("ensure_relay")
 		return 1, err
 	}
 	a.debugf("runtime ready: relay=%s instance=%s workspace=%s", a.config.RelayServerURL, a.config.InstanceID, a.config.WorkspaceRoot)
@@ -266,26 +273,27 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		default:
 		}
 	}); err != nil {
+		a.recordWorkStartupFailure("lifetime_setup")
 		return 1, err
 	}
 
 	var client *relayws.Client
 	var activeChild *childSession
-	connectedOnce := false
+	var connectedOnce atomic.Bool
 	client = relayws.NewClient(a.config.RelayServerURL, a.relayHello(), relayws.ClientCallbacks{
 		OnWelcome: func(_ context.Context, welcome agentproto.Welcome) error {
-			a.debugf("relay welcome: connectedOnce=%t server=%s", connectedOnce, relayWelcomeSummary(welcome))
+			a.debugf("relay welcome: connectedOnce=%t server=%s", connectedOnce.Load(), relayWelcomeSummary(welcome))
 			if manager.WelcomeCompatible(welcome) {
-				connectedOnce = true
+				connectedOnce.Store(true)
 				return nil
 			}
-			if connectedOnce {
+			if connectedOnce.Load() {
 				return relayws.FatalError{Err: fmt.Errorf("relay version mismatch after connection: %s", relayWelcomeSummary(welcome))}
 			}
 			return fmt.Errorf("relay bootstrap welcome mismatch: %s", relayWelcomeSummary(welcome))
 		},
 		OnConnect: func(context.Context) error {
-			a.debugf("relay connected: instance=%s connectedOnce=%t", a.config.InstanceID, connectedOnce)
+			a.debugf("relay connected: instance=%s connectedOnce=%t", a.config.InstanceID, connectedOnce.Load())
 			problems.Flush()
 			return nil
 		},
@@ -485,14 +493,14 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	}
 	client.SetRawLogger(rawLogger)
 
-	activeChild, err = a.runtime.Launch(ctx, a, rawLogger, problems.Emit)
+	activeChild, err = a.launchInitialChild(ctx, rawLogger, problems.Emit)
 	if err != nil {
 		return 1, err
 	}
 	startChildSessionIO(ctx, activeChild, stdout, stderr, writeCh, a.runtime, client, commandResponses, turnTracker, &activeChildGeneration, 1, errCh, a.debugf, rawLogger, problems.Emit)
 
 	go func() {
-		if err := runRelayClient(ctx, a.config.RelayServerURL, client, manager, func() bool { return connectedOnce }); err != nil && err != context.Canceled {
+		if err := runRelayClient(ctx, a.config.RelayServerURL, client, manager, connectedOnce.Load); err != nil && err != context.Canceled {
 			errCh <- err
 		}
 	}()
@@ -512,6 +520,9 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			closeChildSessionPipes(activeChild)
 			emitRuntimeExitReconciliation(client, turnTracker, err, problems.Emit)
 			drainAndCloseRelayClient(client, problems.Emit)
+			if !connectedOnce.Load() {
+				a.recordWorkStartupFailure("native_exit_before_ready")
+			}
 			if err == nil {
 				return 0, nil
 			}

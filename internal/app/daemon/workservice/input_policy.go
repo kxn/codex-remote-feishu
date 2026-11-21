@@ -43,6 +43,9 @@ func (s *Service) inputPolicy(tx *workstore.Tx, wc work.WorkContext) (workInputP
 			if superseded[agreement.ID] || agreement.ValidFrom.After(s.now()) || agreement.ValidUntil != nil && !agreement.ValidUntil.After(s.now()) {
 				continue
 			}
+			if wc.TaskID != "" && agreement.SubjectKind == work.AgreementItem && agreement.SubjectID != wc.TaskID {
+				continue
+			}
 			result.Agreements = append(result.Agreements, agreement)
 		}
 		adoptions, err := tx.ListPracticeAdoptions(scope.ID)

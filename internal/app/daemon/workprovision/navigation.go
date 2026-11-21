@@ -52,6 +52,27 @@ func (s *Service) navigation(ctx context.Context, state *snapshot) error {
 			issues = append(issues, fmt.Errorf("项目 Tab 结果待按实际 tab_id 核对：%w", tabErr))
 		}
 	}
+	if _, ok := platform.(interface{ UsesFixedNavigationCard() }); ok && state.home.NavigationMessageID == "" {
+		legacy := false
+		if err = s.store.Within(ctx, func(tx *workstore.Tx) error {
+			_, err := tx.GetProvisionStep(state.operation.ID, "navigation.message")
+			legacy = err == nil
+			if errors.Is(err, workstore.ErrNotFound) {
+				return nil
+			}
+			return err
+		}); err != nil {
+			return errors.Join(append(issues, err)...)
+		}
+		if !legacy {
+			if !state.home.NavigationCardWanted && state.home.NavigationCardViewID == "" {
+				if err = s.homeUpdate(ctx, state, func(home *workstore.ProjectHome) { home.NavigationCardWanted = true }); err != nil {
+					issues = append(issues, err)
+				}
+			}
+			return errors.Join(issues...)
+		}
+	}
 	sync := "资料索引待同步"
 	if state.home.SyncState == "synced" {
 		sync = "已同步"

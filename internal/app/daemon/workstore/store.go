@@ -112,7 +112,7 @@ func (s *Store) initialize(ctx context.Context) error {
 			return fmt.Errorf("work schema %d is newer than supported %d", version, SchemaVersion)
 		}
 		if version == SchemaVersion {
-			return nil
+			return t.repairLegacyTaskInboxBindings()
 		}
 		if version != 0 {
 			return fmt.Errorf("unsupported work schema migration from %d", version)

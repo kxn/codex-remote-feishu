@@ -2,6 +2,8 @@ package workruntime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -223,5 +225,118 @@ func TestRetiredRecoveryRequiresBothWatermarksAndExactProcessExit(t *testing.T) 
 				t.Fatalf("retired recovery allowed=%t error=%v", scenario.allowed, err)
 			}
 		})
+	}
+}
+
+func TestRejectedResumeRecoveryUsesVerifiedCheckpointAndKeepsInputs(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		checkpoint     string
+		problem        string
+		unknownEffects bool
+		automatic      bool
+	}{
+		{name: "missing with recoverable context", checkpoint: "durable native recovery facts", problem: "claude_resume_thread_not_found", automatic: true},
+		{name: "missing without checkpoint", problem: "claude_resume_thread_not_found"},
+		{name: "unknown effects", checkpoint: "durable native recovery facts", problem: "claude_resume_thread_not_found", unknownEffects: true},
+		{name: "provider failure", checkpoint: "durable native recovery facts", problem: "provider_authorization_failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t, work.BackendClaude)
+			f.tx(func(tx *workstore.Tx) error {
+				wc, err := tx.GetContext("context")
+				if err != nil {
+					return err
+				}
+				wc.Checkpoint = tc.checkpoint
+				wc.Revision++
+				if err = tx.PutContext(wc, wc.Revision-1); err != nil {
+					return err
+				}
+				if tc.unknownEffects {
+					op := work.Operation{ID: "uncertain-old-effect", ScopeID: "scope", ContextID: wc.ID, Actor: work.Actor{Kind: work.ActorSystem, ID: "runtime"}, Kind: "resource.write", TargetID: wc.ID, TargetGeneration: 1, IdempotencyKey: "uncertain-old-effect", RequestHash: "uncertain-effect", State: work.OperationUnknown, Revision: 1}
+					_, _, err = tx.PutOperation(op, 0)
+				}
+				return err
+			})
+			raw, err := json.Marshal(f.command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256(raw)
+			receipt := &agentproto.RuntimeCommandReceipt{Version: agentproto.JournalProtocolVersion, CommandID: f.command.CommandID, PayloadHash: hex.EncodeToString(sum[:]), CarrierIncarnation: f.carrier.Incarnation, Stage: "prepared"}
+			ack := agentproto.CommandAck{CommandID: f.command.CommandID, Accepted: false, RuntimeReceipt: receipt, Problem: &agentproto.ErrorInfo{Code: tc.problem, Message: "native resume rejected"}}
+			quiescent := false
+			f.driver.inspect = func(request InspectionRequest) (NativeObservation, error) {
+				if !request.ResumeRejected || request.SessionID != "session" || request.SubjectCommandID != f.command.CommandID {
+					t.Fatalf("unexpected inspection: %+v", request)
+				}
+				observation := stoppedObservation(request)
+				observation.BackgroundWorkStopped = quiescent
+				return observation, nil
+			}
+			if err = f.coordinator.HandleAck(t.Context(), "instance-1", ack); err == nil {
+				t.Fatal("released rejected attempt without background proof")
+			}
+			quiescent = true
+			for range 2 {
+				if err = f.coordinator.Reconcile(t.Context(), "attempt"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			f.tx(func(tx *workstore.Tx) error {
+				wc, err := tx.GetContext("context")
+				if err != nil {
+					return err
+				}
+				worker, err := tx.GetWorker("worker")
+				if err != nil {
+					return err
+				}
+				gate, err := tx.GetRuntimeGate(worker.ID)
+				if err != nil {
+					return err
+				}
+				inputs, err := tx.ListInbox("scope")
+				if err != nil {
+					return err
+				}
+				wantState, wantGate, wantInputs := work.WorkerUnavailable, "native_resume_rejected", 1
+				if tc.automatic {
+					wantState, wantGate, wantInputs = work.WorkerRecovering, "snapshot_rebuild_required", 2
+				}
+				if worker.State != wantState || gate.Reason != wantGate || gate.AttemptID != "attempt" || wc.Checkpoint != tc.checkpoint || len(inputs) != wantInputs {
+					t.Fatalf("recovery=%+v gate=%+v checkpoint=%q inputs=%+v", worker, gate, wc.Checkpoint, inputs)
+				}
+				for _, input := range inputs {
+					if input.State != work.InboxPending {
+						t.Fatalf("replay consumed input: %+v", input)
+					}
+				}
+				return nil
+			})
+			if !tc.automatic {
+				f.driver.inspect = nil
+				if _, err = f.coordinator.Recover(t.Context(), recoveryRequest(t, f)); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func TestCodexResumeMissingRecognizesExactLocalProtocolError(t *testing.T) {
+	session := "0193f000-0000-7000-8000-000000000001"
+	event := &agentproto.Event{ThreadID: session, TurnCompletionOrigin: agentproto.TurnCompletionOriginThreadResumeRejected, ErrorMessage: "no rollout found for thread id " + session}
+	command := workstore.NativeCommand{TerminalRejection: event}
+	if !missingNativeResumeTarget(work.BackendCodex, session, command) {
+		t.Fatal("known Codex missing rollout was not recognized")
+	}
+	if missingNativeResumeTarget(work.BackendCodex, "different-thread", command) {
+		t.Fatal("rejection for another thread was accepted")
+	}
+	event.ErrorMessage = "provider authorization failed"
+	if missingNativeResumeTarget(work.BackendCodex, session, command) {
+		t.Fatal("provider rejection was read as a missing thread")
 	}
 }

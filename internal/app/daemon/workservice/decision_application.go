@@ -14,6 +14,11 @@ func (s *Service) applyBusinessDecision(tx *workstore.Tx, request work.DecisionR
 	if request.Kind != work.DecisionBusiness {
 		return fmt.Errorf("native requests require their exact native response path")
 	}
+	if request.AgreementProposalRef != "" {
+		if err := s.applyAgreementConflictDecision(tx, request, decision); err != nil {
+			return err
+		}
+	}
 	var task work.Task
 	if request.TaskID != "" {
 		var err error

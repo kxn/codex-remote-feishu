@@ -77,3 +77,47 @@ func TestSharedMemoryCorrectionNotifiesOnlyAuthorizedActiveContextsWithoutBody(t
 		return nil
 	})
 }
+
+func TestMemoryCorrectionCanBeClaimedByTaskWorker(t *testing.T) {
+	s, _ := openTestStore(t)
+	seedPersonal(t, s)
+	entry := memory("task-correction", work.MemoryScope{Kind: work.MemoryProject, ProjectID: "project"})
+	requireTx(t, s, func(tx *Tx) error {
+		task := testTask("active-task", "r")
+		if err := tx.PutTask(task, 0); err != nil {
+			return err
+		}
+		wc := work.WorkContext{ID: "active-context", ScopeID: "s", RoleID: "r", TaskID: task.ID, Workstream: "task:" + task.ID, Revision: 1}
+		if err := tx.PutContext(wc, 0); err != nil {
+			return err
+		}
+		worker := work.WorkerSession{ID: "task-worker", ContextID: wc.ID, ScopeID: "s", RoleID: "r", Backend: work.BackendCodex, State: work.WorkerReady, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: "task-carrier", InstanceGeneration: 1, ProcessGeneration: 1, Revision: 1}
+		if err := tx.PutWorker(worker, 0); err != nil {
+			return err
+		}
+		if err := tx.PutMemory(entry, 0); err != nil {
+			return err
+		}
+		entry.State = work.MemoryInvalidated
+		entry.Revision++
+		entry.UpdatedAt = time.Now().UTC()
+		if err := tx.PutMemory(entry, 1); err != nil {
+			return err
+		}
+		input, err := tx.GetInbox("memory-correction:task-correction:2:active-context:input")
+		if err != nil {
+			return err
+		}
+		claim := testClaim()
+		claim.Attempt.TaskID = task.ID
+		claim.Attempt.FrozenRequirementsRevision = task.RequirementsRevision
+		claim.Attempt.FrozenAssignmentGeneration = task.AssignmentGeneration
+		claim.Attempt.ContextID = wc.ID
+		claim.Attempt.RunRef.WorkerID = worker.ID
+		claim.Attempt.InputIDs = []string{input.ID}
+		claim.InstanceID = worker.InstanceID
+		claim.StartOperation.ContextID = wc.ID
+		claim.StartOperation.TargetID = worker.ID
+		return tx.ClaimAttempt(claim)
+	})
+}

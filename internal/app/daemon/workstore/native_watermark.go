@@ -9,6 +9,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
+func (t *Tx) CarrierHasCommands(incarnation string) (bool, error) {
+	var exists bool
+	err := t.tx.QueryRowContext(t.ctx, "SELECT EXISTS(SELECT 1 FROM native_commands WHERE incarnation=?)", incarnation).Scan(&exists)
+	return exists, err
+}
+
 func (t *Tx) NativeCommandWatermark(commandID string) (int64, error) {
 	var value int64
 	err := t.tx.QueryRowContext(t.ctx, `SELECT rowid FROM native_commands WHERE command_id=?`, commandID).Scan(&value)

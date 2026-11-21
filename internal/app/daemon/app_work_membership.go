@@ -13,7 +13,11 @@ import (
 
 // verifyWorkMembership queries using the same App identity that observed this
 // person. Open IDs are never copied into another App's identity namespace.
-func (a *App) verifyWorkMembership(ctx context.Context, principalID, scopeID, tenant string, ids work.SenderIDs, gateway work.IngressGateway) (resultErr error) {
+func (a *App) verifyWorkMembership(ctx context.Context, principalID, scopeID, tenant string, ids work.SenderIDs, gateway work.IngressGateway) error {
+	return a.verifyWorkMembershipWithInvitedLeader(ctx, principalID, scopeID, tenant, ids, gateway, false)
+}
+
+func (a *App) verifyWorkMembershipWithInvitedLeader(ctx context.Context, principalID, scopeID, tenant string, ids work.SenderIDs, gateway work.IngressGateway, allowInvited bool) (resultErr error) {
 	r := a.teamRuntime
 	query := workstore.MembershipQuery{ScopeID: scopeID, PrincipalID: principalID, Tenant: tenant}
 	identity := work.IdentityScope{Tenant: tenant, AppIdentityDomain: gateway.AppID, IDType: "open_id", ExternalID: ids.OpenID, Generation: gateway.BotGeneration}
@@ -42,7 +46,16 @@ func (a *App) verifyWorkMembership(ctx context.Context, principalID, scopeID, te
 			return e
 		}
 		if member.State != work.ProjectMemberReady {
-			return fmt.Errorf("这位助手还不是该项目的可用成员。")
+			if !allowInvited || member.State != work.ProjectMemberInvited {
+				return fmt.Errorf("这位助手还不是该项目的可用成员。")
+			}
+			project, e := tx.GetProject(scope.ProjectID)
+			if e != nil {
+				return e
+			}
+			if project.LeaderRoleID != gateway.RoleID || project.State != work.ProjectProvisioning {
+				return fmt.Errorf("这位助手还不是该项目的可用成员。")
+			}
 		}
 		binding, e = tx.GetRoleBotBinding(gateway.RoleID)
 		if e != nil {

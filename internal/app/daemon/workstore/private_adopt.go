@@ -86,7 +86,7 @@ func (t *Tx) AdoptPrivateInstruction(req AdoptPrivateInstructionRequest) (result
 		}
 		identity := sha256.Sum256([]byte(mustJSON([]string{"private-adoption", personal.ID, projectScope.ID, req.Source.MessageID})))
 		id := "private-adoption:" + hex.EncodeToString(identity[:])
-		result = PrivateInstructionAdoption{ID: id, PersonalScopeID: personal.ID, ProjectScopeID: projectScope.ID, SourceMessageID: req.Source.MessageID, ProjectContextID: context.ID, TaskID: id + ":task", MessageID: id + ":message", InboxID: id + ":input", RequestHash: hash}
+		result = PrivateInstructionAdoption{ID: id, PersonalScopeID: personal.ID, ProjectScopeID: projectScope.ID, SourceMessageID: req.Source.MessageID, ProjectContextID: id + ":context", TaskID: id + ":task", MessageID: id + ":message", InboxID: id + ":input", RequestHash: hash}
 		content := work.NewContent(id+":body", projectScope.ID, "text/plain; charset=utf-8", []byte(req.Summary), req.Now)
 		if e = t.PutContent(content); e != nil {
 			return e
@@ -103,7 +103,11 @@ func (t *Tx) AdoptPrivateInstruction(req AdoptPrivateInstructionRequest) (result
 		if e = t.PutTask(task, 0); e != nil {
 			return e
 		}
-		input := work.Inbox{ID: result.InboxID, ScopeID: projectScope.ID, TaskID: task.ID, RecipientRoleID: personal.RoleID, RecipientContextID: context.ID, MessageID: message.ID, EventID: id, State: work.InboxPending, ContentState: work.InputContentReady, AvailableAt: req.Now, Revision: 1}
+		taskContext := privateAdoptionTaskContext(result.ProjectContextID, task, req.Now)
+		if e = t.PutContext(taskContext, 0); e != nil {
+			return e
+		}
+		input := work.Inbox{ID: result.InboxID, ScopeID: projectScope.ID, TaskID: task.ID, RecipientRoleID: personal.RoleID, RecipientContextID: taskContext.ID, MessageID: message.ID, EventID: id, State: work.InboxPending, ContentState: work.InputContentReady, AvailableAt: req.Now, Revision: 1}
 		if e = t.PutInbox(input, 0); e != nil {
 			return e
 		}
@@ -112,4 +116,8 @@ func (t *Tx) AdoptPrivateInstruction(req AdoptPrivateInstructionRequest) (result
 		return e
 	})
 	return
+}
+
+func privateAdoptionTaskContext(id string, task work.Task, now time.Time) work.WorkContext {
+	return work.WorkContext{ID: id, ScopeID: task.ScopeID, RoleID: task.OwnerRoleID, TaskID: task.ID, Workstream: "task:" + task.ID, Revision: 1, CreatedAt: now, UpdatedAt: now}
 }

@@ -108,8 +108,10 @@ type ApplyAgreementRequest struct {
 	ExpectedRevision int64
 	ReportingOnly    bool
 	Replacements     []DecisionReplacement
+	Withdrawals      []work.DecisionRequest
 	NewRequests      []work.DecisionRequest
 	Inbox            []work.Inbox
+	Gates            []work.PauseGate
 }
 
 func (t *Tx) ApplyAgreement(input ApplyAgreementRequest) error {
@@ -129,13 +131,21 @@ func (t *Tx) ApplyAgreement(input ApplyAgreementRequest) error {
 				if !reflect.DeepEqual(old.ParticipationPoints, agreement.ParticipationPoints) || !reflect.DeepEqual(old.AffectedPrincipalIDs, agreement.AffectedPrincipalIDs) {
 					return fmt.Errorf("reporting change alters participation")
 				}
-				if len(input.Replacements) > 0 || len(input.NewRequests) > 0 {
+				if len(input.Replacements) > 0 || len(input.Withdrawals) > 0 || len(input.NewRequests) > 0 || len(input.Gates) > 0 {
 					return fmt.Errorf("reporting change cannot migrate decisions")
 				}
 			}
 		}
 		if err = t.putAgreement(agreement, input.ExpectedRevision); err != nil {
 			return err
+		}
+		for _, gate := range input.Gates {
+			if gate.ScopeID != agreement.ScopeID || gate.Source != work.GateParticipation || gate.State != work.GateClosed {
+				return fmt.Errorf("invalid agreement participation gate")
+			}
+			if err = t.PutPauseGate(gate, 0); err != nil {
+				return err
+			}
 		}
 		migrated := map[string]bool{}
 		for _, move := range input.Replacements {
@@ -173,6 +183,20 @@ func (t *Tx) ApplyAgreement(input ApplyAgreementRequest) error {
 				if !found {
 					return fmt.Errorf("delegated decision needs receiver inbox")
 				}
+			}
+		}
+		for _, withdrawal := range input.Withdrawals {
+			request, e := t.GetDecisionRequest(agreement.ScopeID, withdrawal.ID)
+			if e != nil {
+				return e
+			}
+			if request.Revision != withdrawal.Revision || request.State != work.DecisionOpen || request.AgreementID != agreement.ID || request.ParticipationGateID == "" {
+				return ErrConflict
+			}
+			request.State = work.DecisionAborted
+			request.Revision++
+			if err = t.PutDecisionRequest(request, withdrawal.Revision); err != nil {
+				return err
 			}
 		}
 		if input.ExpectedRevision > 0 && !input.ReportingOnly && (old.DecisionOwner != agreement.DecisionOwner || !reflect.DeepEqual(old.ParticipationPoints, agreement.ParticipationPoints)) {

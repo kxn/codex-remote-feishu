@@ -22,6 +22,20 @@ func (t *Tx) PutDecisionRequest(v work.DecisionRequest, expected int64) error {
 	if err = t.validateDecisionPresentation(v, expected == 0); err != nil {
 		return err
 	}
+	if v.AgreementProposalRef != "" {
+		if err = t.requireContent(v.ScopeID, v.AgreementProposalRef); err != nil {
+			return err
+		}
+	}
+	if v.ParticipationGateID != "" && expected == 0 {
+		gate, e := t.GetPauseGate(v.ParticipationGateID)
+		if e != nil {
+			return e
+		}
+		if gate.ScopeID != v.ScopeID || gate.TaskID != v.TaskID || gate.Source != work.GateParticipation || gate.State != work.GateClosed {
+			return ErrScopeDenied
+		}
+	}
 	if v.TaskID != "" {
 		task, err := t.GetTask(v.TaskID)
 		if err != nil {
@@ -73,7 +87,7 @@ func (t *Tx) PutDecisionRequest(v work.DecisionRequest, expected int64) error {
 		if err != nil {
 			return err
 		}
-		if err = immutable(old.ScopeID != v.ScopeID || old.TaskID != v.TaskID || old.Kind != v.Kind || old.AttemptID != v.AttemptID || old.RequestGeneration != v.RequestGeneration || old.AgreementID != v.AgreementID || old.AgreementRevision != v.AgreementRevision || !reflect.DeepEqual(old.Presentation, v.Presentation) || old.Owner != v.Owner || !reflect.DeepEqual(old.AllowedActors, v.AllowedActors)); err != nil {
+		if err = immutable(old.ScopeID != v.ScopeID || old.TaskID != v.TaskID || old.Kind != v.Kind || old.AttemptID != v.AttemptID || old.RequestGeneration != v.RequestGeneration || old.AgreementID != v.AgreementID || old.AgreementRevision != v.AgreementRevision || old.ParticipationGateID != v.ParticipationGateID || old.AgreementProposalRef != v.AgreementProposalRef || !reflect.DeepEqual(old.Presentation, v.Presentation) || old.Owner != v.Owner || !reflect.DeepEqual(old.AllowedActors, v.AllowedActors)); err != nil {
 			return err
 		}
 		if err = work.ValidateDecisionTransition(old.State, v.State); err != nil {
@@ -112,7 +126,21 @@ func (t *Tx) PutDecisionRequest(v work.DecisionRequest, expected int64) error {
 	} else if v.State == work.DecisionApplying || v.State == work.DecisionResolved {
 		return fmt.Errorf("applying request requires response operation")
 	}
-	return t.record("decision_requests", v.ID, v.Revision, expected, v)
+	if err = t.record("decision_requests", v.ID, v.Revision, expected, v); err != nil {
+		return err
+	}
+	if v.ParticipationGateID != "" && (v.State == work.DecisionResolved || v.State == work.DecisionAborted) {
+		gate, e := t.GetPauseGate(v.ParticipationGateID)
+		if e != nil {
+			return e
+		}
+		if gate.State == work.GateClosed {
+			gate.State = work.GateOpen
+			gate.Revision++
+			return t.PutPauseGate(gate, gate.Revision-1)
+		}
+	}
+	return nil
 }
 func (t *Tx) GetDecisionRequest(scopeID, id string) (work.DecisionRequest, error) {
 	var v work.DecisionRequest

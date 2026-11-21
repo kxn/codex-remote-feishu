@@ -61,7 +61,11 @@ func (a *App) runTeamProvisionRecoveryViews(ctx context.Context) error {
 				if step.State != work.OperationUnknown {
 					continue
 				}
-				switch step.StepID {
+				stepKind := step.StepID
+				if workprovision.IsNavigationTabRestoreStep(stepKind) {
+					stepKind = "navigation.tab"
+				}
+				switch stepKind {
 				case "materials.document", "materials.folder", "materials.index", "navigation.tab", "navigation.message":
 					candidates = append(candidates, provisionRecoveryView{Target: workprovision.RecoveryInteractionTarget{OperationID: op.ID, StepID: step.StepID, ExpectedRevision: step.Revision, HomeDocumentID: home.DocumentID}, Home: home, PrincipalID: op.Actor.ID})
 				}
@@ -150,6 +154,9 @@ func provisionRecoveryCard(id, step string, choices workprovision.RecoveryChoice
 		fields = append(fields, cardkit.PlainTextBlockElement(label), map[string]any{"tag": "select_static", "name": name, "required": true, "placeholder": cardkit.PlainText("明确选择一个已存在的对象"), "options": items})
 	}
 	buttonLabel := "核实后使用已有资料"
+	if workprovision.IsNavigationTabRestoreStep(step) {
+		step = "navigation.tab"
+	}
 	switch step {
 	case "materials.document":
 		title = "核对项目资料文档"

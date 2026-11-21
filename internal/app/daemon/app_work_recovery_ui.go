@@ -93,6 +93,8 @@ func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession,
 	view.TargetRevision = worker.Revision
 	text := "这项工作正在核对执行状态。未处理的输入和已有成果会保留，确认后才能重新执行。"
 	switch gate.Reason {
+	case "native_resume_rejected":
+		text = "原生会话无法恢复，原输入和检查点已保留。自动重建的证据不足，请核查后恢复工作。"
 	case "missing_processing_report":
 		text = "上次执行没有留下完整的处理记录。原输入已保留；恢复时会先核查已经做过的操作，避免重复执行。"
 	case "carrier_disconnected", "runtime_disconnected":

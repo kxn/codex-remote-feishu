@@ -16,15 +16,24 @@ import (
 )
 
 type teamProjectProjection struct {
-	Project                                                work.Project
-	Members                                                []work.ProjectMember
-	MemberNames                                            map[string]string
-	TaskStates                                             map[work.TaskState]int
-	Decisions, Attention, Problems                         []string
-	DirectorySelectable                                    bool
-	HomeURL, HomeSync, HomeOperation, ArtifactsFingerprint string
-	Channel                                                work.ProjectChannelBinding
-	Binding                                                work.RoleBotBinding
+	Project                                                      work.Project
+	TeamMaterials                                                teamMaterialsProjection
+	Members                                                      []work.ProjectMember
+	MemberNames                                                  map[string]string
+	TaskStates                                                   map[work.TaskState]int
+	Decisions, Attention, Problems                               []string
+	DirectorySelectable                                          bool
+	NavigationTabMissing, NavigationPinMissing, NavigationLegacy bool
+	NavigationGeneration                                         int64
+	NavigationStatus                                             string
+	HomeURL, HomeSync, HomeOperation, ArtifactsFingerprint       string
+	Channel                                                      work.ProjectChannelBinding
+	Binding                                                      work.RoleBotBinding
+}
+
+type teamMaterialsProjection struct {
+	State, URL          string
+	Allowed, NeedsCheck bool
 }
 
 func teamProjectFacts(tx *workstore.Tx, id string) (teamProjectProjection, error) {
@@ -34,6 +43,10 @@ func teamProjectFacts(tx *workstore.Tx, id string) (teamProjectProjection, error
 		return v, err
 	}
 	v.Project = project
+	team, err := tx.GetTeam(project.TeamID)
+	if err != nil && !errors.Is(err, workstore.ErrNotFound) {
+		return v, err
+	}
 	channels, err := tx.ListProjectChannelBindings(id)
 	if err != nil {
 		return v, err
@@ -48,6 +61,17 @@ func teamProjectFacts(tx *workstore.Tx, id string) (teamProjectProjection, error
 	}
 	if v.Channel.ChatID == "" {
 		return v, fmt.Errorf("project destination unavailable")
+	}
+	if team.Materials != nil {
+		allowed, err := tx.TeamMaterialsProjectAllowed(team, v.Channel)
+		if err != nil {
+			return v, err
+		}
+		v.TeamMaterials = teamMaterialsProjection{State: team.Materials.State, Allowed: allowed}
+		if allowed {
+			v.TeamMaterials.URL = team.Materials.URL
+			v.TeamMaterials.NeedsCheck = team.Materials.LastError != ""
+		}
 	}
 	v.Binding, err = tx.GetRoleBotBinding(project.LeaderRoleID)
 	if err != nil {
@@ -148,6 +172,19 @@ func teamProjectFacts(tx *workstore.Tx, id string) (teamProjectProjection, error
 		v.HomeURL = home.URL
 		v.HomeSync = home.SyncState
 		v.HomeOperation = home.OperationID
+		v.NavigationTabMissing = home.NavigationTabMissing
+		v.NavigationPinMissing = home.NavigationPinMissing
+		v.NavigationLegacy = home.PinMessageID != "" && home.NavigationCardViewID == "" && !home.NavigationCardWanted
+		v.NavigationGeneration = home.NavigationGeneration
+		if home.TabID != "" && !v.NavigationTabMissing {
+			v.NavigationStatus = "项目 Tab 已登记。"
+		}
+		if home.PinMessageID != "" && !v.NavigationPinMissing && !home.NavigationCardWanted {
+			v.NavigationStatus += "导航消息已 Pin。"
+		}
+		if home.NavigationCardWanted {
+			v.NavigationStatus += "导航卡 Pin 待核对，可先使用当前状态卡。"
+		}
 		if operation, e := tx.GetOperation(home.OperationID); e == nil {
 			v.DirectorySelectable = operation.State != work.OperationConfirmed && project.State != work.ProjectArchiving && project.State != work.ProjectArchived
 		} else {
@@ -211,8 +248,33 @@ func teamProjectPanel(v teamProjectProjection) workui.Panel {
 	case work.ProjectArchived:
 		panel.Buttons = []workui.Button{{Label: "重新打开（保持暂停）", Action: "project.reopen"}}
 	}
+	switch {
+	case v.TeamMaterials.State == "":
+		panel.Paragraphs = append(panel.Paragraphs, "团队资料待连接。")
+	case !v.TeamMaterials.Allowed:
+		panel.Paragraphs = append(panel.Paragraphs, "团队资料尚未共享给此项目。")
+	case v.TeamMaterials.State == "ready":
+		panel.Paragraphs = append(panel.Paragraphs, "团队资料："+v.TeamMaterials.URL)
+		if v.TeamMaterials.NeedsCheck {
+			panel.Paragraphs = append(panel.Paragraphs, "团队资料的访问状态待核对。")
+		}
+	case v.TeamMaterials.State == "pending":
+		panel.Paragraphs = append(panel.Paragraphs, "团队资料正在连接。")
+	default:
+		panel.Paragraphs = append(panel.Paragraphs, "团队资料连接待核对。")
+	}
+	panel.Buttons = append(panel.Buttons, workui.Button{Label: "查看团队资料", Action: "team.materials.open"})
 	if v.DirectorySelectable {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "更换资料目录", Action: "project.directory.open"})
+	}
+	if v.NavigationStatus != "" {
+		panel.Paragraphs = append(panel.Paragraphs, v.NavigationStatus)
+	}
+	if v.NavigationTabMissing || v.NavigationPinMissing {
+		panel.Paragraphs = append(panel.Paragraphs, "已登记的固定入口已移除。项目首页和资料仍然保留。")
+		panel.Buttons = append(panel.Buttons, workui.Button{Label: "恢复固定入口", Action: "project.navigation.restore"})
+	} else if v.NavigationLegacy {
+		panel.Buttons = append(panel.Buttons, workui.Button{Label: "启用项目导航卡", Action: "project.navigation.restore"})
 	}
 	return panel
 }
@@ -256,13 +318,17 @@ func (a *App) runTeamProjectViews(ctx context.Context) error {
 				return err
 			}
 			attention := struct {
-				State               work.ProjectState
-				Revision            int64
-				Decisions, Problems []string
-				URL, HomeRecovery   string
-				Binding             work.RoleBotBinding
-				Channel             work.ProjectChannelBinding
-			}{facts.Project.State, facts.Project.Revision, facts.Attention, facts.Problems, facts.HomeURL, "", facts.Binding, facts.Channel}
+				State                                                        work.ProjectState
+				Revision                                                     int64
+				Decisions, Problems                                          []string
+				URL, HomeRecovery                                            string
+				Binding                                                      work.RoleBotBinding
+				Channel                                                      work.ProjectChannelBinding
+				NavigationGeneration                                         int64
+				NavigationStatus                                             string
+				TeamMaterials                                                teamMaterialsProjection
+				NavigationTabMissing, NavigationPinMissing, NavigationLegacy bool
+			}{facts.Project.State, facts.Project.Revision, facts.Attention, facts.Problems, facts.HomeURL, "", facts.Binding, facts.Channel, facts.NavigationGeneration, facts.NavigationStatus, facts.TeamMaterials, facts.NavigationTabMissing, facts.NavigationPinMissing, facts.NavigationLegacy}
 			if facts.HomeSync == "unknown" || facts.HomeSync == "conflict" {
 				attention.HomeRecovery = facts.HomeSync
 			}
@@ -273,18 +339,14 @@ func (a *App) runTeamProjectViews(ctx context.Context) error {
 			} else if !errors.Is(err, workstore.ErrNotFound) {
 				return err
 			}
-			card, err := workui.Card(viewID, teamProjectPanel(facts))
-			if err != nil {
-				return err
-			}
-			_, err = workui.Queue(tx, workstore.UIView{ID: viewID, ScopeID: facts.Project.ScopeID, SurfaceKey: "project.status:" + id, Kind: "project.status", TargetID: id, TargetRevision: facts.Project.Revision, Binding: facts.Binding, Tenant: facts.Channel.Tenant, ChatID: facts.Channel.ChatID, ChannelGeneration: facts.Channel.BindingGeneration}, card)
-			return err
+			view := workstore.UIView{ID: viewID, ScopeID: facts.Project.ScopeID, SurfaceKey: "project.status:" + id, Kind: "project.status", TargetID: id, TargetRevision: facts.Project.Revision, Binding: facts.Binding, Tenant: facts.Channel.Tenant, ChatID: facts.Channel.ChatID, ChannelGeneration: facts.Channel.BindingGeneration}
+			return queueTeamProjectStatus(tx, view, facts)
 		})
 		if err != nil {
 			failures = append(failures, err)
 			continue
 		}
-		if r.provision != nil && facts.HomeURL != "" && facts.Project.State != work.ProjectArchived && facts.HomeSync != "conflict" {
+		if r.provision != nil && facts.HomeURL != "" && facts.HomeSync != "conflict" {
 			if err = a.refreshTeamProjectHome(ctx, facts); err != nil {
 				failures = append(failures, err)
 			}
@@ -297,6 +359,9 @@ func (a *App) refreshTeamProjectHome(ctx context.Context, facts teamProjectProje
 	facts.HomeSync = ""
 	raw, _ := json.Marshal(facts)
 	id := workui.ID("project.home.refresh", string(raw))
+	if facts.Project.State == work.ProjectArchived {
+		id = workui.ID("project.home.archive", facts.Project.ID, workRevision(facts.Project.Revision))
+	}
 	perform := false
 	err := r.store.Within(ctx, func(tx *workstore.Tx) error {
 		old, err := tx.GetOperation(id)

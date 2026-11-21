@@ -25,7 +25,11 @@ func (s *Service) RecoveryOptions(ctx context.Context, target RecoveryInteractio
 		return RecoveryChoices{}, err
 	}
 	result := RecoveryChoices{}
-	switch target.StepID {
+	stepKind := target.StepID
+	if IsNavigationTabRestoreStep(stepKind) {
+		stepKind = "navigation.tab"
+	}
+	switch stepKind {
 	case "navigation.tab":
 		tabs, err := platform.ListTabs(ctx, state.request.ChatID)
 		if err != nil {

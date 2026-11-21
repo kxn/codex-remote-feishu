@@ -26,6 +26,15 @@ func (t *Tx) notifyMemoryCorrection(old, current work.MemoryEntry) error {
 		if wc.Purpose == work.PurposeControl || wc.Purpose == work.PurposeReview {
 			continue
 		}
+		if wc.TaskID != "" {
+			task, e := t.GetTask(wc.TaskID)
+			if e != nil {
+				return e
+			}
+			if task.OwnerRoleID != wc.RoleID || task.State == work.TaskDone || task.State == work.TaskCancelled {
+				continue
+			}
+		}
 		read := work.ReadScope{ScopeID: wc.ScopeID, ContextID: wc.ID, TaskID: wc.TaskID, RoleID: wc.RoleID}
 		scope, err := t.readScope(read)
 		if err == ErrScopeDenied {
@@ -62,7 +71,7 @@ func (t *Tx) notifyMemoryCorrection(old, current work.MemoryEntry) error {
 		// The source identifies this local notice, not the foreign private body.
 		source := work.SourceRef{Kind: "memory_revision_notice", ID: old.ID, Version: fmt.Sprint(current.Revision), EvidenceRef: body.ID}
 		message := work.Message{ID: id, ScopeID: wc.ScopeID, ConversationID: wc.ID, Source: work.Actor{Kind: work.ActorSystem, ID: "memory-correction"}, DerivedFrom: &source, BodyRef: body.ID, Revision: 1, CreatedAt: now}
-		input := work.Inbox{ID: id + ":input", ScopeID: wc.ScopeID, RecipientRoleID: wc.RoleID, RecipientContextID: wc.ID, EventID: id, MessageID: id, State: work.InboxPending, Revision: 1, AvailableAt: now}
+		input := work.Inbox{ID: id + ":input", ScopeID: wc.ScopeID, TaskID: wc.TaskID, RecipientRoleID: wc.RoleID, RecipientContextID: wc.ID, EventID: id, MessageID: id, State: work.InboxPending, Revision: 1, AvailableAt: now}
 		if _, _, err = t.AcceptMessage(message, []work.Inbox{input}); err != nil {
 			return err
 		}

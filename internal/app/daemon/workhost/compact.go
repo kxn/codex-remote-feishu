@@ -145,6 +145,7 @@ func (h *Host) advanceCompaction(ctx context.Context, operation work.Operation) 
 	if err != nil || !ready {
 		return err
 	}
+	ctx = context.WithValue(ctx, freshHistoryKey{}, true)
 	if worker.Generation == request.Generation {
 		if err = h.Retire(ctx, worker.ID); err != nil {
 			return err

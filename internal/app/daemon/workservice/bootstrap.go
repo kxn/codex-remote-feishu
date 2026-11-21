@@ -82,6 +82,10 @@ func (s *Service) BootstrapContext(ctx context.Context, token, runRef string) (B
 			if e != nil {
 				return e
 			}
+			team, e = teamViewForScope(tx, team, scope)
+			if e != nil {
+				return e
+			}
 			item := BootstrapTeam{Team: team, Roles: []work.Role{}}
 			for _, candidate := range members {
 				if !candidate.Active {

@@ -7,7 +7,9 @@ import (
 
 func lifecycleCommandDTOs() map[string]any {
 	return map[string]any{
-		"role.list": KnowledgeListRequest{}, "role.inspect": RoleInspectRequest{}, "role.update-description": RoleDescriptionRequest{}, "team.list": KnowledgeListRequest{}, "team.inspect": TeamInspectRequest{}, "team.create": TeamCreateRequest{}, "team.update": TeamUpdateRequest{}, "team.member.add": TeamMemberRequest{}, "team.member.remove": TeamMemberRequest{},
+		"team.materials.select": TeamMaterialsSelectRequest{},
+		"team.materials.share":  TeamMaterialsShareRequest{},
+		"role.list":             KnowledgeListRequest{}, "role.inspect": RoleInspectRequest{}, "role.update-description": RoleDescriptionRequest{}, "team.list": KnowledgeListRequest{}, "team.inspect": TeamInspectRequest{}, "team.create": TeamCreateRequest{}, "team.update": TeamUpdateRequest{}, "team.member.add": TeamMemberRequest{}, "team.member.remove": TeamMemberRequest{},
 		"project.inspect": ProjectInspectRequest{}, "project.pause": ProjectLifecycleRequest{}, "project.resume": ProjectLifecycleRequest{}, "project.archive": ProjectLifecycleRequest{}, "project.reopen": ProjectLifecycleRequest{}, "project.member.add": ProjectMemberRequest{}, "project.member.remove": ProjectMemberRequest{}, "project.leader.change": ProjectLeaderRequest{},
 		"task.list": TaskListRequest{}, "task.inspect": TaskInspectRequest{},
 		"task.start": TaskTransitionRequest{}, "task.wait": TaskTransitionRequest{}, "task.check": TaskTransitionRequest{}, "task.done": TaskTransitionRequest{}, "task.cancel": TaskTransitionRequest{}, "task.pause": TaskTransitionRequest{}, "task.resume": TaskTransitionRequest{},
@@ -17,6 +19,10 @@ func lifecycleCommandDTOs() map[string]any {
 }
 func (s *Service) executeLifecycle(ctx context.Context, token string, req workcmd.DispatchRequest) (any, bool, error) {
 	switch req.Name {
+	case "team.materials.select":
+		return executeDTO(ctx, token, req, s.TeamMaterialsSelect)
+	case "team.materials.share":
+		return executeDTO(ctx, token, req, s.TeamMaterialsShare)
 	case "role.list":
 		return executeDTO(ctx, token, req, s.RoleList)
 	case "role.inspect":

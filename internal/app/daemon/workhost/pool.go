@@ -47,7 +47,7 @@ func (h *Host) ensurePoolCapacity(ctx context.Context, contextID string, purpose
 			return e
 		})
 		if err == nil {
-			err = h.rebuildCarrier(ctx, &candidate, carrier)
+			err = h.rebuildCarrier(ctx, &candidate, carrier, true)
 		}
 		unlock()
 		if ctx.Err() != nil {

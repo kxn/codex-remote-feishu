@@ -63,8 +63,7 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 	}
 	scope, err := a.bindWorkProcess(cmd)
 	if err != nil {
-		childCancel()
-		_ = cmd.Wait()
+		abortNativeStartup(cmd, childCancel, scope, childStdin, childStdout, childStderr)
 		return nil, err
 	}
 	a.debugf("child started: binary=%s pid=%d cwd=%s", childBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
@@ -73,8 +72,7 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 		return a.bootstrapHeadlessCodex(childStdin, childStdout, rawLogger, reportProblem)
 	})
 	if err != nil {
-		childCancel()
-		_ = cmd.Wait()
+		abortNativeStartup(cmd, childCancel, scope, childStdin, childStdout, childStderr)
 		return nil, err
 	}
 

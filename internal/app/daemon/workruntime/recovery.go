@@ -116,7 +116,7 @@ func (c *Coordinator) Recover(ctx context.Context, request RecoveryRequest) (Rec
 		if _, _, e = tx.PutOperation(operation, 0); e != nil {
 			return e
 		}
-		if e = c.recoveryInput(tx, id, worker, request.Source); e != nil {
+		if e = c.recoveryInput(tx, id, worker, request.Source, "用户已明确授权恢复当前工作上下文。原收件箱输入保持未处理，先核查此前已经完成的操作和副作用，不要盲目重跑；用明确的处理报告说明实际采用及处理的输入。此前原生历史只读保留，新执行使用新的隔离会话。"); e != nil {
 			return e
 		}
 		if e = tx.AcknowledgeRuntimeRecovery(worker.ID, gate.Reason, gate.Revision); e != nil {
@@ -191,13 +191,16 @@ func (c *Coordinator) recoveryCondition(tx *workstore.Tx, request RecoveryReques
 	inspection = InspectionRequest{Carrier: carrier, Binding: carrier.Owner, SessionID: worker.NativeSessionID, LocationID: worker.LocationID, LocationGeneration: worker.LocationGeneration}
 	return worker, gate, inspection, nil
 }
-func (c *Coordinator) recoveryInput(tx *workstore.Tx, id string, worker work.WorkerSession, source work.SourceRef) error {
-	text := "用户已明确授权恢复当前工作上下文。原收件箱输入保持未处理，先核查此前已经完成的操作和副作用，不要盲目重跑；用明确的处理报告说明实际采用及处理的输入。此前原生历史只读保留，新执行使用新的隔离会话。"
+func (c *Coordinator) recoveryInput(tx *workstore.Tx, id string, worker work.WorkerSession, source work.SourceRef, text string) error {
+	wc, err := tx.GetContext(worker.ContextID)
+	if err != nil {
+		return err
+	}
 	body := work.NewContent(id+":instructions", worker.ScopeID, "text/plain", []byte(text), c.options.Clock())
 	if err := tx.PutContent(body); err != nil {
 		return err
 	}
 	message := work.Message{ID: id + ":message", ScopeID: worker.ScopeID, ConversationID: "runtime-recovery:" + worker.ContextID, Source: work.Actor{Kind: work.ActorSystem, ID: "runtime-recovery"}, BodyRef: body.ID, DerivedFrom: &source, Revision: 1, CreatedAt: c.options.Clock()}
-	_, _, err := tx.AcceptMessage(message, []work.Inbox{{ID: id + ":inbox", ScopeID: worker.ScopeID, RecipientContextID: worker.ContextID, RecipientRoleID: worker.RoleID, EventID: id, State: work.InboxPending, AvailableAt: c.options.Clock(), Revision: 1}})
+	_, _, err = tx.AcceptMessage(message, []work.Inbox{{ID: id + ":inbox", ScopeID: worker.ScopeID, RecipientContextID: worker.ContextID, RecipientRoleID: worker.RoleID, TaskID: wc.TaskID, EventID: id, State: work.InboxPending, AvailableAt: c.options.Clock(), Revision: 1}})
 	return err
 }

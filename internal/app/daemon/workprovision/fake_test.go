@@ -138,7 +138,11 @@ func (p *fakePlatform) ListTabs(context.Context, string) ([]feishu.ProjectChatTa
 }
 func (p *fakePlatform) CreateDocTab(_ context.Context, _ string, link string) (feishu.ProjectChatTab, error) {
 	p.tabCalls++
-	tab := feishu.ProjectChatTab{ID: "system-project-tab", Name: "项目", Type: "doc", URL: link}
+	id := "system-project-tab"
+	if p.tabCalls > 1 {
+		id += "-" + strconv.Itoa(p.tabCalls)
+	}
+	tab := feishu.ProjectChatTab{ID: id, Name: "项目", Type: "doc", URL: link}
 	p.tabs = append(p.tabs, tab)
 	if p.tabErr != nil && !p.tabHasID {
 		return feishu.ProjectChatTab{}, p.tabErr

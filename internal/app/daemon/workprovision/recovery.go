@@ -169,7 +169,11 @@ func (s *Service) ResolveUnknown(ctx context.Context, recovery Recovery) (Report
 		return Report{}, fmt.Errorf("recovery requires an exact external ID")
 	}
 	var receipt effect
-	switch recovery.StepID {
+	stepKind := recovery.StepID
+	if IsNavigationTabRestoreStep(stepKind) {
+		stepKind = "navigation.tab"
+	}
+	switch stepKind {
 	case "materials.folder":
 		if err = platform.CheckFolder(ctx, recovery.ExternalID); err != nil {
 			return Report{}, err
@@ -243,6 +247,16 @@ func (s *Service) ResolveUnknown(ctx context.Context, recovery Recovery) (Report
 	}
 	if _, err = s.confirmKnown(ctx, state, step, receipt); err != nil {
 		return Report{}, err
+	}
+	if IsNavigationTabRestoreStep(recovery.StepID) {
+		generation := state.home.NavigationGeneration
+		if recovery.StepID != navigationTabRestoreStep(state.home.TabID) {
+			return Report{}, workstore.ErrConflict
+		}
+		if err = s.RestoreFixedTab(ctx, state.project.ID, generation); err != nil {
+			return Report{}, err
+		}
+		return s.report(ctx, state, nil)
 	}
 	return s.Run(ctx, recovery.OperationID)
 }

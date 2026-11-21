@@ -33,8 +33,7 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 	}
 	scope, err := a.bindWorkProcess(cmd)
 	if err != nil {
-		childCancel()
-		_ = cmd.Wait()
+		abortNativeStartup(cmd, childCancel, scope, childStdin, childStdout, childStderr)
 		return nil, err
 	}
 	a.debugf("claude child started: binary=%s pid=%d cwd=%s", claudeBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
@@ -43,8 +42,7 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 		return a.bootstrapClaude(childStdin, childStdout, rawLogger, reportProblem)
 	})
 	if err != nil {
-		childCancel()
-		_ = cmd.Wait()
+		abortNativeStartup(cmd, childCancel, scope, childStdin, childStdout, childStderr)
 		return nil, err
 	}
 

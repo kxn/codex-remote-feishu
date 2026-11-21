@@ -18,6 +18,8 @@ type inspectedTurn struct {
 	Terminal  bool
 }
 type workInspectionState struct {
+	startupProcessUntracked bool
+
 	scopeID              string
 	cliSession           string
 	dirty                bool
@@ -87,7 +89,7 @@ func (s *workInspectionState) events(events []agentproto.Event) {
 		if event.Kind == agentproto.EventTurnStarted || event.Kind == agentproto.EventTurnCompleted || event.Kind == agentproto.EventNativeTurnBindingObserved || event.Kind == agentproto.EventNativeInputReceipt {
 			s.dirty = true
 		}
-		if event.ThreadID != "" && (event.Kind == agentproto.EventNativeTurnBindingObserved || event.Kind == agentproto.EventTurnStarted || event.Kind == agentproto.EventTurnCompleted) {
+		if event.ThreadID != "" && (event.Kind == agentproto.EventNativeTurnBindingObserved || event.Kind == agentproto.EventTurnStarted || (event.Kind == agentproto.EventTurnCompleted && event.TurnID != "")) {
 			s.sessionIDs[event.ThreadID] = true
 		}
 		key := nativeTurnKey(event.ThreadID, event.TurnID)

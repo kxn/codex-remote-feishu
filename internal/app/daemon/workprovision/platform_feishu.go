@@ -38,6 +38,8 @@ type FeishuPlatform struct {
 	drive     feishu.BitableAPI
 }
 
+func (p *FeishuPlatform) UsesFixedNavigationCard() {}
+
 func (p *FeishuPlatform) Binding() work.RoleBotBinding { return p.binding }
 func (p *FeishuPlatform) ConnectorIdentity() string {
 	return workservice.FeishuConnectorIdentity(p.binding)

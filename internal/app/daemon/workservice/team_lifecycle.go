@@ -12,11 +12,12 @@ import (
 )
 
 type TeamCreateRequest struct {
-	Key             string   `json:"key"`
-	Name            string   `json:"name"`
-	LeaderRoleID    string   `json:"leader_role_id"`
-	MemberRoleIDs   []string `json:"member_role_ids"`
-	SourceMessageID string   `json:"source_message_id"`
+	Materials       *work.TeamMaterialsSelection `json:"materials,omitempty"`
+	Key             string                       `json:"key"`
+	Name            string                       `json:"name"`
+	LeaderRoleID    string                       `json:"leader_role_id"`
+	MemberRoleIDs   []string                     `json:"member_role_ids"`
+	SourceMessageID string                       `json:"source_message_id"`
 }
 type TeamUpdateRequest struct {
 	Key              string `json:"key"`
@@ -80,6 +81,23 @@ func (s *Service) TeamCreate(ctx context.Context, token, run string, req TeamCre
 				}
 			}
 			team := work.Team{ID: id, Name: req.Name, LeaderRoleID: req.LeaderRoleID, Revision: 1}
+			selection := work.TeamMaterialsSelection{Mode: "managed"}
+			if req.Materials != nil {
+				selection = *req.Materials
+			}
+			if err = selection.Validate(); err != nil {
+				return "", 0, err
+			}
+			if selection.Mode != "managed" {
+				if err = directorySourceContainsURL(tx, message, selection.URL); err != nil {
+					return "", 0, err
+				}
+			}
+			binding, err := tx.GetRoleBotBinding(req.LeaderRoleID)
+			if err != nil {
+				return "", 0, err
+			}
+			team.Materials = &work.TeamMaterials{ScopeID: scope.ID, Generation: 1, Selection: selection, Identity: binding, Source: humanSource(message), State: "pending"}
 			if err = tx.PutTeam(team, 0); err != nil {
 				return "", 0, err
 			}
@@ -128,6 +146,12 @@ func (s *Service) TeamList(ctx context.Context, token, run string, req Knowledge
 				}
 			}
 		}
+		for index, team := range visible {
+			visible[index], err = teamViewForScope(tx, team, scope)
+			if err != nil {
+				return err
+			}
+		}
 		page, err = knowledgePage(visible, req, func(v work.Team) string { return v.ID })
 		return err
 	})
@@ -156,6 +180,10 @@ func (s *Service) TeamInspect(ctx context.Context, token, run string, req TeamIn
 			return workauth.ErrUnauthorized
 		}
 		if view.Team, err = tx.GetTeam(req.TeamID); err != nil {
+			return err
+		}
+		view.Team, err = teamViewForScope(tx, view.Team, scope)
+		if err != nil {
 			return err
 		}
 		view.Members, err = tx.ListTeamMembers(req.TeamID)

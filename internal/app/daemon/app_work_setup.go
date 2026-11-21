@@ -21,6 +21,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workteamhome"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worktransport"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workupgrade"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
@@ -127,6 +128,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	}
 	r.handler = workhttp.NewHandler(service)
 	a.teamRuntime = r
+	r.teamMaterials = workteamhome.New(store, a.teamMaterialsResolver)
 	ok = true
 	return nil
 }

@@ -65,7 +65,10 @@ func (s *Service) RefreshHome(ctx context.Context, projectID string) error {
 			if _, err = s.confirmKnown(ctx, state, step, effect{ID: state.home.DocumentID, Data: actual}); err != nil {
 				return err
 			}
-			return s.persistIndex(ctx, &state, platform, actual)
+			if err = s.persistIndex(ctx, &state, platform, actual); err != nil {
+				return err
+			}
+			continue
 		}
 		if actual.Index.Fingerprint == state.home.IndexBaseline && actual.Status.Fingerprint == state.home.StatusBaseline {
 			_ = s.homeUpdate(ctx, &state, func(home *workstore.ProjectHome) { home.SyncState = "unknown" })
@@ -100,7 +103,9 @@ func (s *Service) RefreshHome(ctx context.Context, projectID string) error {
 		return effect{ID: state.home.DocumentID, Data: blocks}, err
 	})
 	if writeErr != nil {
-		_ = s.homeUpdate(ctx, &state, func(home *workstore.ProjectHome) { home.SyncState = "unknown" })
+		if step.State == work.OperationSending || step.State == work.OperationUnknown {
+			_ = s.homeUpdate(ctx, &state, func(home *workstore.ProjectHome) { home.SyncState = "unknown" })
+		}
 		return writeErr
 	}
 	blocks, err := decodeStep[HomeBlocks](step)

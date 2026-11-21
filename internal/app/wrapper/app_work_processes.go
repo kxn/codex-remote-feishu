@@ -1,8 +1,10 @@
 package wrapper
 
 import (
+	"context"
 	"fmt"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"io"
 	"os"
 	"os/exec"
 
@@ -23,6 +25,9 @@ func (a *App) bindWorkProcess(cmd *exec.Cmd) (*hostinventory.Scope, error) {
 	}
 	scope, err := hostinventory.Bind(cmd)
 	if err != nil {
+		a.work.inspection.mu.Lock()
+		a.work.inspection.startupProcessUntracked = true
+		a.work.inspection.mu.Unlock()
 		return nil, err
 	}
 	a.work.inspection.mu.Lock()
@@ -34,7 +39,7 @@ func (a *App) bindWorkProcess(cmd *exec.Cmd) (*hostinventory.Scope, error) {
 	a.work.inspection.cliSession = ""
 	a.work.inspection.mu.Unlock()
 	if err := a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner); err != nil {
-		return nil, err
+		return scope, err
 	}
 	return scope, nil
 }
@@ -48,4 +53,14 @@ func (a *App) carrierProcessIdentity() *agentproto.RuntimeProcessIdentity {
 		return nil
 	}
 	return &agentproto.RuntimeProcessIdentity{HostID: a.work.snapshot.HostID, Platform: identity.Platform, PID: identity.PID, StartIdentity: identity.StartIdentity}
+}
+
+func abortNativeStartup(cmd *exec.Cmd, cancel context.CancelFunc, scope *hostinventory.Scope, pipes ...io.Closer) {
+	scope.MarkControlledStop()
+	cancel()
+	_ = cmd.Wait()
+	scope.MarkWaitObserved()
+	for _, pipe := range pipes {
+		_ = pipe.Close()
+	}
 }

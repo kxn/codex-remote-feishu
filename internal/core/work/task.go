@@ -28,6 +28,7 @@ type GateSource string
 const (
 	GateProject        GateSource = "project"
 	GateTask           GateSource = "task"
+	GateParticipation  GateSource = "participation"
 	GateContext        GateSource = "context"
 	GateHumanControl   GateSource = "human_control"
 	GateReconciliation GateSource = "reconciliation"
@@ -48,13 +49,13 @@ func (v PauseGate) Validate() error {
 	if err := required(v.ID, v.ScopeID, v.SourceID); err != nil {
 		return err
 	}
-	if !oneOf(v.Source, GateProject, GateTask, GateContext, GateHumanControl, GateReconciliation) || !oneOf(v.State, GateOpen, GateClosed) {
+	if !oneOf(v.Source, GateProject, GateTask, GateParticipation, GateContext, GateHumanControl, GateReconciliation) || !oneOf(v.State, GateOpen, GateClosed) {
 		return fmt.Errorf("invalid pause gate")
 	}
 	if v.Source == GateContext && v.ContextID == "" {
 		return fmt.Errorf("context gate needs context")
 	}
-	if v.Source == GateTask && v.TaskID == "" {
+	if (v.Source == GateTask || v.Source == GateParticipation) && v.TaskID == "" {
 		return fmt.Errorf("task gate needs task")
 	}
 	return positive("gate revision", v.Revision)

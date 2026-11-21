@@ -30,7 +30,7 @@ func (s *Service) step(ctx context.Context, state snapshot, key string, identity
 		if err := s.current(tx, state); err != nil {
 			return err
 		}
-		if write {
+		if write && !projectPresentationStep(key) {
 			if err := s.allowEstablishmentEffect(tx, state); err != nil {
 				return err
 			}
@@ -39,7 +39,7 @@ func (s *Service) step(ctx context.Context, state snapshot, key string, identity
 		if err != nil {
 			return err
 		}
-		if cancellationRequested(op) && (write || !strings.HasPrefix(key, "recovery.")) {
+		if cancellationRequested(op) && !projectPresentationStep(key) && (write || !strings.HasPrefix(key, "recovery.")) {
 			return ErrCancelled
 		}
 		existing, err := tx.GetProvisionStep(state.operation.ID, key)
@@ -199,4 +199,10 @@ func (s *Service) confirmKnown(ctx context.Context, state snapshot, step worksto
 		return nil
 	})
 	return step, err
+}
+
+// Project presentation writes only maintain the fixed home and registered
+// navigation. They never prepare execution or re-open the business gate.
+func projectPresentationStep(key string) bool {
+	return strings.HasPrefix(key, "projection.") || strings.HasPrefix(key, "navigation.fixed.")
 }

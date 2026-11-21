@@ -104,6 +104,11 @@ type ProjectHome struct {
 	TabID                      string              `json:"tab_id,omitempty"`
 	NavigationMessageID        string              `json:"navigation_message_id,omitempty"`
 	PinMessageID               string              `json:"pin_message_id,omitempty"`
+	NavigationCardViewID       string              `json:"navigation_card_view_id,omitempty"`
+	NavigationCardWanted       bool                `json:"navigation_card_wanted,omitempty"`
+	NavigationGeneration       int64               `json:"navigation_generation,omitempty"`
+	NavigationTabMissing       bool                `json:"navigation_tab_missing,omitempty"`
+	NavigationPinMissing       bool                `json:"navigation_pin_missing,omitempty"`
 	SyncState                  string              `json:"sync_state"`
 	Revision                   int64               `json:"revision"`
 	UpdatedAt                  time.Time           `json:"updated_at"`

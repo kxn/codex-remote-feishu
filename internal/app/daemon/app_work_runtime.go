@@ -21,6 +21,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workteamhome"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worktransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
@@ -42,6 +43,7 @@ type teamRuntime struct {
 	signer              *workauth.Signer
 	handler             http.Handler
 	store               *workstore.Store
+	teamMaterials       *workteamhome.Service
 	service             *workservice.Service
 	engine              *workengine.Engine
 	host                *workhost.Host
@@ -109,6 +111,11 @@ func (r *teamRuntime) run(ctx context.Context) {
 	r.every(ctx, "project-views", 5*time.Second, r.app.runTeamProjectViews)
 	r.every(ctx, "settings", 5*time.Second, func(ctx context.Context) error { return r.app.syncWorkRoles(ctx, r.store) })
 	r.every(ctx, "scheduler", time.Second, r.tickScheduler)
+	r.every(ctx, "idle-carrier-recovery", 2*time.Second, func(ctx context.Context) error { return r.coordinator.ReconcileIdleCarriers(ctx, 8) })
+	r.every(ctx, "startup-recovery", 2*time.Second, r.host.ReconcileStartupFailures)
+	r.every(ctx, "project-lifecycle", time.Second, r.app.runTeamProjectLifecycle)
+	r.every(ctx, "project-navigation", 30*time.Second, r.app.runTeamProjectNavigation)
+	r.every(ctx, "team-materials", 30*time.Second, r.teamMaterials.Run)
 	r.every(ctx, "native-goal-policy", time.Second, func(ctx context.Context) error { return r.coordinator.RunGoalPolicies(ctx, 32) })
 	r.every(ctx, "native-stop", time.Second, r.stops.RunOnce)
 	r.every(ctx, "publication", time.Second, func(ctx context.Context) error { _, err := r.publisher.RunOnce(ctx, 32); return err })

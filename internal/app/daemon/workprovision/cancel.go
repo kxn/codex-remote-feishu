@@ -112,8 +112,21 @@ func (s *Service) settleCancellation(ctx context.Context, operation work.Operati
 		if err != nil {
 			return err
 		}
-		if !cancellationRequested(op) {
-			return fmt.Errorf("provisioning has no proven cancellation request")
+		if op.State == work.OperationConfirmed || op.State == work.OperationTerminal {
+			report.State = string(op.State)
+			report.Steps, err = tx.ListProvisionSteps(op.ID)
+			return err
+		}
+		newCancellation := !cancellationRequested(op)
+		if newCancellation {
+			project, err := tx.GetProject(projectID)
+			if err != nil {
+				return err
+			}
+			if project.State != work.ProjectArchiving || project.ScopeID != op.ScopeID {
+				return fmt.Errorf("provisioning has no proven cancellation request")
+			}
+			op.Steps = append(op.Steps, work.OperationStep{ID: "cancellation_requested", State: work.OperationConfirmed, Receipt: "project-archiving:" + projectID})
 		}
 		children, err := tx.ListProvisionSteps(op.ID)
 		if err != nil {
@@ -151,6 +164,11 @@ func (s *Service) settleCancellation(ctx context.Context, operation work.Operati
 				}
 			}
 		}
+		if op.State == work.OperationUnknown && !newCancellation && len(report.Blockers) > 0 && op.LastError == fmt.Sprint(report.Blockers) {
+			report.State = string(op.State)
+			report.Steps = children
+			return nil
+		}
 		if op.State != work.OperationTerminal {
 			old := op.Revision
 			op.Revision++
@@ -179,4 +197,27 @@ func (s *Service) settleCancellation(ctx context.Context, operation work.Operati
 		return err
 	})
 	return report, err
+}
+
+// SettleArchivedEstablishment stops unfinished provisioning authorized by the
+// project archive transition. Recorded unknown external effects still require
+// exact reconciliation before archiving can settle.
+func (s *Service) SettleArchivedEstablishment(ctx context.Context, project work.Project) error {
+	var operations []work.Operation
+	if err := s.store.Within(ctx, func(tx *workstore.Tx) error {
+		var err error
+		operations, err = tx.ListOperations(project.ScopeID)
+		return err
+	}); err != nil {
+		return err
+	}
+	for _, operation := range operations {
+		if (operation.Kind == "project.provision" || operation.Kind == "project.member.provision") &&
+			operation.State != work.OperationConfirmed && operation.State != work.OperationTerminal {
+			if _, err := s.settleCancellation(ctx, operation, project.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

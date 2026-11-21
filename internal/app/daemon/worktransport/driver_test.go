@@ -239,3 +239,95 @@ func TestInspectionTimeoutAndLateResultNeverReleaseBusinessOccupancy(t *testing.
 		return nil
 	})
 }
+
+func TestIdleReconnectRunsOwnerInspectionBeforeRestoringReady(t *testing.T) {
+	f := newTransportFixture(t)
+	if err := f.coordinator.Disconnect(t.Context(), "instance"); err != nil {
+		t.Fatal(err)
+	}
+	// A fresh coordinator rediscovers the gate. There was no active attempt to
+	// drive the ordinary reconciliation loop.
+	f.coordinator = workruntime.New(f.store, workruntime.Options{Driver: f.driver})
+	f.driver.BindRegistrar(f.coordinator)
+	hello := agentproto.Hello{Instance: agentproto.InstanceHello{InstanceID: "instance", Managed: true, Source: "headless", Backend: agentproto.BackendCodex}, WorkerProtocolVersion: 1, JournalProtocolVersion: 1, CarrierIncarnation: "carrier-1"}
+	if err := f.coordinator.HandleHello(t.Context(), hello); err != nil {
+		t.Fatal(err)
+	}
+	safe := false
+	calls := 0
+	f.relay.send = func(instance string, command agentproto.Command) error {
+		calls++
+		if instance != "instance" || command.Kind != agentproto.CommandRuntimeInspect || command.Execution == nil || *command.Execution != f.request.Binding {
+			t.Fatalf("invalid owner inspection command: %+v", command)
+		}
+		event := f.result(command)
+		if !safe {
+			event.RuntimeInspection.Background.PendingTaskIDs = []string{"still-running"}
+			hash, err := agentproto.RuntimeEventPayloadHash(event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			event.Journal.PayloadHash = hash
+		}
+		if err := f.coordinator.HandleEvent(t.Context(), instance, event); err != nil {
+			return err
+		}
+		return f.driver.DeliverInspection(t.Context(), event)
+	}
+	if err := f.coordinator.ReconcileIdleCarriers(t.Context(), 8); err == nil {
+		t.Fatal("incomplete quiescence was accepted")
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		worker, err := tx.GetWorker("worker")
+		if err != nil {
+			return err
+		}
+		if worker.State != work.WorkerRecovering {
+			t.Fatalf("restored before complete quiescence: %s", worker.State)
+		}
+		return nil
+	})
+	safe = true
+	if err := f.coordinator.ReconcileIdleCarriers(t.Context(), 8); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		worker, err := tx.GetWorker("worker")
+		if err != nil {
+			return err
+		}
+		if worker.State != work.WorkerReady || worker.Generation != 1 || worker.CarrierIncarnation != "carrier-1" || calls != 2 {
+			t.Fatalf("idle worker did not recover exact carrier: %+v, inspections=%d", worker, calls)
+		}
+		if _, err = tx.GetRuntimeGate(worker.ID); !errors.Is(err, workstore.ErrNotFound) {
+			t.Fatalf("idle gate retained after exact proof: %v", err)
+		}
+		return nil
+	})
+}
+
+func TestRejectedResumeInspectionUsesOwnerInventoryWithoutProbingMissingSession(t *testing.T) {
+	f := newTransportFixture(t)
+	request := f.request
+	request.ResumeRejected = true
+	request.SubjectCommandID = "rejected-resume"
+	request.SessionID = "missing-history"
+	request.Binding.AttemptID, request.Binding.RunRef = "attempt", "run"
+	f.relay.send = func(instance string, command agentproto.Command) error {
+		if command.Execution == nil || *command.Execution != f.request.Binding || command.Target.ThreadID != "missing-history" || command.Target.TurnID != "" {
+			t.Fatalf("rejected native resume did not inspect the physical owner's complete inventory: %+v", command)
+		}
+		event := f.result(command)
+		if err := f.coordinator.HandleEvent(t.Context(), instance, event); err != nil {
+			return err
+		}
+		return f.driver.DeliverInspection(t.Context(), event)
+	}
+	proof, err := f.driver.Inspect(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = proof.ValidateStopped(request); err != nil {
+		t.Fatal(err)
+	}
+}
