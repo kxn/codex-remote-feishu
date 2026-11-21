@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-21`
-> Summary: 更新 Raft 式团队完整产品设计，新增共享资料接线与版本规范，同步 Agent Git 自主管理、会话 Goal 和 Cron 退役。
+> Summary: 新增 Raft 源码依据与人机交付工作约定，同步正式发布、人的固定入口和临时／长期资料边界。
 
 ## 1. 适用范围
 
@@ -206,6 +206,7 @@
 - [feishu-agent-team-technical-design.md](./draft/feishu-agent-team-technical-design.md)
 - [feishu-agent-team-execution-design.md](./draft/feishu-agent-team-execution-design.md)
 - [feishu-agent-team-materials-design.md](./draft/feishu-agent-team-materials-design.md)
+- [feishu-agent-team-human-delivery-design.md](./draft/feishu-agent-team-human-delivery-design.md)
 - [feishu-agent-codebase-reuse-assessment.md](./draft/feishu-agent-codebase-reuse-assessment.md)
 - [feishu-group-context-multi-bot-design.md](./draft/feishu-group-context-multi-bot-design.md)
 - [feishu-group-on-demand-resume-design.md](./draft/feishu-group-on-demand-resume-design.md)

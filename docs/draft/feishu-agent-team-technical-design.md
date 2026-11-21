@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 落实 Agent 自主管理 Git、会话 Goal 边界、Cron 退役及长期共享资料的 API 接线与权威分工。
+> Summary: 增加显式 Delivery 与发送回执合同，关联资料持久化及预期交付，旧自动预览退出正式交付判断。
 
 ## 1. 结论与范围
 
@@ -116,6 +116,7 @@ flowchart TD
 | `WorkerSession` / `ExecutionLocation` | 工作上下文、原生会话、host/cwd、位置绑定代次与占用 | 工作库保存绑定；Agent 操作 Git，Git 保存自身事实 |
 | `Team` / `ResourceCollection` / `Resource` / `ResourceVersion` | 团队与项目共享资料的身份、引用、权威来源、版本和来源锚点 | 资料注册表保存关联与回执；正文在指定权威载体，见资料设计 |
 | `ArtifactVersion` / `Review` / `Integration` | 不可变成果、对应评审与集成状态 | 新协作存储；不可变文件／Git 引用作为成果载体 |
+| `Delivery` | 受众、意图、简要结论、需人动作、固定成果引用、保留类别、outbox 关联与送达状态 | 统一工作存储；发布、通知、已读与验收分开 |
 | `MemoryEntry` | scope、key、内容、来源、版本、撤销状态 | 新协作存储 |
 | Bot 模型配置 | profile/model/reasoning 等 | 保持现有 Bot capability store 为唯一写源 |
 | 项目资源、负责人及调度预算 | 团队模式的资源关联、owner、并发与队列策略 | 协作库；旧 room store 仅负责未迁移群 |
@@ -367,6 +368,14 @@ Conversation 先有逻辑 ID，再取得平台根消息／话题 ID。相关 out
 ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。`turn.completed` 不等于 Task 完成；当前用户中断也可能使执行 QueueItem 收口，因此业务完成必须有任务结果与验收证据。
 
 暂停先关闭新执行准入；已有 run 时记录 pause requested 并请求中断，直到原生 terminal evidence 到达，才显示实际已停下并释放 slot。回信仍入库，恢复后处理。任务取消、项目归档或角色移除使后续唤醒失效；迟到结果保留在原 attempt，不自动重新打开任务。
+
+### 11.1.1 显式交付合同
+
+任务承接时声明必要交付及验收方式，按需求修订更新。Agent 通过统一 CLI 用例发布 Delivery，服务端核对 scope、成果引用与持久化状态，再原子关联 Delivery 和通知 outbox。外部资源保存使用前置 operation；不能用扫描 native final 的文件名替代登记，也不能在远端尚未保存时标为可交付。
+
+声明必须交付的任务在缺少对应成果时不能确认交付完成；通知失败保留待发送，人的已读和验收另存，暂停不受此检查阻碍。issue-backed 业务状态仍以 issue 为权威，外部关闭而缺少成果显示实际缺口，不擅自重开 issue 或伪造已验收。
+
+这比 Raft 一般任务的提示式交付要求更明确，是本项目补充合同。系统能查登记完整性，不能自动识别所有未登记文件的价值；负责人和评审仍承担内容判断。提示词、工作目录、旧预览边界及人的固定入口见 [交付设计](./feishu-agent-team-human-delivery-design.md)。
 
 ### 11.2 并发为 1 也必须完成交接
 

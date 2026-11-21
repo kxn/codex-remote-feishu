@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 核实飞书资料接口与身份限制，定义长期原位更新、共享范围、交付版本及 issue/PR/repo 文档的权威边界。
+> Summary: 补充面向人的显式交付与保留分类，区分旧监督预览、临时评审材料、正式成果及长期资料。
 
 ## 1. 结论与核查范围
 
@@ -35,7 +35,7 @@ GitHub 侧可通过已配置 GitHub App／仓库凭据接 [issue 更新](https:/
 
 已有 [Drive adapter](../../internal/adapter/feishu/markdown_preview_lark_api.go)、[Bitable API](../../internal/adapter/feishu/bitable_api.go)、[附件下载落地](../../internal/app/daemon/app_inbound_file.go) 和 [文档评论读取](../../internal/app/daemon/tool_service_drive_comments.go) 可按职责复用。Docx 正文／blocks、Wiki 解析与节点、Sheets 单元格、事件入口、GitHub 资源绑定需要新增应用用例与 adapter。
 
-当前预览缓存由 scope＋路径＋内容 hash 定位，内容变化会产生新上传；[预览清理](../../internal/adapter/feishu/preview/markdown_preview_managed.go) 会删除远端文件，默认后台清理年龄为 24 小时。长期资料必须使用不同远端目录、注册记录和清理范围；不能只给旧预览加一个永久标记却仍被旧目录扫描器删除。IM file_key 也不能当云文档的永久 ID。
+旧预览服务于人逐次监督 Agent 的场景，可保留为辅助，不因目标改变就把它视为错误实现。当前预览缓存由 scope＋路径＋内容 hash 定位，内容变化会产生新上传；[预览清理](../../internal/adapter/feishu/preview/markdown_preview_managed.go) 会删除远端文件，默认后台清理年龄为 24 小时。长期资料必须使用不同远端目录、注册记录和清理范围；不能只给旧预览加一个永久标记却仍被旧目录扫描器删除。IM file_key 也不能当云文档的永久 ID。
 
 只保留 Bitable 通用 API，不复用旧 Cron 的 schema、配置页、scheduler、运行记录和 cronrepo。项目已有业务表不能被 Cron schema 校正器改写。本仓库 issueworkflow 是开发本仓的工具，不自动等于产品的 GitHub connector。
 
@@ -128,6 +128,14 @@ Docx 的 `document_revision_id` 不是 expected-current 强 CAS；`client_token`
 一般分析可明确交付并验收已固定的观测数据集。要求严格同一源版本的事项，采用已验证的版本导出机制，或经源负责人确认停止编辑及计算变化后形成可核对基线；不假设平台可自动锁住所有人工编辑。条件未满足显示“快照未就绪”。公式表保留公式、输入与计算结果及时间，不能只存截图或暗示不同时间读到的值必然对应。
 
 不承诺飞书无限历史保留或跨表原子快照。快照完整性影响验收：仅有摘要不算完整可复核成果。个人／项目资料及快照遵守同一共享范围；本地持久快照需备份，不放在可被 worktree 清理的目录。
+
+### 6.4 面向人的发布与保存责任
+
+[交付工作约定](./feishu-agent-team-human-delivery-design.md) 区分过程材料、待评审材料、正式成果及长期知识，受众另作一条轴。临时决策资料也可能需要稳定链接和版本，不能按“不是长期文档”就放回会被清理的旧预览区。
+
+Resource／ArtifactVersion 负责内容身份与固定版本，Delivery 负责向谁、为何、需要什么动作以及通知是否送达。交付摘要不是第二份权威正文，待我处理视图不是另一个资料仓库。未处理的评审／决定和仍被引用的版本保持保留；关闭后按项目既定保留策略归档／清理，未设置策略时不套用预览 TTL。
+
+正式交付先持久保存并登记，再通知；旧自动预览结果不能自动升级为正式 Resource 或完成证据。旧能力可保留为按需查看，具体存放、分类、完成检查和提示词职责见交付约定，不重新让模型决定每份已交付成果是否需要持久保存。
 
 ## 7. 变更发现、搜索与 Agent 上下文
 

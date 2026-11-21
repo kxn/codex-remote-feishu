@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 弃用 Cron，改为 Agent 原生 Git 自主管理，区分会话 Goal，并补齐长期共享资料的复用边界。
+> Summary: 明确旧上传的逐次监督用途和可保留边界；正式交付转为有受众、成果引用及送达记录的业务操作。
 
 ## 1. 决策与范围
 
@@ -58,7 +58,7 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 
 ### 3.1 资料接入的新增审计
 
-当前 [上传预览](../../internal/adapter/feishu/preview/markdown_preview.go) 默认 24 小时清理；[缓存 key](../../internal/adapter/feishu/preview/markdown_preview_helpers.go) 含 scope、路径与 content hash，内容改变通常新建远端文件；[后台清理](../../internal/adapter/feishu/preview/markdown_preview_managed.go) 会实际删除远端对象。这解释了“每次都产生新文件”的现状，不能当作长期资料管理的底座。
+当前 [上传预览](../../internal/adapter/feishu/preview/markdown_preview.go) 默认 24 小时清理；[缓存 key](../../internal/adapter/feishu/preview/markdown_preview_helpers.go) 含 scope、路径与 content hash，内容改变通常新建远端文件；[后台清理](../../internal/adapter/feishu/preview/markdown_preview_managed.go) 会实际删除远端对象。这解释了“每次都产生新文件”的现状。用户补充其原始用途是逐次监督：模型总结提到文件时预上传供人查看。它可以作为可选辅助保留，但不能当作长期资料或正式交付的唯一依据；新团队默认不自动外发所有过程文件。
 
 - 可复用 [Drive adapter](../../internal/adapter/feishu/markdown_preview_lark_api.go) 的上传／元数据／共享传输，必须新设永久资料目录、记录及清理边界，不沿用预览的默认 full_access 授权。
 - [BitableAPI](../../internal/adapter/feishu/bitable_api.go) 已有表、字段、记录增改和分页；仅保留通用 API adapter，不复用 Cron 表 schema、绑定业务、时钟或任务模型。
