@@ -18,11 +18,11 @@ Safe happy-path push helper for this repository.
 Default behavior:
   1. require a clean worktree
   2. verify lightweight CI guardrails before any remote sync
-  3. fetch the target remote branch
+  3. check whether the target remote branch exists and fetch it if present
   4. if upstream moved ahead, rebase onto it
   5. rerun tests only when a rebase actually happened
   6. if a rebase happened, require a post-rebase review confirmation
-  7. push only if every previous step succeeds
+  7. push only if every previous step succeeds, and set upstream for a new branch
 
 It intentionally does not try to auto-resolve conflicts or recover from test
 failures. In those cases it stops and leaves the repository state visible for
@@ -150,32 +150,54 @@ if [[ -z "${BRANCH}" ]]; then
   BRANCH="${upstream_branch:-${current_branch}}"
 fi
 
+branch_ref="refs/heads/${BRANCH}"
 remote_ref="refs/remotes/${REMOTE}/${BRANCH}"
-
-printf '[4/8] fetch %s %s\n' "${REMOTE}" "${BRANCH}"
-git fetch "${REMOTE}" "${BRANCH}"
-
-if ! git show-ref --verify --quiet "${remote_ref}"; then
-  echo "remote branch not found after fetch: ${remote_ref}" >&2
-  exit 1
-fi
-
-counts="$(git rev-list --left-right --count "HEAD...${remote_ref}")"
-read -r ahead behind <<< "${counts}"
+git check-ref-format "${branch_ref}"
+new_branch=0
 rebase_happened=0
 
-if [[ "${behind}" != "0" ]]; then
-  printf '[5/8] rebase onto %s/%s (ahead=%s behind=%s)\n' "${REMOTE}" "${BRANCH}" "${ahead}" "${behind}"
-  if ! git rebase "${remote_ref}"; then
-    cat >&2 <<'EOF'
+printf '[4/8] check %s %s\n' "${REMOTE}" "${branch_ref}"
+if remote_heads="$(git ls-remote --exit-code --heads -- "${REMOTE}" "${branch_ref}")"; then
+  if ! awk -F '\t' -v ref="${branch_ref}" '$2 == ref { found = 1 } END { exit !found }' <<< "${remote_heads}"; then
+    echo "remote branch probe did not return the exact ref: ${branch_ref}" >&2
+    exit 1
+  fi
+else
+  probe_status=$?
+  if [[ "${probe_status}" != "2" ]]; then
+    echo "could not check remote branch: ${REMOTE}/${BRANCH}" >&2
+    exit "${probe_status}"
+  fi
+  new_branch=1
+fi
+
+if [[ "${new_branch}" == "1" ]]; then
+  printf '[5/8] remote branch does not exist; skip fetch and rebase\n'
+else
+  printf '[4/8] fetch %s %s\n' "${REMOTE}" "${branch_ref}"
+  git fetch "${REMOTE}" "${branch_ref}"
+
+  if ! git show-ref --verify --quiet "${remote_ref}"; then
+    echo "remote branch not found after fetch: ${remote_ref}" >&2
+    exit 1
+  fi
+
+  counts="$(git rev-list --left-right --count "HEAD...${remote_ref}")"
+  read -r ahead behind <<< "${counts}"
+
+  if [[ "${behind}" != "0" ]]; then
+    printf '[5/8] rebase onto %s/%s (ahead=%s behind=%s)\n' "${REMOTE}" "${BRANCH}" "${ahead}" "${behind}"
+    if ! git rebase "${remote_ref}"; then
+      cat >&2 <<'EOF'
 rebase failed and was left in place for manual resolution.
 resolve conflicts, continue or abort the rebase yourself, then rerun tests and push manually.
 EOF
-    exit 2
+      exit 2
+    fi
+    rebase_happened=1
+  else
+    printf '[5/8] remote is not ahead (ahead=%s behind=%s); skip rebase\n' "${ahead}" "${behind}"
   fi
-  rebase_happened=1
-else
-  printf '[5/8] remote is not ahead (ahead=%s behind=%s); skip rebase\n' "${ahead}" "${behind}"
 fi
 
 if [[ "${NO_TEST}" == "1" ]]; then
@@ -233,4 +255,8 @@ else
 fi
 
 printf '[8/8] push %s HEAD:%s\n' "${REMOTE}" "${BRANCH}"
-git push "${REMOTE}" "HEAD:${BRANCH}"
+if [[ "${new_branch}" == "1" ]]; then
+  git push --set-upstream --force-with-lease="${branch_ref}:" -- "${REMOTE}" "HEAD:${branch_ref}"
+else
+  git push "${REMOTE}" "HEAD:${branch_ref}"
+fi
