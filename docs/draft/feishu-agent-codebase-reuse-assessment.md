@@ -1,8 +1,10 @@
-# Agent 统一运行层：代码复用、迁移与操作归属审计
+# Agent 统一运行层：代码复用与命令盘点依据
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 完整盘点现有 Slash：新群退出旧命令流程，单聊适用命令保留并重接统一内核；方法库与人的参与约定分开。
+> Summary: 保留原代码复用与完整 Slash 盘点；统一实现工作包、迁移合同和产品故事转由主文档规定。
+
+文档定位：本文件是专项依据／附录，不是另一份实施入口。用户行为以[产品主文档](./feishu-agent-team-product-design.md)为准，领域所有权、状态与迁移以[技术主文档](./feishu-agent-team-technical-design.md)为准，后端具体时序见[原生运行合同](./feishu-agent-team-runtime-contracts.md)。本文件保留原调查证据和解释；实现拆分、异常处理及验收统一按主文档的 US／T／UAT 编号追踪。
 
 ## 1. 决策与范围
 

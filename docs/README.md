@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-21`
-> Summary: 补充自然语言参与／汇报约定、通用工作方法库与完整 Slash 盘点：群自然语言协作，单聊保留适用命令。
+> Summary: 统一 Agent 团队设计入口：产品故事与 UAT、代码实施主合同和原生会话附录；原调查文档作为专项依据。
 
 ## 1. 适用范围
 
@@ -202,12 +202,13 @@
 - [current-thread-patch-v1-prd.md](./draft/current-thread-patch-v1-prd.md)
 - [current-thread-patch-v1-tech-plan.md](./draft/current-thread-patch-v1-tech-plan.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
-- [feishu-agent-team-product-design.md](./draft/feishu-agent-team-product-design.md)
-- [feishu-agent-team-technical-design.md](./draft/feishu-agent-team-technical-design.md)
-- [feishu-agent-team-execution-design.md](./draft/feishu-agent-team-execution-design.md)
-- [feishu-agent-team-materials-design.md](./draft/feishu-agent-team-materials-design.md)
-- [feishu-agent-team-human-delivery-design.md](./draft/feishu-agent-team-human-delivery-design.md)
-- [feishu-agent-codebase-reuse-assessment.md](./draft/feishu-agent-codebase-reuse-assessment.md)
+- [feishu-agent-team-product-design.md](./draft/feishu-agent-team-product-design.md) — 产品主文档：30 个用户故事、正常／异常交互、60 个 UAT 场景。
+- [feishu-agent-team-technical-design.md](./draft/feishu-agent-team-technical-design.md) — 技术主文档：T01—T12 工作包、所有权、事务、迁移与验收映射。
+- [feishu-agent-team-runtime-contracts.md](./draft/feishu-agent-team-runtime-contracts.md) — 后端专项：Codex／Claude 的真实会话、注入和恢复差异。
+- [feishu-agent-team-execution-design.md](./draft/feishu-agent-team-execution-design.md) — 专项依据，按两份主文档统一实施。
+- [feishu-agent-team-materials-design.md](./draft/feishu-agent-team-materials-design.md) — 专项依据，按两份主文档统一实施。
+- [feishu-agent-team-human-delivery-design.md](./draft/feishu-agent-team-human-delivery-design.md) — 专项依据，按两份主文档统一实施。
+- [feishu-agent-codebase-reuse-assessment.md](./draft/feishu-agent-codebase-reuse-assessment.md) — 专项依据，按两份主文档统一实施。
 - [feishu-group-context-multi-bot-design.md](./draft/feishu-group-context-multi-bot-design.md)
 - [feishu-group-on-demand-resume-design.md](./draft/feishu-group-on-demand-resume-design.md)
 - [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)

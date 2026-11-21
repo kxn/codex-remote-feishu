@@ -1,8 +1,10 @@
-# 人与 Agent 的交付约定：Raft 源码依据与飞书适配
+# 人与 Agent 的交付：Raft 源码与适配依据
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 补齐自然语言委托、人的参与程度和汇报约定，确保减少打扰会改变责任流转而非仅隐藏消息。
+> Summary: 保留 Raft 显式发布、Artifact 和人工反馈的源码依据；具体用户流程与交付状态以产品及技术主文档为准。
+
+文档定位：本文件是专项依据／附录，不是另一份实施入口。用户行为以[产品主文档](./feishu-agent-team-product-design.md)为准，领域所有权、状态与迁移以[技术主文档](./feishu-agent-team-technical-design.md)为准，后端具体时序见[原生运行合同](./feishu-agent-team-runtime-contracts.md)。本文件保留原调查证据和解释；实现拆分、异常处理及验收统一按主文档的 US／T／UAT 编号追踪。
 
 ## 1. 范围与结论
 

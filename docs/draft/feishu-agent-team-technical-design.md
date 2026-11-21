@@ -1,549 +1,543 @@
-# 飞书 Agent 团队技术可行性与实现方向
+# 飞书 Agent 团队技术设计：领域、运行合同与代码改造
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 增加人的参与／汇报约定及按需方法库接线；群关闭旧 Slash 路径，单聊命令重接统一业务层。
+> Summary: 将完整产品故事映射到 12 个实现工作面，明确持久所有权、Codex／Claude 会话与注入差异、事务恢复、迁移和工程验收。
 
-## 1. 结论与范围
+## 1. 文档地位、依据与结论
 
-[产品草案](./feishu-agent-team-product-design.md) 描述的项目群、固定角色、互相交接、分层记忆和统一模型配置，在现有技术基础上可实现。主要工作是新增团队协作领域，以及把现有执行与展示能力接到该领域；不是从零编写 agent runtime，也不是只追加一份提示词。
+本文与[产品主文档](./feishu-agent-team-product-design.md)组成实施入口。产品故事 `US-*`、验收 `UAT-*` 是行为合同；本文 `T01`—`T12` 是实现工作面。专项附录只展开协议和证据，不另立并行架构。本文没有修改生产实现，不把设计中的类型、表、命令或接口声称为现有能力。
 
-推荐选择：
+代码审计基线：本仓 `dbd006c55ea4195e46e4066c324b75cfd9f76222`；Raft 参考快照：`botiverse/raft-source@5214e34e726ed715f455e78c96fa521791ef2de3`。源码细节见[原生运行合同](./feishu-agent-team-runtime-contracts.md)、[代码复用审计](./feishu-agent-codebase-reuse-assessment.md)、[共享资料接口证据](./feishu-agent-team-materials-design.md)、[Raft 交付机制调查](./feishu-agent-team-human-delivery-design.md)。产品规范优先解释用户行为；当前生产行为仍以 canonical 文档和代码为准，实现时同步它们。
 
-1. 自建多身份 CLI 是团队能力的确定入口，按需查询帮助，与 UI 共用业务用例；不把新增团队 MCP／动态工具适配列为主线。
-2. 人类 UI 和 agent 工具调用同一组 typed application use cases，不让 agent 伪造卡片点击或私聊命令。
-3. 同一 daemon 管理的角色通过内部持久 inbox 可靠交接；飞书承载真实角色身份下的公开讨论和人类交互。
-4. 角色、项目、任务和执行身份独立；不把 Bot、群、目录、runtime thread 视为同一个对象。
-5. 新增协作存储，原子记录任务变化、收件箱和待发送事件；现有内存执行队列只作为执行投影。
-6. 团队运行层拥有独立 WorkerSession、后台调度与恢复；桌面／编辑器通过明确的控制权交接参与，不由群 surface 独占执行。
-7. 角色指令和项目记忆复用后端注入通道，但须新增组合、版本、生效及恢复合同。
-8. 多角色、多工作流并行、独立执行目录、成果评审及集成属于目标本身；容量为 1 只是资源不足时的退化情况，不能替代完整交付。
-9. 单聊也进入相同运行层，使用个人 scope 和记忆；旧群使用体验可全部替换，旧 surface owner 仅在迁移期存在。
-10. 人保留模型与已有工作目录等精确选择，Git 工作区由 Agent 原生管理，原生会话与 compact 由运行层维护，例行协作由角色组织，不复刻旧手动菜单。
+结论：**在原仓库演进，保留原生 Agent 接入、进程与协议、飞书 gateway、配置与安装等基础，重构执行所有权和协作持久层。** 只在现有 surface 上叠角色提示词不足以实现目标，也不应另建一个只服务群的第二运行内核。最终个人／项目共用 WorkContext、WorkerSession、Attempt 与恢复合同。
 
-完整对象、并行与迁移合同见 [执行与工作区设计](./feishu-agent-team-execution-design.md)。实施顺序只表达工程依赖，不将后续依赖项移出目标。原文中“第一版共享目录串行”“工作区和每任务会话留待扩展”的取舍已撤回。
+Raft 给出的可参考机制是：稳定 Agent、独立工作区与记忆索引、持久 inbox、CLI 业务操作、原生会话 start/resume/steer/compact/recycle、显式消息与版本成果。它的 Agent workspace 不等于我们的群／项目／repo；本产品采用更明确的 scope 与 workstream，以支持同 Bot 跨项目及单聊。借鉴机制，不复制源码，也不把 Raft recipes 当所有任务必经的硬流水线。
 
-[代码复用与操作归属审计](./feishu-agent-codebase-reuse-assessment.md) 给出同仓库演进依据。群协作是最高产品优先级，单聊是相同内核的个人工作入口，不形成第二套产品编排。
+## 2. T01 分层、改造范围与交付单元
 
-飞书权限是否已经开通不作为本次可行性阻塞。接口范围、调用主体、幂等、任务归属和配置生效时机仍是实现正确性的一部分，不能因未来会授权而省略。
-
-本文只新增设计文档，不改生产代码、协议或持久化。未来实现涉及持久化、队列和跨组件生命周期，应按 `full` 执行相应 guardrail；当前行为以 canonical 文档及代码为准。
-
-## 2. 已核实的实现基础
-
-以下事实来自当前代码；链接指向实现入口，函数名是后续核查定位点。
-
-| 能力 | 已有事实 | 仍需补齐 |
-| --- | --- | --- |
-| MCP 服务 | daemon 的 `newToolRuntimeHandler` 使用 Go MCP SDK 发布 Streamable HTTP；`newToolMCPServer` 注册工具 | 团队领域工具、稳定调用身份 |
-| 已发布工具 | 文件／图片／视频发送、飞书文档评论读取，以及条件发布的看图辅助 | 群成员管理、普通聊天读写、任务、角色及记忆工具 |
-| Codex 工具注入 | wrapper 用 `-c mcp_servers...` 发布 URL 与 bearer 环境引用 | 团队 execution binding 和工具发现验证 |
-| Claude 工具注入 | wrapper 生成 HTTP MCP 配置，使用 `--mcp-config` | 会话恢复和配置变化的验证 |
-| OpenCode 工具注入 | wrapper 生成 ACP HTTP MCPServer，在 session 请求中传入 | 实际 runtime 的工具发现与生命周期验证 |
-| 常驻指令 | 三个后端已有 profile Instruction 的注入路径，默认 profile 存在分支差异 | 独立角色组合、默认 profile 覆盖、版本与失效 |
-| 群基础 | room 共享 workspace，Bot 各有 surface、会话和队列 | 项目／工作区分离，WorkerSession 独立执行归属，多工作流并行 |
-| 飞书文本收发 | gateway 已有 Create／Reply／Patch 和引用消息读取 | 团队发送语义、话题管理、分页历史及查询索引 |
-| Bot 进群 | 已有进群事件和 primary bootstrap | 主动邀请 Bot 的 adapter、业务操作与 agent 工具 |
-| Bot 设置 | 已有统一 model/reasoning/profile 等记录和投影 | 不依赖人类私聊 surface 的 typed 设置用例 |
-| 恢复 | surface resume 保存路由，群由用户输入按需恢复 | 持久协作待办与无新用户消息时的受控唤醒 |
-
-主要证据：
-
-- [MCP server 与 dispatcher](../../internal/app/daemon/tool_mcp.go)：`newToolRuntimeHandler`、`newToolMCPServer`、`handleMCPToolCall`。
-- [工具目录与 caller 解析](../../internal/app/daemon/tool_service.go)：`toolDefinitions`、`requireToolAuth`、`resolveToolCallerSurfaceContextLocked`。
-- [跨 backend MCP publication](../../internal/app/wrapper/app_child_mcp.go)：`applyCodexFeishuMCPPublication`、`applyClaudeFeishuMCPPublication`、`openCodeFeishuMCPServers`。
-- [OpenCode session 接入](../../internal/app/wrapper/app_child_session_opencode.go)、[ACP session 命令](../../internal/adapter/acp/commands.go)。
-- [群记录](../../internal/core/state/types.go)：`FeishuRoomContextRecord`、`FeishuRoomStateRecord`。
-- [Bot 设置变更](../../internal/core/orchestrator/service_bot_capability_settings.go)：`applySurfaceCapabilitySettingsMutation`、`commitBotCapabilitySettingsMutation`。
-- [飞书消息接口](../../internal/adapter/feishu/gateway_im_calls.go)、[引用消息读取](../../internal/adapter/feishu/gateway_inbound_quoted_inputs.go)。
-
-两个容易误判的地方：
-
-- `feishu_resolve_surface_context` 有内部实现，但没有被注册到当前工具目录，不能算现成可调用能力。
-- `dynamicToolCall` 的解析与展示不代表完整工具执行：Codex `dynamicTools` 默认空，当前 tool callback 测试仍断言暂不支持。该现状不阻塞已确定的 CLI 路线。见 [Codex start 参数](../../internal/adapter/codex/translator_commands.go) 与 [回调测试](../../internal/core/orchestrator/service_request_tool_callback_test.go)。
-
-当前设置代码明确把 `access/plan` 留在会话层；Bot record 保存 model/reasoning/profile 等。部分较早的架构或状态机文字仍将 access/plan 归入 Bot，实施时应依据当前代码及测试同步该差异，不能在团队设计中顺带扩大为全局设置。
-
-## 3. 分层与业务调用路径
+### 2.1 目标调用链
 
 ```mermaid
 flowchart TD
-    UI[飞书卡片 / 管理页面] --> UC[共享业务用例]
-    CLI[Agent 团队 CLI] --> API[Daemon 受控能力 API]
-    API --> UC
-    IN[群消息 / 团队事件] --> UC
-    UC --> CORE[Orchestrator 协作领域决策]
-    CORE --> TX[Daemon 事务与持久协作存储]
-    TX --> OUT[Outbox 与外部操作]
-    OUT --> FS[Feishu adapter / projector]
-    TX --> DIS[待办调度与执行准入]
-    DIS --> RUN[现有 queue / headless / wrapper / backend]
-    RUN --> CLI
+    F[飞书消息 / 卡片 / 私聊命令] --> A[Application 用例入口]
+    C[Agent 多身份 CLI] --> A
+    A --> D[协作领域决策与版本校验]
+    D --> S[事务工作库 / operation / outbox]
+    S --> Q[调度 / 恢复 / 控制权协调]
+    Q --> R[Runtime coordinator]
+    R --> W[wrapper / backend adapter]
+    W --> N[Codex app-server / Claude CLI]
+    W --> J[关键事件 journal / receipt]
+    J --> A
+    S --> P[投影与外部操作 worker]
+    P --> F2[飞书 / 文档 / GitHub connector]
+    N --> C
 ```
 
-| 层 | 应负责 | 不应承担 |
+保留 `Service` 的领域状态中心角色，但不能让新领域决策依赖“先改 Service 内存，再 Save JSON”。新增纯领域命令处理与 unit-of-work 边界；daemon 读取必要快照、执行领域校验、事务提交、发布 committed events，最后更新现有 UI 投影。数据库与外部调用不在 `App.mu` 内执行。
+
+建议包按职责落位，名字可在实施时微调，边界不可混合：
+
+| 实现位置 | 责任与输入输出 | 现有接点 |
 | --- | --- | --- |
-| `core/control` 及协作 command 合同 | typed command、actor、expected revision、操作结果 | 将 agent 请求伪装成人类卡片 payload |
-| `core/state` / 协作领域类型 | 角色、项目、任务、待办及执行关联 | 把 durable 任务全部塞入 UI surface 字段 |
-| `core/orchestrator` 协作 cluster | 成员与任务规则、路由、状态迁移、唤醒资格、影响范围 | HTTP MCP 协议、飞书网络调用或磁盘写入细节 |
-| `app/daemon` application / repository | 事务、外部操作调度、执行身份、重启对账 | 在工具 handler 里另建一套任务状态机 |
-| CLI / daemon API / MCP adapter | 输入解析、schema、验证调用上下文、用例结果转命令或工具结果 | 直接操作 UI modal、任意调用管理 HTTP API、复制领域规则 |
-| `adapter/feishu` | 平台消息和成员 API、保留来源与话题字段 | 自行判定任务完成、负责人或项目归属 |
-| renderer / projector | 将同一领域结果投影为菜单、卡片与消息 | 用卡片发送成功代表任务已经被处理 |
-| wrapper / backend adapter | 指令、工具与输入注入，原生协议翻译 | 项目规划、任务分配、长期记忆业务规则 |
+| `internal/core/work`（新增） | ID、scope、任务／会话状态、领域命令、事件、revision 校验；纯逻辑 | 逐步从 orchestrator 的 surface 规则抽离 |
+| `internal/app/daemon/workservice`（新增） | typed 用例、unit-of-work、身份解析、跨服务操作协调 | UI、入站、CLI 共用，不各写一套状态机 |
+| `internal/app/daemon/workstore`（新增） | SQLite schema、事务、迁移 journal、查询及 outbox | 已有 sqlite 依赖；旧 statestore 作为迁移来源与保留配置 |
+| `internal/app/daemon/workruntime`（新增） | 调度、公平预算、launch snapshot、控制权、运行对账 | 复用底层启动能力，替换 surface 准入 |
+| `internal/core/agentproto` | 扩展稳定 owner、command receipt、事件序号与能力协商 | 保留原有 command/event 翻译体系 |
+| `internal/app/wrapper`、`internal/adapter/{codex,claude}` | 后端握手、原生绑定、输入、维护、关键事件持久回执 | 保留 native protocol，增加确切上下文关联 |
+| `internal/adapter/feishu` | 平台消息、成员、Tab/Pin、资料 API；保留真实平台证据 | 现有 multi-Bot gateway、broker、卡片能力 |
+| 资料／记忆／方法模块（新增） | 资源注册、版本、变更操作；作用域记忆；按需方法发现 | 复用部分 Drive/Bitable 传输，不复用旧 Cron 产品 |
 
-保持 [现有架构](../general/architecture.md) 中 Service 为产品状态中心的约定，可新增协作 cluster 和纯领域包。不要把所有实现继续平铺在 Service 根，也不要由 MCP server 再维护一套独立可变任务表。
+### 2.2 代码去向清单
 
-业务命令返回结构化结果，例如 accepted、completed、conflict、waiting、failed，并包含 operation/task/revision。UI 根据结果生成展示；工具把同一结果返回模型。agent 调用不需要先生成一张供自己点击的卡片。
-
-统一运行层包含上下文组装、worker 生命周期、inbox 投递、调度、执行位置引用与成果记录，底层 adapter 继续负责原生协议。最终单聊与项目都由 WorkerSession 拥有执行，WorkScope 区分 personal/project；legacy surface owner 只作迁移桥。queue、claim、approval、pending launch 和 turn 归属须贯穿该合同，不能伪造更多 surface 来容纳并行任务。
-
-## 4. 稳定对象及事实所有权
-
-| 对象 | 关键事实 | 所有权 |
+| 当前载体 | 处理方式 | 对现有行为的影响 |
 | --- | --- | --- |
-| `Role` | 稳定 ID、名称、职责版本、通用方法 | 新协作存储 |
-| `RoleBotBinding` | role、gateway、AppID 和 identity generation | 协作引用现有 Bot identity，不复制密钥 |
-| `WorkScope` / `PersonalScope` | 个人或项目作用域、稳定用户与角色关联 | 统一工作存储；入口 surface 只作关联 |
-| `Project` | 稳定 ID、名称、状态、负责人、群绑定 | 新协作存储 |
-| `ProjectChannelBinding` / `ProjectResource` | 群及资源关联、repository 身份、目标分支、绑定代次 | 新协作存储 |
-| `ProjectMember` | role、加入意图、平台成员证据、ready 状态 | 新协作存储 |
-| `Conversation` | project、群、话题／根消息、参与者 | 新协作存储 |
-| `Task` | owner、业务来源、采纳的范围／验收版本、执行依赖与成果 | 内部工作库存执行事实；issue-backed 工作的范围／验收／业务状态以 issue 为权威，其余 Task 内部为权威 |
-| `Message` / `InboxItem` | 来源、正文或引用、接收角色、处理状态 | 新协作存储 |
-| `Outbox` / `Operation` | 外部副作用意图、幂等键、状态、回执 | 新协作存储 |
-| `ExecutionAttempt` | run、role/scope/context/session、可选 project/task、thread/turn 证据与冻结版本 | 统一工作存储；运行投影交给现有执行 cluster |
-| `WorkerSession` / `ExecutionLocation` | 工作上下文、原生会话、host/cwd、位置绑定代次与占用 | 工作库保存绑定；Agent 操作 Git，Git 保存自身事实 |
-| `Team` / `ResourceCollection` / `Resource` / `ResourceVersion` | 团队与项目共享资料的身份、引用、权威来源、版本和来源锚点 | 资料注册表保存关联与回执；正文在指定权威载体，见资料设计 |
-| `ArtifactVersion` / `Review` / `Integration` | 不可变成果、对应评审与集成状态 | 新协作存储；不可变文件／Git 引用作为成果载体 |
-| `Delivery` | 受众、意图、简要结论、需人动作、固定成果引用、保留类别、outbox 关联与送达状态 | 统一工作存储；发布、通知、已读与验收分开 |
-| `ParticipationAgreement` | 来源消息、适用事项／阶段、决策责任、人的参与点、汇报方式、revision | 项目工作约定的结构化投影；变更同步影响当前待办，不只写记忆 |
-| `PracticeDefinition` / 采用引用 | 方法 ID／版本、适用情境、说明资源、采用该方法的角色／工作 | 版本化方法包为来源；工作库保存采用版本和实际结果，不据此伪造方法执行成功 |
-| `MemoryEntry` | scope、key、内容、来源、版本、撤销状态 | 新协作存储 |
-| Bot 模型配置 | profile/model/reasoning 等 | 保持现有 Bot capability store 为唯一写源 |
-| 项目资源、负责人及调度预算 | 团队模式的资源关联、owner、并发与队列策略 | 协作库；旧 room store 仅负责未迁移群 |
+| [SurfaceConsoleRecord](../../internal/core/state/types.go:313) | 拆出执行、queue、pending launch、request 主记录；surface 留显示和选中目标 | 切换／关闭界面不再决定任务生死 |
+| [service_dispatch_core](../../internal/core/orchestrator/service_dispatch_core.go:14)、[service_queue](../../internal/core/orchestrator/service_queue.go:81) | 执行 owner 改 WorkerSession；登记与容量准入分开 | 忙时能接收协作任务；私聊队列仍有明确控制 |
+| [runtime clusters](../../internal/core/orchestrator/service_runtime_clusters.go:323) | 保留每 instance 单活动执行约束，绑定 attempt | 多工作流并行需要多个 carrier，不能只扩 map 后并发同一进程 |
+| [routing claims](../../internal/core/orchestrator/service_routing_claims.go:309) | 资源／native session claim 归 worker/controller，去除 surface selection 失效条件 | 同仓库多项目允许；同写位置仍互斥 |
+| [headless launch](../../internal/app/daemon/app_headless.go:325)、[pool](../../internal/app/daemon/app_headless_pool.go:14) | 保留 spawn/profile/宿主能力；launch 授权由持久 operation 提供 | 不再要求 PendingHeadless surface；不能借同 cwd 的有主会话 |
+| [detach headless](../../internal/core/orchestrator/service_detach_headless.go:15) | 从“最后 surface 离开即终止”改为 session lifecycle／controller | 私聊 detach 只是查看解绑，工作继续或明确交接 |
+| [request ownership](../../internal/core/orchestrator/service_helpers_request.go:126)、[request handling](../../internal/core/orchestrator/service_request.go:75) | 保留 frozen owner/revision 原则，owner 换 session/attempt/request generation | 无当前 surface 也保存授权请求，选择适用展示入口 |
+| [群恢复](../../internal/app/daemon/app_surface_resume_policy.go:12)、[按需恢复](../../internal/app/daemon/app_group_on_demand_resume.go) | 工作库驱动恢复；旧 resume JSON 用作导入 | 无新用户消息仍能处理持久待办 |
+| [Bot settings](../../internal/core/orchestrator/service_bot_capability_settings.go) | 抽 typed 设置用例，保持配置单写源；控制宿主归 session | 私聊模型配置影响全角色后续执行，接管只影响当前工作 |
+| [tool caller](../../internal/app/daemon/tool_service.go:419) | 增 worker credential＋run_ref，不从 active surface 猜 | 后台协作、单聊和附件工具均有正确身份 |
+| [入站归并](../../internal/app/daemon/app_ingress.go:77) | 新持久接收及事件归并 worker，保留有界内存缓冲 | FIFO 不再被误当崩溃持久性；慢操作移出 App 全局锁 |
+| [旧 primary](../../internal/core/orchestrator/service_feishu_primary_command.go)、room/shared-workspace admission | 对迁移群退出生产路由；公共 transport/request 部分保留 | 旧群 UX 全弃，不牵连私聊和新卡片 |
+| `internal/app/gitworkspace`、旧 worktree picker | 私聊明确工具能力保留；群日常 Agent 原生 Git | 不建平台自动 worktree 生命周期服务 |
+| `cronrepo` 与 Cron scheduler/command/schema | 停止注册与执行，保留只读迁移证据后清理代码 | 不自动把旧定时计划重投到新队列 |
 
-`RoleID` 不等于模型名称或 gateway 槽位；换模型保留身份。换 AppID 属于 identity 变更，必须显式处理绑定与失效，不能仅因槽位同名而继承旧执行权限。
+## 3. T02 对象、数据库与唯一事实所有权
 
-旧 Bot record 中的 ProductMode（headless/vscode）不能继续决定全部项目的执行控制。backend/model/profile 仍是统一 Bot 策略，实际宿主与控制权归 WorkerSession；私聊接管编辑器不影响其他项目 worker。普通单聊不必创建 Task，但其输入、attempt 和记忆具有与项目相同的持久归属。
-
-`ProjectID` 不由群或目录字符串生成。Project 关联资源与沟通入口，实际执行位置登记为 ExecutionLocation。多个项目可关联同一仓库，不共用可变会话和可写 checkout。不同角色及工作流可以并行，同一个原生 session 和同一可写 checkout 分别保持单 owner。
-
-项目建立、旧群与个人上下文迁移均采用持久 operation。切换事务记录 authority generation，之后统一工作库拥有相关工作事实；旧 JSON 是迁移来源／只读投影，不能继续独立写入。旧群命令和菜单无需兼容，新群直接使用项目业务入口；单聊保留有用的精确选择与工作控制并接入新用例。切换前可退回旧状态，切换后已有新工作时按 journal 前滚修复，不能用旧快照覆盖新任务。
-
-群默认指向一个明确项目，项目可关联主群和其他讨论入口。建立／迁移保存预期 binding generation、资源基线和 Bot identity；重放时发现更新转 conflict/superseded，不覆盖后来的决定。单个 SQL 事务不能覆盖飞书 API、Git 与进程启动，各步骤分别记回执并对账。未 ready 的资源不准入对应任务，不把不完整建立结果显示为全体就绪。
-
-项目工作约定使用有来源的资料／指令引用和采用版本表示，涉及当前阶段、资料组织及工作方法。运行库只保存关联、适用范围和实际采用的版本，不另建必须填满的流程配置表，也不重复拥有 repo／飞书原文。新任务读取当前适用约定，活动任务在收到影响自身的变更后按 steering／重排合同处理；不能用“更成熟”之类模型推断擅自扩大执行授权。
-
-群入口通过同一业务用例操作 ChatTab／TopNotice／Pin adapter，现有多 Bot 分发与 FeishuCallBroker 复用。持久绑定 project/chat/generation、入口用途、外部 ID 和目标 ResourceID，恢复时核查自有入口；不把入口失效当作项目状态丢失，也不覆盖人维护的其他标签。API 类型限制与群文件边界见 [原生入口接线](./feishu-agent-team-materials-design.md#21-群原生固定入口)。
-
-## 5. 能力入口、按需发现与最小接口
-
-### 5.1 Raft 的实际做法
-
-Raft 公开托管 Agent 提示词规定使用 `raft` CLI 做沟通与管理，由 daemon 把身份绑定的 wrapper 加入 PATH。常驻说明列出命令族，详细参数通过子命令 `--help` 和 `raft manual get/search` 查询；它没有把整套协作操作都声明成模型原生工具。原生 runtime 的 MCP、CLI 和浏览器能力仍然可以独立使用。
-
-公开源码的 managed-runner 路径为：模型调用原生 shell → `raft` wrapper → CLI HTTP client → daemon 本地凭据代理 → Raft agent API。CLI 持有本地代理凭据，daemon 持有服务端 agent 凭据。外接 agent 还可使用 CLI 直连或 SDK。因而“CLI”和“调用 API”是不同层次，可以同时成立；这也不表示 Raft 必须自己直接驱动底层模型 API。
-
-官方服务 CLI 迁移指南进一步建议：当第三方应用操作集增长时，将完整能力放进服务 CLI，发现／登录与兼容操作保留在 manifest。这是应用集成建议，与上述 Raft 自身协作 CLI 的源码证据分开理解。
-
-CLI 仍消耗上下文：入口说明、已查询帮助、执行结果都会进入会话。优势是通常复用原生 shell 工具，未查询命令的完整参数不必预加载；没有实测前不承诺固定 token 节省比例。Raft 的完整提示词还包含大量协作与记忆规则，不应照搬全文并假定天然精简。
-
-### 5.2 本项目推荐路线
-
-给托管 worker 注入一个随产品发布的多身份 CLI；同一安装服务多个 Bot，每个调用绑定自身角色／项目／工作流，不使用可被其他进程切换的全局默认身份，也不以绑定飞书 User OAuth 为前提。下列 `team` 为设计示意命令名，不是现有可执行文件：
+### 3.1 六层身份不能再压成一个 session
 
 ```text
-team context
-team discover "邀请测试角色加入项目"
-team project member add --help
-team project member add --role tester --run-ref <current-run>
+Role（同事；统一模型策略）
+  WorkScope（personal 或 project）
+    WorkContext（某条持续工作流；检查点与当前约定）
+      WorkerSession（backend、控制权、执行位置、native 绑定代次）
+        ExecutionAttempt（一次业务执行及它实际接收的输入）
+          NativeOperation / NativeTurn（原生 start/resume/steer 等关联证据）
+SurfaceBinding / Conversation 从外部指向工作，并不拥有上述执行。
 ```
 
-常驻说明只放当前角色／项目入口、少量协作规则、如何发现操作。高频操作如收件箱、回信、任务状态可给简短例子；邀请、设置、记忆管理等长尾操作按需查。发现结果返回少量相关操作和精确帮助入口，不能用一次“搜索”再把全目录倒进上下文。先用命令名、描述、标签检索，不必先引入模型或向量库。
+一个 WorkContext 在原生历史损坏、compact 或换模型后仍保留。WorkerSession 是受控执行容器，重建可以换 native binding 并增加 generation；切 backend 建立替代 WorkerSession 关联旧 context。Attempt 不等同业务 Task，也不假定 Claude 合成 turn 与 Codex 原生 turn 同等级。一个 Task 可由多个角色/context 执行、检查、集成；普通私聊可无 Task 但仍有 context/attempt。
 
-CLI 调 daemon 的受控能力 API，daemon 调共享业务用例，再由 adapter 调飞书。CLI 不持有飞书 App secret、不自判任务状态、不调用私有管理 UI。配置仍集中在 Bot；身份由 wrapper 注入对应 worker，模型不必在每条命令重填 Bot、群、项目。单轮 `run_ref` 继续显式携带并校验，不能由“当前运行是哪一轮”覆盖旧请求归属。
+建议默认：负责人每项目一个协调 workstream；专家按需要形成明确实施／检查 workstream；可连续复用同一范围且兼容的空闲 context，不每条消息都建会话。独立并行责任分配独立 WorkerSession，同一 native session 不并发两个主动 run。是否新建 workstream 由调度与角色工作组织决定，不让用户手动选 session。
 
-在共享 command registry 维护操作名、简述、输入 schema、结果合同和作用域；CLI 帮助、发现目录与可选 MCP schema 从同一合同生成。CLI 新增的是调用适配与发布工作，不是第二套任务系统。正文／复杂输入支持 stdin 或 JSON 文件，避免把长消息拼进 shell 参数；结果支持摘要、分页、引用和 JSON，写操作返回既有 operation/idempotency 状态。
+### 3.2 逻辑表与关键约束
 
-现有少量 MCP 工具保持其既有功能；新增团队能力统一走 CLI。下面保留原生延迟工具的调查记录作为选型依据，不把实现三套新工具入口作为本目标的工作项。
+下列为需落 schema 的最少业务字段，不是完整 DDL；ID 使用独立稳定 ID，时间戳与 revision、actor/source 在可变对象及操作中统一保留。外部 token／密钥不复制进这些表。
 
-### 5.3 动态工具不等于延迟加载
-
-必须区分三个能力：运行中工具目录改变；宿主注册自定义工具；模型只在需要时获得完整工具定义。前两者不自动带来第三种效果。MCP server 连接或后台拉取目录，也不等于所有 schema 已进入模型请求。不能靠提示词里写“需要时再用”省去已经发送的 schema。
-
-截至本次调查，上游能力与本仓库接入必须分开判断：
-
-| Backend | 当前官方能力 | 本项目判断 |
+| 对象／表 | 关键字段 | 唯一性／约束／事实来源 |
 | --- | --- | --- |
-| Claude Code | MCP Tool Search 按需加载完整定义，启动仍有工具名与 server instructions；模型、网关、配置可使其退回提前加载 | 已有 MCP 注入，可利用原生搜索；实际版本与网关必须验证 |
-| Codex app-server | 官方 main 有 experimental `thread/start.dynamicTools`；`deferLoading` 默认 false。搜索要求模型 `supports_search_tool`、允许 `tool_search`、且存在带搜索信息的 deferred 工具；原生 MCP 也有搜索曝光选择 | 本仓库自定义工具未形成执行闭环，不能仅添加 schema；MCP 接入与自定义 callback 两条路线分别验收 |
-| OpenCode | 当前 V2 文档默认 MCP 经 `execute` Code Mode 使用；`codemode:false` 可直接曝光，禁止 `execute` 也会退回直接工具定义 | 当前仓库走 ACP 注入 `mcpServers`，未证明实际安装版本和该路径具备 V2 效果；先验证兼容，再利用原生发现 |
+| Principal / ExternalIdentity | principal_id、tenant、app_identity_domain、id_type、external_id、generation | 外部别名含 App 范围和 ID 类型；没有证据不跨应用自动合并人 |
+| Role / RoleBotBinding | role_id、description_version、gateway_ref、AppID、identity_generation | RoleID 不随模型变；凭据在现有配置单写源 |
+| Team / TeamMember | team_id、leader_role、成员与状态、资料集合 | 团队共享不是租户全开放 |
+| WorkScope / PersonalScope / Project | kind、principal/team/project refs、生命周期、pause gates | CHECK 区分 personal/project；个人归属不取最后发言人 |
+| ProjectChannelBinding / ProjectMember | chat、purpose、binding_generation；role、join_intent、platform_state、runtime_state | 每群仅一个活动主项目；多 Bot 观察合到同一 Project |
+| ProjectResource / ExecutionLocation | source identity、host/cwd、resource_ref、location_generation | 项目可多资源；cwd 不做 ProjectID；位置不存另一套 Git 真相 |
+| WorkContext / WorkerSession | scope/role/workstream、checkpoint；backend/native namespace、instance/process/session/controller generations、desired/applied refs | 每个 active native binding 一个 owner；世代改变旧调用失效 |
+| Task / TaskRevision / Dependency | owner、assignment_generation、scope、business_source、adopted_requirements、dependencies、pause gates | 拒绝依赖环；issue-backed 业务字段外部权威，内部拥有执行事实 |
+| Conversation / Message / Observation | channel/root/thread、source actor、platform message key、正文引用、received observations | 平台消息按 tenant/chat/message 规范键去重；保留各 App 接收证据 |
+| Inbox / AttemptInput | recipient context/role、message/event、state、claimed_attempt、delivery/consumption receipts | 同事件同接收目标唯一；只有确切输入 ID 可确认处理 |
+| ExecutionAttempt / NativeOperation | worker、generation、frozen refs、command IDs、native binding、terminal evidence | 每 session／当前 carrier 最多一个非终态主动 attempt |
+| RuntimeEventReceipt | carrier incarnation、sequence、command/native IDs、payload/hash、committed cursor | 不用 PID、连接时间或“最近任务”猜归属 |
+| Request / RequestDecision | request kind、native/request generation、attempt、allowed actor、revision、response operation | 每 request revision 最多一个被接受决定；业务决定与 native request 类型分开 |
+| ControllerLease / ResourceOccupancy | owner、kind、resource key、generation、expiry、reconciliation state | 到期触发核查，不代表原生进程已停；同写位置不可重复准入 |
+| Operation / Outbox / Idempotency | actor/context snapshot、target generation、key、request hash、steps、state、external receipt | 同 actor/scope/op/key 重放同结果；同 key 不同正文拒绝 |
+| Resource / ResourceVersion / Delivery | collection、canonical source、connector identity、version/evidence、audience、notification | 资料正文在权威源；交付固定清单与通知状态分离 |
+| MemoryEntry / ParticipationAgreement / PracticeAdoption | scope、source、revision、validity；方法 id/version 和实际采用记录 | 不把这些摘要作为第二份业务要求／验收事实 |
+| MigrationJournal / ProjectionCursor | legacy fingerprint、authority_generation、stage、evidence；投影游标 | 已迁移事实只写新库；投影可重建 |
 
-Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更不是默认延迟加载。上述源码 main／当前官方文档不等于本机已发布版本。不能仅把服务接上 MCP 就声称节省已经实现；同样不能再笼统说三个 backend 的 MCP 都只能全量常驻。CLI 基线路线不要求重写这些 runtime 的模型请求循环。
+使用 SQLite WAL、短事务、外键和唯一索引。关键查询至少建立：inbox(recipient,state,available_at)、attempt(worker,state)、operation(state,next_attempt_at)、outbox(target,state)、task(scope,state,owner)、resource(source_identity)、request(owner,state)、event(incarnation,sequence)。schema 版本化迁移，迁移前备份并核对读取能力；不能靠 JSON 字段无约束地保存所有状态。
 
-### 5.4 共享业务操作
+数据库路径属于 daemon 数据根，资料持久 blob 和 native cache 分开目录。单机 daemon 是工作库写入权威；多宿主 wrapper 只产生有归属的运行回执，通过同一 daemon 领取工作，不共享网络文件系统上的 SQLite。宿主离线是 worker unavailable，不建立第二个独立调度权威。
 
-以下是业务能力清单，名字为设计示意，不代表必须全部作为常驻 MCP 工具发布：
+### 3.3 保持单写源的几个例外处理
 
-| 工具 | 输入意图 | 核心业务效果 |
+Bot 的 model/profile/reasoning 仍由现有设置 store 单写，新库只存 revision 引用与实际冻结快照；跨 JSON 与 SQL 的修改有 Operation，恢复时对账，不能声称本地 SQL 同时原子改了 JSON。access/plan 是会话级事实。旧 ProductMode 中的执行控制部分迁至 WorkerSession，不能从全局 Bot setting 再决定所有 worker 的宿主。
+
+issue-backed 工作区分：外部范围／验收／业务状态、内部执行状态。更新外部时先保存意图，写成功且回读后显示已同步；外部先关闭时记录事实和证据缺口，不伪造已验收，不擅自重开。PR merged、Git HEAD、测试结果都由原始系统证据确认。表格／首页只有投影权。
+
+## 4. T03 输入、路由、项目建立与多身份 CLI
+
+### 4.1 人类与 Agent 入站
+
+规范化流程：验证来源 → 保存最小 durable envelope → 按平台回执协议确认接收 → 后台展开引用／附件 → 解析项目／话题／显式目标 → 事务保存 Message、recipient Inbox 与必要 Operation → 投影“已接收”。引用展开失败不丢最初消息，保留待处理原因。
+
+平台 callback ACK 和业务“已接单”分开。WebSocket／HTTP 各按 SDK 真实 ACK 边界实现；无法在自动 ACK 前插入持久写入的通道，应改造接收链，并以缺口对账补充，不拿内存 lane 成功当 durable receipt。存储失败不得反馈业务受理成功。历史补读仅建立缺失观察或恢复已知未处理输入，不把全部历史新派发。
+
+群绑定优先解析 Project，然后按已知 task conversation、引用、显式目标定位；多个 Bot 收到同一 message 合并 observation。无明确专家目标的新消息默认给负责人处理；明确 @ 专家给专家，负责人获得必要 FYI，不产生第二份任务。工作归属不随群最后发言人变化。
+
+内部 CLI 委派先落 Message/Inbox/Task，飞书发送是 outbox 投影。回流事件按 message mapping 只补平台证据，不能再次触发委派。未接入执行回执合同的外部 Bot 只能作为聊天参与者，不因为入群便宣称可调度。Agent 消息正文不走人类 slash、纯 @ primary 切换或确认词授权路径。
+
+### 4.2 项目建立 saga
+
+`CreateProject` 输入：真实发起人、chat binding expected generation、名称、team/leader、已明确选择的资源引用、资料容器意图、幂等 key。尚无 ProjectID 时使用限定在该 chat 的 bootstrap context；此凭据只可查候选和登记建立，不能自填另一个 ProjectID 获取其记忆。
+
+步骤：reserve channel binding → 创建 Project/WorkScope → 登记选定成员与资源 → 创建／关联固定资料 → 邀请已有角色 → 建导航／Tab → 按能力就绪生成协调 context → 投递首项需求。每步独立 operation、前置条件和回执；失败保留已完成部分，按任务需要 gate，非代码工作不等 repo。取消建立保留外部已建资源的清单，清理另有明确操作，不因失败自动删用户资料。
+
+群改绑定、资源重新选择等增加 generation；迟到回调只更新原 operation，不覆盖当前选择。恢复创建未知结果先查询登记和外部证据；无法确定时标 unknown，不按标题搜索随便接管同名文档或重复创建。
+
+### 4.3 CLI 与共同命令合同
+
+CLI 只承担解析、帮助、发现和 daemon API 调用。常驻注入只包括当前角色／范围、基本协作规则和帮助入口；大部分命令按需 `--help` 或检索读取。CLI 不持 App secret，不使用可被别的进程切换的全局默认 Bot，不强制 User OAuth；复用 shell，不另实现模型循环。
+
+每个用例接受服务端解析的 CommandContext：actor、scope、context、worker/session generation、attempt/run_ref、source message、expected revision、idempotency key。模型可以提交目标对象和意图，但不能自行声明更高权限 actor 或替换执行身份。
+
+会话凭据绑定 role/scope/context/session/Bot generation；每轮另注入显式 opaque `run_ref`，CLI 请求必须携带并核对。**禁止用“当前最新 attempt”替代缺失的 run_ref**，否则迟到工具调用会写入新一轮。凭据只进入对应进程，模型帮助与日志不输出 secret。已受理异步 operation 固定原身份，可在原 turn 结束后完成；新来的过期 run 调用被拒绝。
+
+共享 registry 定义命令名、输入 schema、作用范围、结果和版本，UI 与 CLI 调相同用例。核心用例包括 AcceptInput、CreateProject、AssignTask、DelegateAndWait、ApplyTaskRevision、ApplyAgreement、PublishDelivery、RequestControl、RespondRequest、UpdateSettings、ResourceOperation、MemoryUpdate；不暴露万能 `call_feishu_api(path,body)` 让模型绕开产品合同。大正文用 stdin/文件，结果分页和引用，避免工具帮助重新占满上下文。
+
+命令结果固定含 `status=completed|accepted|pending_external|conflict|blocked|failed`、operation/object/revision、实际 applied refs、可重试条件；accepted 不能包装为完成。业务幂等 key 可跨重试重复，命令数据 hash 不同则冲突。
+
+## 5. T04 工作状态、协作与事务
+
+### 5.1 状态轴及合法迁移
+
+| 状态轴 | 迁移合同 | 禁止的推断 |
 | --- | --- | --- |
-| `team_get_context` | 当前执行及必要查询范围 | 返回角色、项目、成员、任务和可用操作 |
-| `team_members_list` | 当前项目 | 列出角色职责、就绪与忙碌状态 |
-| `project_create` | 名称、已有角色、目录选择结果、群绑定 | 与建立项目卡共用 provisioning 用例 |
-| `project_member_add` | 目标已配置 role | 记录成员意图，异步邀请并核对结果 |
-| `conversation_read` | 已知话题／消息、分页游标 | 读取当前可访问项目历史和相关资料 |
-| `team_message_send` | 目标角色／任务、正文、FYI 或需处理 | 记录消息、目标 inbox、公开 outbox |
-| `task_create` / `task_assign` | 目标、验收、owner、依赖 | 原子登记工作和交接；忙碌也接受待办 |
-| `task_update` | task、expected revision、状态／成果 | 校验迁移，通知受影响角色 |
-| `artifact_submit` / `review_request` / `review_submit` | 不可变成果、任务 revision、检查结论 | 保存实现、评审与返工的版本关联 |
-| `integration_request` / `integration_status` | 目标分支、成果及评审引用 | 向集成角色交接工作并读取证据，不由 daemon 包办 merge |
-| `resource_register/read/update` / `resource_version` | 资料链接或 ID、范围、基线版本、变更 | 更新既有资料、冲突核对、冻结交付；按需发现，详见共享资料设计 |
-| `memory_read` / `memory_update` | scope、key、版本、来源 | 按命名空间读取或更新长期资料 |
-| `role_update` | 职责／通用方法的明确变更 | 调用统一角色配置用例，记录影响范围 |
-| `bot_settings_update` | 已支持设置的明确变更 | 共用设置用例，记录 requested/effective，不即时自毁当前执行 |
+| Task | todo → active ↔ waiting；按采用要求进入 checking 或 done；取消独立终态 | native turn.completed、PR merged、外部 closed 不等于人验收 |
+| PauseGate | 按项目／任务／人工控制等来源分别 open/closed | 项目恢复不能消除用户单独的任务暂停 |
+| WorkerSession | preparing → ready ↔ busy；另有 maintaining/recovering/handoff/unavailable/retired | 断线或租约过期不是 ready |
+| Attempt | prepared → dispatch_pending → running → completed/interrupted/failed；不确定进入 reconciling | timeout 不是 failed-and-safe-to-rerun；interrupted 不是业务完成 |
+| Inbox | pending → claimed → processed；撤销用户未派发输入有 cancelled 记录 | notified/read/native accepted 不等于 processed |
+| HumanDecision / NativeRequest | open → decision_recorded → applying → resolved；另有 superseded/aborted/unknown | 卡片点成功不是 native 已执行授权；委托不等于人批准 |
+| Operation | prepared → sending → confirmed；retryable/terminal/unknown | 远端超时不证明未执行 |
+| Project | provisioning → active/degraded → pausing/paused → archiving/archived | 群被删不等于删除项目；重开不盲续所有旧工作 |
 
-issue-backed Task 的业务变更先登记 outbox／operation，外部更新并回读后再确认业务状态；内库原子事务只保证执行状态与发送意图，不与 GitHub 假造跨系统事务。外部关闭／重开按资料设计归并，不能以本地旧字段覆盖外部事实。
+Task 不规定强制流水线。要求和 adopted practices 决定 needed evidence；领域层检查已声明的约束与证据关联，不判断所有工作的语义质量。取消／归档时迟到结果归原 attempt 归档，不自动改新状态。
 
-消息、任务和配置变更必须保留来源 actor、作用范围与 idempotency key。工具重试返回既有 operation 结果；版本冲突返回当前 revision，由 agent 重新读取后决定，不静默覆盖他人更新。
+### 5.2 原子操作边界
 
-不暴露一个拥有全应用能力的 `call_feishu_api(path, body)` 作为主接口。群成员、消息、设置是可解释的产品操作，系统负责选择正确 Bot 凭据、调用 SDK、去重和恢复。
-
-目录与 CLI/API 合同版本化。CLI 帮助按需读取，不依赖 runtime 热增工具；MCP 目录变更是否可热刷新、刷新后是否仍延迟加载，需要分别验证。必要时在安全会话边界重新连接／恢复，不在活跃执行中静默切换调用合同。
-
-## 6. 工具身份不能继续只靠当前飞书消息
-
-当前 `requireToolAuth` 使用 loopback + daemon 共用 bearer，URL 携带 instance ID；随后从 active/pending remote turns 查 surface。该实现用于“给本轮用户发送附件”，并要求 normal mode。
-
-团队执行可能由同事回信、任务指派或资料变更触发，没有新的人类消息。不能伪造用户 turn、任意传 `surface_session_id`，或者从多个 active turn 中取第一个来决定项目。
-
-推荐引入两级绑定，兼容 CLI 环境与 MCP 配置通常在进程／session 启动时注入的事实：
-
-1. **运行会话绑定**：daemon 为 worker 签发凭据，关联 role、scope/context、instance/session、Bot generation；personal scope 关联稳定 principal，project scope 关联 ProjectID。wrapper 只把该凭据注入对应 child，不继续分发一个可任意声明 instance 的全局 bearer。单聊不伪造 ProjectID 或 TaskID。
-2. **单轮执行引用**：每次派发分配 `run_ref`，把可选 task、回复目标和指令／记忆版本登记在服务端；将不承担身份认证的 opaque run reference 放进当轮输入。工具请求携带该引用，服务端同时验证会话绑定和 active run，不接受模型自行声明 actor/scope。
-
-这避免依赖“每一轮热改 MCP Authorization header”才能工作。旧轮迟到请求携带旧 run reference 时应被拒绝，不应被重新解释成当前轮操作。
-
-同一角色在项目中可有多个明确工作流与 WorkerSession，每个 session 一次承载一个 run，不同 session 可并行。绑定加入 workstream、execution-location generation 与 controller lease；工具入口捕获固定 execution context，异步操作保存该 context。结束、暂停、重绑或 generation 变化后按状态拒绝后续旧调用。
-
-拒绝新的旧 run 调用，不代表取消已经受理的异步 operation。邀请、消息投递等操作保存受理时的身份与作用域快照，独立推进自己的状态；只有项目取消、绑定失效或显式取消等规则使其停止，不能因为发起者 turn 结束就遗失副作用回执。
-
-资料读写复用执行绑定并解析其关联 Team／ResourceCollection；Team 共享操作校验成员、资源关联和操作范围，不因角色参加多个项目便放开其他项目。外部资料 connector identity 固定绑定，真实 actor 另记审计，见 [资料身份合同](./feishu-agent-team-materials-design.md#53-多-bot-的访问身份)。
-
-`project_create` 使用受限的项目建立上下文：绑定 role、Bot generation、chat、真实发起人及 provisioning operation，尚不假设已有 ProjectID。该上下文只允许查询可用角色、选择项目资源和建立当前群项目，不能访问任意既有项目记忆。建立完成后生成正式 worker 绑定；不能把原始 bootstrap 凭据通过修改模型参数升级为跨项目权限。
-
-未开始 run 时由 daemon 查 inbox 并启动工作，不要求闲置的模型不停调用工具。老附件工具可保留原 caller 兼容路径；团队 run 使用的新身份解析也应服务其附件发送，避免团队工具可用而交付文件失败。
-
-该绑定保证系统工具的归属，不等于对共享宿主文件系统做完整安全沙箱。严格跨项目数据隔离需要另外的 runtime/file-access 边界，不能仅靠记忆目录或提示词声称已实现。
-
-## 7. 如何注入角色、工具和项目记忆
-
-### 7.1 统一输入合同
-
-常驻说明组合：既有 profile instruction、适用的协作规则、角色职责与版本。每轮材料提供 scope/context/session/run、可选 project/task、已确认需求、相关记忆摘要、待处理事件及回复目标；个人普通对话不需要创建项目任务。
-
-现有项目的 `AGENTS.md`、`CLAUDE.md` 等规则继续由 backend 原有机制读取。不把动态项目记忆写入全局 profile，不覆盖既有 instruction，也不通过更换 cwd 到角色记忆目录破坏项目规则与工具路径。
-
-任务事件、引用消息、外部资料与记忆正文按来源分别包装，不拼装成新的高优先级指令。明确配置优先级：平台执行与来源合同、用户管理的 profile/角色规则、项目规则及当前任务指令各有作用域；冲突要呈现，不能以“拼接在后面”默默解决。
-
-### 7.1.1 参与约定与方法库如何执行
-
-自然语言输入由负责人理解；明确委托或汇报要求通过 CLI 调用项目约定用例，携带来源消息与明确范围。业务层验证来源和当前 revision，保存参与／汇报约定并发送 agreement_changed 事件。该合同是工作管理能力，不要求用户学命令；普通答复不因未产生约定而被强制记录为配置变更。
-
-变更用例处理尚在等待人的关联事项：委托后转给负责人／适合角色，旧人待办标记转交；增加参与时为受影响的未完成工作建立需要的查看／决定请求。任务责任与通知路由一起更新，单纯静音不代表已经处理委托。旧卡片回调按代次核对，不把旧请求迟到回复当作新规则下的批准。活动执行通过已有 steering／安全边界收到变更，记录采用的 agreement revision。
-
-方法库采用小型版本化 Markdown skill／playbook 包，至少包含用途、适用／不适用情境、所需输入、建议步骤、产出和升级条件。内置方法默认可发现且由角色按情境主动采用，不要求人逐个启用；团队方法和项目采用约定有明确来源与版本。详细说明通过 CLI 的发现／读取能力按需获得，常驻只含核心原则、适用摘要与索引，不一次注入整库。
-
-方法内容可通过受控文件供原生 Agent 读取，但产品合同不依赖不同 backend 恰好使用相同 skill 路径、自动发现或热加载语义。角色执行方法时调用现有任务／消息／资料／原生 shell 能力；先保证统一按需读取路径，再按已核实的 backend 能力做原生 skills 适配。方法包不是第二个任务引擎，也不代替可核实的执行结果。
-
-评审和集成方法决定怎样组织检查；ParticipationAgreement 决定哪些检查／决定需要人参与。二者分别引用：用户降低参与时可以由其他角色继续评审，不能一并关闭质量方法。版本更新在新采用或安全工作边界处理，团队模板升级不静默改变所有运行中的事项。
-
-### 7.1.2 群与单聊的命令路由
-
-新群模式在入口路由处退出旧 Slash dispatch，不只是隐藏菜单；自然语言进入工作上下文，模型／已有资源选择等通过需要时的卡片控件完成。识别到独立旧命令输入时提供新入口指引，引用和代码里的 slash 保留为正文。不能再让群 `/use`、`/workspace` 等偷偷修改旧 surface 执行字段。
-
-单聊保留适用的 canonical Slash、别名和菜单，解析后调用相同的新业务用例；原生后端不支持的命令仍给真实限制，不假装通用支持。此前明确弃用 Cron、原群专用命令退役分别处理；不因保留私聊而恢复旧群内核。单聊局部 Autowhip／原生 Plan／Goal 等控制不能充当项目业务完成信号。
-
-群任务卡／快捷停止和单聊 `/stop` 都直接调用明确 scope/session 的运行控制，绕过模型排队；群停止的对象是实际任务／项目，不能套用旧 room 中“当前 Bot”的隐式目标。模型忙碌或故障时仍能请求停止并获得实际回执。
-
-### 7.2 各 runtime 的真实落点
-
-| Backend | 现有指令路径 | 团队扩展方式 |
+| 事务 | 一次提交的内容 | 提交后才允许 |
 | --- | --- | --- |
-| Codex | `profile.Instruction` → `CodexThreadPolicy.DeveloperInstruction` → start/resume `developerInstructions` | 合成后的 instruction 进入同一 policy；版本纳入 resume/compact/restart 一致性；保留原生 base instructions |
-| Claude | `profile.Instruction` → `ClaudeAppendSystemPromptEnv` → initialize `appendSystemPrompt` | 扩展启动合同；常驻规则变更在安全边界重启／恢复后生效，每轮项目材料走普通输入 |
-| OpenCode | profile instruction 写入启动 overlay 的 `instructions` | 生成角色专属 overlay，保留项目 config 合并语义；实际 runtime 验证后再承诺能力对齐 |
+| 接受输入 | 去重记录、Message、Inbox、相关要求变更意图、反馈 outbox | 回复已受理、安排执行 |
+| 委派 | child task/assignment、receiver inbox、parent dependency、公开 outbox | 启动对方或宣称交接已登记 |
+| 领取执行 | 校验 gates/leases、attempt、确切 input IDs、冻结版本、启动 command operation | 发往 wrapper；不可先 spawn 后补记录 |
+| 处理运行回执 | event 去重、attempt/session 更新、request 或 terminal evidence、投影事件 | 推进下一执行或移除控制请求 |
+| 保存处理结果 | 已实际处理的 input IDs、检查点／结果、后续待办、依赖事件 | 将 input 标 processed；不能顺带清新到消息 |
+| 变更责任／要求 | revision、assignment generation、受影响工作和待办、旧请求失效关系 | steering／取消重排、新 owner 接管 |
+| 接受决定 | frozen request/revision/actor 校验、唯一 decision、响应 operation | 发送 native 回应或应用业务决定 |
+| 交付 | 已保存版本／引用、Delivery、适用要求状态、通知 outbox | 显示交付存在；外部业务状态确认另待回执 |
 
-代码入口：[Codex profile resolver](../../internal/app/codexprofile/runtime_resolver.go)、[resume policy](../../internal/core/orchestrator/service_codex_resume_policy.go)、[Codex 参数投影](../../internal/adapter/codex/translator_config.go)、[Claude profile](../../internal/config/claude_profiles.go)、[Claude 初始化](../../internal/app/wrapper/app_headless_claude.go)、[OpenCode compiler](../../internal/app/opencodeprofile/compiler.go)、[统一 prompt inputs](../../internal/core/orchestrator/service_queue.go)。
+领域代码用 expected revision 做条件写，唯一约束解决竞争。外部飞书、GitHub、Git、进程操作不在事务内执行；回调按 operation/generation 归并。SQLite 事务不跨 App 全局锁持有；失败不先投影成功再事后补偿。
 
-组合层必须独立于“用户有没有自定义 profile instruction”。当前 Claude 的 built-in profile 路径会提前返回，OpenCode 默认 profile 路径也不直接产生自定义 Instructions；仅在既有非空 instruction 分支追加角色文本会漏掉默认用户。所有受支持 profile 路径都要接收 execution-context composition，原有 profile instruction 只是其中一个输入，不为每个角色复制 provider profile。
+### 5.3 忙时输入与依赖等待
 
-### 7.3 生命周期
+领入一个 attempt 的输入集合固定记录，后到输入仍 pending。安全时可将选定补充 input 作为该 attempt 的附加 delivery；主配置快照不因此静默变化，保存附加 requirements/agreement revision 的采用证据。steer 拒绝或证据不确定时留待下一安全边界，不能并发再开一轮。
 
-1. dispatcher 选定输入／待办，确定 role、scope、context 和可选 project/task，取得执行预算。
-2. 生成 ExecutionAttempt，冻结模型、profile、指令／记忆版本，有 Task 时同时冻结其 revision。
-3. 准备／恢复该 role×scope×workstream 的 WorkerSession 与适用执行目录，注入工具绑定并等待真实 ready。
-4. 新会话带入简短记忆入口；已有会话仅追加必要的版本变化和当前任务信息。
-5. 执行中通过 memory 工具按需查详细资料；重要反馈及时写入，不只等待会话结束。
-6. turn 结束记录执行结果与未完成事项；下一轮根据任务事实恢复。
+内部 read inbox 返回确切 ID 和版本；read receipt 仅说明模型已读。Agent 提交 processing outcome 时须关联已处理 ID、结果或下一持久状态；不要求必须完成 Task 才能处理一封信。反过来，业务完成不能只靠全部 inbox 已读。
 
-不要把登记待办等同已创建 runtime queue item。模型等参数在真正建立执行项时冻结；已创建 queue item 仍遵守 [配置冻结合同](../general/config-state-storage-guidelines.md)，不被随后 Bot 设置静默改写。需求 revision 变化则通过明确 steering、取消重排或下一轮处理，旧成果标记需要复核。
+依赖条件明确为 result_available/review_accepted/integrated 等采用的条件，拒绝环。父角色委派后仍可做独立事；真正等待时提交依赖与检查点并退出主动执行。调度器停止／暂停原生 continuation，核实后释放计算 slot；目录占用根据仍可能运行的 shell/background work 单独处理。结果落库和父 inbox 同事务，无需用户说“继续”。
 
-原生 compact、受控会话重建、启动记忆和消息保留属于完整运行生命周期。说明记录 desired/applied revision；若 backend 恢复会话不能及时应用新说明，就在安全边界重建并载入持久恢复材料。原生自动记忆按角色／项目隔离，无法隔离时由 adapter 关闭重复写入并使用团队记忆。具体状态与失败处理见 [完整执行设计](./feishu-agent-team-execution-design.md#6-原生上下文与长期记忆)。
+反复无进展交接按相同工作／原因归并，限制自动跟进预算并转明确 blocker；限额是运行护栏，不改变原任务目标。队列接收不受可运行 slot 限制；存储容量或过载才以明确接收错误／背压处理，不能虚假接单。
 
-### 7.4 桌面与编辑器接管
+## 6. T05 调度、控制权与持久运行事件
 
-`feishuMCPPublicationEligible` 当前排除 VS Code source，现有工具 resolver 也限制 normal mode；这说明旧 attach 不能直接被当作新的团队执行 owner，需要重做绑定。团队后台独立运行，桌面／编辑器可以观察或通过 controller lease 接管明确工作流。
+### 6.1 执行准入和资源不混为一谈
 
-接管期间自动 dispatcher 不向同一 session 派发执行，消息仍入库；归还时核对任务、成果、目录和检查点再恢复。不得因模型和 cwd 一致借用用户正在操作的会话，也不得把人类切换 `/use` 当作后台任务归属变更。
+准入同时检查：scope 未暂停／归档、Task revision/assignment 有效、角色绑定有效、controller=automatic、worker 可用、location generation 匹配、所需资料／成员就绪、预算与占用可获得。多个项目按 scope/角色公平排队，避免一个大量拆分任务的项目耗尽全部容量；具体并发限额可配置，不把容量固定为 1。
 
-## 8. 记忆管理方案
+计算 slot、wrapper carrier、native session owner、可写目录占用、目标 ref 集成协调各自独立。现有远程派发 ownership 按 instance 维护单一 pending/active binding；Codex translator 的按 thread 映射不等于当前产品调度已支持多 workstream。因此本合同不在一个 carrier 中并发派发两个 workstream。可复用空闲 carrier 的前提是完整 launch/binding 合同一致；同模型、同 cwd 不是充分条件。未绑定预热进程需完成受控初始化，已绑定的原生历史不跨 scope 借用。
 
-用结构化版本记录保存 Markdown 正文，按角色／项目／任务和关键词查询，长资料作为可引用文档或 artifact 保存。存储方案依据知识检索需求选择，向量数据库不是角色连续性和正确恢复的前提。
+资源租约包含 holder/generation/expiry，但 expiry 只触发 reconciliation。连接断开、PID 消失都可能残留子进程或外部操作，不能立刻安排另一个 writer。托管进程停止需要 process group／已知后台任务证据；无法证明则保留占用并转恢复检查。Agent 自行启动的远程后台服务另有资源回执与责任，不能假定停止模型就停止一切。
 
-| Scope | 内容 | 更新规则 |
+### 6.2 自动与人工控制
+
+接管顺序：持久请求和关闭派发 gate → 保存当前输入／检查点 → 请求当前 turn 和 native continuation 停止 → 核实执行及写占用 → 增加 controller generation → 交给人。观察窗口不取得 lease。归还先核对当前原生会话、目录、Git 状态、未决请求和输入，再切 automatic；不能凭“窗口关闭”判断已归还。
+
+停止／暂停走运行控制用例，绕过模型输入队列。Task、Project、WorkerSession 各有明确目标；级联作用保存快照与来源，项目恢复不消除任务独立暂停。取消保留 inbox/result 历史；私聊 `/stop` 可撤销该个人工作中未发送的用户排队输入，不能删除同事回信。中断请求已发送与实际 terminal 分开；归档在运行未停时仍为 archiving。
+
+原生 Goal 可能在 turn terminal 后自发开始后续 turn。等待、暂停、接管、预算不足和更换工作前须关闭相应 continuation，并观察实际状态；不能只等一个 turn.completed 就释放整个执行归属。合法原生续跑在已授予的 bounded continuation lease 内保持同一个业务 Attempt 和 run_ref，各 native turn 独立记录 ID、开始／终态和输入证据；一个 native turn 结束只更新子记录，直到 continuation 结束／暂停并确认不再自动续跑才结束该 Attempt。换任务、换范围或恢复重建时才创建新 Attempt 并注入新的 run_ref；不能先创建 successor attempt，再假定原生自发 turn 的首个工具调用前已经收到新 run_ref。重连后发现无法归属的 active turn 先接管为 reconciliation，不丢事件、不默认允许继续。scheduler 和 native Goal 不能同时当无条件启动器。
+
+### 6.3 关键运行事件需要新增 durable 合同
+
+当前 [ingress](../../internal/app/daemon/app_ingress.go:77) 是内存队列；[Event.Seq](../../internal/core/agentproto/types.go:96) 字段存在不证明生产端已实现序号、持久 ACK 和重放。现有 App 在全局锁中 ApplyAgentEvent，不能直接把 SQL fsync 与外部查询塞进去。
+
+拟新增协议：
+
+1. wrapper 为持久 carrier incarnation 生成单调 event sequence；started、terminal、native request、command result、binding/change、continuation 状态写关键事件 journal。
+2. daemon 网络入口轻量接收，有界 receiver worker 持久保存 event receipt 后回 durable ACK。wrapper 在收到该游标前保留可重放关键事件；重连从 ACK 后补发。
+3. command 侧保存 command ID、payload hash 与执行阶段。重放重复 command 返回既有状态；已经写 native 但未知结果不能重新执行整个命令。
+4. daemon 工作处理器按 worker/generation 串行归并，事务完成后发布内存投影。重复事件与迟到世代仅补原证据；不重新完成任务或释放别人的 lease。
+5. 流式 token 可批量／合并，不要求每 token fsync；最终内容、必要轨迹索引与原生历史补读保障用户结果，不把流式显示当关键业务账本。
+
+必须接受的物理边界：native 接收命令与 wrapper 写 journal 之间仍不能跨进程原子提交。journal 让我们知道“已准备／可能已发送”，不能保证任意 shell exactly-once。未知窗口用原生状态、历史、CLI 操作回执与现场检查对账；不足时显示 unknown，不能自动重放副作用。
+
+升级需协议能力协商，如 owner_contract_version、durable_receipts、receipt_strength、maintenance capabilities。旧 wrapper 不满足团队协议时不得承接新 team attempt；给明确升级提示。旧未迁移个人工作可在原协议运行至切换窗口，不让一种 session 同时被两个协议 owner 调度。
+
+## 7. T06 Codex／Claude 会话生命周期与上下文注入
+
+详细源码链路和拟改文件见[运行合同附录](./feishu-agent-team-runtime-contracts.md)。这里规定主架构必须采用的差异，不能用一个 `Resume(session)` 接口掩盖它们。
+
+### 7.1 原生对象、启动与回执比较
+
+| 问题 | Codex 当前实现 | Claude Code 当前实现 | 必须实施的处理 |
+| --- | --- | --- | --- |
+| 进程与会话 | wrapper 启动 app-server，initialize 后 thread/start/resume，再 turn/start | wrapper 启动 print/stream-json CLI；进程绑定当前 session，切换通常重启 child | WorkerSession 与进程、native thread/session 分别记录；启动阶段可单独失败 |
+| 原生 ID | thread/turn ID 由 app-server 返回 | session 来自 system.init；turn 为本仓 `relay-claude-turn-N` 合成 | 合成 ID 必须带 incarnation/generation；不能按裸 turn ID 去重 |
+| 新会话可恢复 | start/resume 响应与持久历史分别核查 | system.init 已见 ID 不证明已有可恢复 transcript | resume checkpoint 单独保存，fresh-ID 未持久不能盲 `--resume` |
+| 空闲续跑 | 同 currentThread fast path 直接 turn/start | 当前进程追加 user NDJSON | 同工作兼容时复用，范围不一致禁止复用 |
+| 忙时输入 | turn/steer 带 expectedTurnId，原生响应可确认接收／拒绝 | 本地 active turn 检查后写 user NDJSON，无等价原生 expectedTurnId ACK | 保留 receipt strength；Claude 写队列成功不叫模型消费 |
+| 常驻规则 | developerInstructions 在 thread start/resume；普通 turn 只更新 model/effort 等 | initialize appendSystemPrompt 从 wrapper 环境取 | desired/applied 分开；下轮输入不能假装已热更新 system instructions |
+| cwd | thread/turn policy 与进程 launch 均有约束 | child cmd.Dir 固定 wrapper WorkspaceRoot；resume catalog 也受其限制 | 位置改变必须匹配新 launch snapshot，不只改 Target.CWD |
+| 明确目标不存在 | thread RPC 失败需保留 command/attempt 关联 | catalog 未命中存在继续 current session 的路径 | 团队路径 fail-closed，明确 resume_target_missing，禁止串到当前其他工作 |
+| compact/Goal | 现有 compact 和 Codex headless Goal 链路可复用 | 当前未接通相同 compact／Goal 命令 | 工作级持续性通过持久 checkpoint＋受控重建实现，不虚构原生支持 |
+
+目前通用 CommandAck 多数只说明命令通过 wrapper handler 并排入写队列；只有指定 response gate 等待原生响应。产品分别保存 process_ready、session_observed、input_queued、native_accepted（若有）、turn_started、turn_terminal、resume_checkpoint。缺少证据的阶段标 pending/unknown，不强行对齐两个 backend 的 ACK 含义。
+
+### 7.2 LaunchContract、InstructionBundle、WorkInputEnvelope
+
+采用三个不可混淆的版本快照：
+
+| 合同 | 内容 | 何时应用 |
 | --- | --- | --- |
-| role | 核心职责、通用方法、明确适用于所有项目的规则 | 职责配置与经验分别管理，记录跨项目影响 |
-| personal / role_personal | 个人偏好、私聊资料及该角色的个人工作恢复线索 | 按稳定用户和 scope 隔离，不自动写入 role/project |
-| team | 团队经验与通用资料摘要／索引 | 引用团队原件与版本，不与通用规范形成双写源 |
-| project | 需求、约定、决定的摘要与资料索引 | 原件由资料／工作项权威源维护；摘要有来源和版本 |
-| role_project | 角色在本项目的经验、恢复索引 | 该角色维护，避免覆盖其他角色笔记 |
-| task | 当前任务的检查点、证据与下一步 | 关联任务 revision，不替代 Task 状态 |
+| LaunchContract | backend binary/protocol、host/cwd、provider/profile/env refs、tool binding、native memory 策略、controller/session generations | 创建匹配 wrapper/child；进程级字段改变在安全边界重建 |
+| InstructionBundle | 既有 profile instruction、平台身份与协作核心规则、角色职责、方法发现入口，各片段来源与 hash | Codex 新 thread／受控 resume；Claude 新 launch/init snapshot |
+| WorkInputEnvelope | attempt/run_ref、具体 input IDs、当前 scope/task、采用要求／参与约定版本、恢复摘要、相关记忆入口、回复目标 | 每次 start／steer／下轮输入；详细资料按需读取 |
 
-记忆条目由 memory service 写入协作库；资料正文、业务要求及合并事实分别以资料载体、issue／Task 和 Git／PR 为权威，不由 memory service 再写一份。可生成 `MEMORY.md` 风格的只读索引供 runtime 阅读，但导出文件不是第二份可独立修改的真相。个人临时笔记可以保留文件形式，只有通过服务提交的内容才进入团队恢复与共享合同。
+保留 profile 原始说明、native base instructions、仓库 AGENTS.md／CLAUDE.md 等原生规则。项目资料、聊天引用和记忆正文按来源包装为数据，不拼成高优先级命令。产品规则不能靠拼接顺序覆盖用户既有指令；发生真实冲突时显示来源，由当前有效授权决定。
 
-memory_update 使用 expected revision，记录作者、来源任务/消息、作用范围和撤销历史。冲突时先重新读取，不让模型盲目整文件覆盖。删除或纠正后，使后续注入与查询使用新版本；对正在执行的上下文需要显式通知或重建，不能保证删除存储就使模型立即忘记。
+组合层独立于自定义 profile：Claude built-in profile 早返回路径、OpenCode 默认 overlay 路径都不能漏注入。不能为每角色复制 provider profile 文件。持久文件索引放工作数据根，保留实际 repo cwd，让 native 仓库规则正常读取，不模仿 Raft 个人目录后破坏当前相对路径语义。
 
-项目经验默认不提升为角色通用记忆。跨项目提炼保存适用条件和来源；其他项目的原始对话不会被自动全量注入。
+### 7.3 六条确定时序
 
-私聊进入项目上下文需有用户明确目标或选择；角色可以查询相应项目资料，但私人对话不会自动发布到群或共享记忆。memory owner 不取群 surface 的最近 ActorUserID；App 重绑要核对稳定身份，不能仅凭 gateway 字符串继承个人记忆。
+**A. Fresh**：领取 attempt → 固定配置／位置／凭据 → 准备 launch → initialize → 验证 session binding（Claude 可先暂空，首次 init 后补齐）→ 注入 startup brief＋当轮输入 → 记录投递阶段 → started／terminal 归并。启动失败的事件必须携带 command/attempt，不能依靠“此 instance 恰好只待一个请求”推断。
 
-## 9. 飞书通信与话题路由
+**B. Resume**：读取 native namespace、resume checkpoint、位置与 launch 一致性 → 确认旧执行已结束／可接回 → 用原生 resume → 核实返回身份 → 注入变化摘要与新输入。完整启动记忆不在每次 resume 重复灌入。明确目标不存在时返回缺失，恢复用例决定 fresh rebuild，不偷偷改用别的 session。
 
-### 9.1 内部交接与群中可见内容
+**C. Busy deliver**：输入先入 inbox → 判定是否可在当前 attempt steer → 保存 delivery intent → backend 特有发送与回执 → 按确切 ID 更新阶段。Claude 没有强接收证据时通过后续 transcript／业务 read/processing receipt 归并；无法判明的输入不直接再次执行。重大范围变更可先 interrupt，再在已确认边界重排。
 
-对同一系统管理的角色，`task_assign` 或 `team_message_send` 先提交内部业务记录和 inbox，再通过 outbox 以发送角色绑定的真实 Bot 身份发到飞书。回复不得伪装为人类用户。
+**D. Instruction/config change**：设置记录 desired → 保留已冻结 attempt → 安全边界生成新快照。Codex 不能走 currentThread fast path跳过指令应用；显式 resume/维护仍不能证明采用时，以 checkpoint fresh session。Claude 新 child 若仍从旧 wrapper env 读取，则依旧旧规则，必须更新受控 launch snapshot 或启动新 wrapper。应用证据可来自确定 launch/init 合同与回执，不需要模型自述“我已遵守”；模型回报 model 名也不足以证明整个 bundle。
 
-飞书不是唯一的可靠任务队列。这样即使群消息延迟，内部待办也不会丢；飞书发送失败时明确显示公开消息待发送状态，不声称群已收到。
+**E. Compact/rebuild**：关闭该 worker 新派发并保存未处理输入 → 确认 idle、无悬挂请求、native continuation 已控制 → 保存工作检查点 → 支持并已接通的 native compact 执行并核实 → 否则启动受控 replacement session，载入持久事实与摘要 → 增代次、验证 ready → 恢复队列。压缩失败可继续仍健康旧会话，不能清空 context；旧会话不可用转恢复。重建不复制完整隐私对话到不相干 scope。
 
-原生 bot-to-bot 事件仍用于接收平台侧发起的交流和核对回执。系统自己发出的消息回流时只补平台 evidence，不创建第二份交接。
+**F. Backend change/recovery**：旧执行停止与副作用核实 → 保留 WorkContext、Task、Memory、Resources → 新 WorkerSession/LaunchContract → bounded recovery brief 与必要资料 → 新原生 session → 记录替代关系。Codex thread ID 不能交给 Claude；Claude session ID 不能当 Codex thread。原生 transcript 留作历史来源，不是通用可移植上下文。
 
-其他系统管理的 Bot 只有实现身份、收件确认、执行状态和结果回执合同，才可成为可调度 worker；仅加入群的 Bot 是普通参与者。成员展示与执行资格分开，不假造外部执行结果。
+Raft 对照支持这些处理：稳定 workspace、startup memory brief、Claude resume-ready 区分、Codex busy steer、standing instruction 变化与 session recycle 均有实现；其 Codex 驱动在 start/resume 重发 developerInstructions，源码仍提示 compaction/session persistence 效果需验证；这不能证明特定版本一定要 compact，也不能证明参数已发送即已生效。本产品的受控重建是明确的恢复策略，不冒充 Raft 已保证的行为。见附录固定快照引用。
 
-### 9.2 入站事件
+### 7.4 记忆与原生自动记忆隔离
 
-- 持久记录 canonical message，保留 sender kind、平台 message ID、root/parent/thread、接收 gateway evidence。
-- 团队模式在确认平台事件接收前持久保存最小 envelope，耗时的引用展开和模型执行仍在后台完成。现有内存 inbound lane 的 ACK 不能充当 durable receipt；存储失败时按平台协议返回失败并通过重试／对账恢复，不先回复已接单。
-- 同一群消息由多个 Bot 收到时合并观察；不能仅按 sender open_id 跨应用合并身份。Bot identity 绑定与各应用证据需显式维护。
-- 已知任务话题优先关联该任务，再处理显式 @；无任务关联的新消息交给负责人判断。
-- 普通角色“知道有新信息”和“立即启动执行”分开；FYI 不应无条件触发回复。
-- 历史读取补充群／话题分页；索引供查阅，不自动把拉回的旧消息全部作为新工作执行。
-- 新加入角色得到当前任务、项目摘要和所需历史，不用重放全部群聊启动工作。
-- Bot 协作消息保留 agent 来源，不因正文出现 slash command、纯 @ 或确认词而执行人类设置、primary 切换或审批。需要这类业务操作时使用带真实 actor 的统一用例。
+业务记忆由 T09 持有；native 自动记忆若能按 role/scope/context 存储则隔离，不能隔离时关闭其重复写入并使用受控索引。保留 provider 登录／HOME 等系统配置，不通过改全局 HOME 解决记忆目录。文件系统同宿主仍可被原生 shell 访问，scope/key 隔离不是安全沙箱；需要强租户隔离时必须另配置 OS／容器／凭据边界，不宣称提示词已实现。
 
-当前 [SurfaceIDForInbound](../../internal/adapter/feishu/gateway/routing.go) 按 Bot＋群区分，[mention gate](../../internal/adapter/feishu/gateway/support.go) 会忽略未 @ 的 Bot 消息。团队模式需要在保留原来源检查的前提下增加统一消息归属入口，不能只放开该 gate 就宣布协作已完成。
+每次 attempt 记录实际引用的 instruction/config/memory/agreement revision 及执行期间追加采用记录。要求“忘记”时撤销后续检索、导出与缓存；已加载原生上下文需通知或受控重建。历史审计的保留与用户可删除数据范围分别处理，不能暗中保留一份继续给模型使用的撤销内容。
 
-飞书 `thread_id`／根消息是公共会话引用，runtime thread 是工作流执行引用，两者分别存储。任务实现、协调和评审可以使用独立 WorkerSession，输出始终按 attempt 保存的 conversation target 投影；用户 `/use` 当前选择不改变团队任务归属。
+OpenCode 保持现有 adapter 支持边界，同样接 WorkerSession/context 合同；尚无的 steer/compact 不伪造成功。该扩展不应迫使 Codex／Claude 降为最低公共能力；调用者按 capability 选择等价连续性路径。
 
-### 9.3 出站与交互
+## 8. T07 成果、评审、交付与完成
 
-复用消息 SDK 封装和 projector，补齐 `reply_in_thread` 与任务 root/thread 映射。卡片和纯文本都只是业务记录的投影；输出必须按 run 的 reply target 发到正确话题，不沿用最后一条群消息猜目标。
+### 8.1 结构化结果而非扫描 final
 
-Conversation 先有逻辑 ID，再取得平台根消息／话题 ID。相关 outbox 按锚点创建依赖排序；根消息未发送成功时，后续回复等待映射，不能降级投到主群或最近消息。根消息删除或不可访问时进入显式重新锚定操作，并保留旧、新关联记录。
+`ArtifactVersion` 保存不可变清单与来源：代码 commit/patch＋基线、文件 hash/blob、Docx revision/snapshot、或明确 observation 范围。动态链接另有 `resource_current` 语义，不能标 immutable。`Review` 引用 task revision、artifact/observation、方法版本、实际结论与证据；`Integration` 引用输入版本、目标 repo/ref、前后 HEAD、实际验证／外部回执。
 
-阶段进度和最终交付复用现有事件输出；团队命令显式发送用于跨角色消息和交接说明。需要指定单一内容 owner，避免工具已经发送成果、最终回复又原样发一遍。
+`Delivery` 输入：audience、purpose、summary、needed_action、明确的 current/version refs、retention class、conversation target、source attempt。资源未保存时发布用例先执行 ResourceOperation，确认后登记 Delivery＋outbox。消息发送失败可重试通知，不重复创建成果。已发送消息的 message ID 与 delivery ID 映射；同一交付被多个渠道引用仍是一份。
 
-卡片按钮携带 task/project/revision，点击时重新读取事实。反馈表单和后续话题输入绑定具体任务与操作者，替换团队模式下“吃掉群下一条普通消息”的捕获方式。
+新群采用**显式面向人输出**：普通答复也由 message/delivery 用例发送；native commentary/final 默认进入执行轨迹，不无条件发群。progress projector 发送状态，不另复制 native final 正文。私聊保留原逐轮输出体验，标记内容 delivery owner；已通过 CLI 显式发送相同结果时抑制重复转发。去重靠明确 delivery correlation，不用文本相似度猜测。
 
-## 10. Bot 邀请与自我设置怎样实现
+未显式交付的 native terminal 不自动扫描本地文件、偷偷补发；若工作有应答／交付义务则保存待交付状态，调度一次有边界的补交接工作，反复失败成为可见阻塞。普通无需外发的 FYI 处理可静默结束。不能把 Raft 的 communication-gap trace 误当现成保证，本项目需落上述领域检查。
 
-### 10.1 邀请已有角色
+### 8.2 项目采用要求与固定证据
 
-`project_member_add(role)` → 校验项目和角色绑定 → 登记 joining operation → gateway 在锁外调用飞书群成员 API → 返回结果／进群事件／成员查询对账 → 标记 ready、retryable 或 failed。
+TaskRequirementRef 保存来源、适用范围、revision 和采用决定；可以是需要演示、文件、特定检查或 PR，没有统一必填完整验收表。领域层检查所声明引用存在且属于本范围、版本匹配、保存状态真实。质量好坏由执行／检查责任角色判断；系统不能推断未登记文件的重要性。
 
-当前仅有 [Bot 入群 bootstrap](../../internal/app/daemon/app_feishu_primary_bootstrap.go)，没有主动 `ChatMembers.Create` 业务实现。新 adapter 应走既有 Feishu call broker，遵守 [API timeout 纪律](../general/feishu-api-timeout-discipline.md)，不在 app 锁内做网络调用。
+任务要求变动使相关证据 obsolete/needs_recheck，不删除旧结论。返工新版本另关联评审；必要子项、成果、外部状态与检查结果齐备后才按采用条件结束。业务不要求人验收时不制造待人批准。外部 issue 被人关闭但交付缺失，呈现“外部已关闭／交付缺口”，不是伪造通过或默认重开。
 
-邀请重试按 project＋role＋binding generation 去重。同一个群按飞书接口要求串行执行成员变更。API 超时不等于失败：先查询成员事实，避免不断重复邀请。成员已经在群里也不代表其 runtime 就绪，需要分别投影。
+### 8.3 资料保留与清理
 
-调用应用、目标 Bot 均需满足飞书接口的成员与可用性条件。权限授权本身后续处理；应用注册仍是独立部署流程，不能通过邀请工具凭空创建一个 Bot。
+持久成果 blob、ResourceVersion、Delivery 引用与临时 native/worktree 文件物理分开；引用中的待决定／已交付内容不能被旧预览 TTL 扫描器清理。旧预览默认 24h 与 [managed cleanup](../../internal/adapter/feishu/preview/markdown_preview_managed.go:42) 有真实 DeleteFile，不能只在新数据库标 permanent 就认为安全。
 
-### 10.2 设置与角色维护
+清理按已登记未引用临时对象执行；活跃讨论、保留版本、迁移保护引用阻止删除。Agent 清理自己 worktree 前先发布必要成果、更新位置/checkpoint；平台不接管所有临时文件管理，也不能自动删除未登记但可能有价值的目录。永久删除单独 operation，核查关联引用并记录实际删除结果，不与归档或缓存清理混为一谈。
 
-现有设置写入依赖人类私聊 surface，不能让 Bot 伪造私聊来复用。抽出接受真实 principal 和字段变更的统一用例，UI、CLI、MCP 均调用；审计记录区分 human、role、system。
+## 9. T08 执行位置、Agent Git 与并行集成
 
-分开三类操作：
+项目资源记录 repository identity、授权选择的 source/host、可用 refs；ExecutionLocation 记录实际 host/cwd、规范化路径、location generation、owner 与检查点。目录规范化考虑符号链接和宿主差异，用真实 repo identity 辅助判断，但不凭 basename 或相同 URL 合并项目。读同一资源可以并行，写同一 checkout 不并行准入。
 
-- 维护自己的项目经验：普通 memory_update，在明确 scope 内执行。
-- 调整角色职责或通用方法：role_update，记录版本及跨项目影响；项目例外不能隐式改全球职责。
-- 更换 model/profile/backend：bot_settings_update，沿用统一 Bot 设置和执行参数冻结。可以支持用户已授权的 agent 操作，但不由模型自行通过编辑 config 文件改变全局状态。
+Agent 用原生 shell／Git 自主建立 worktree、分支、合并、修冲突。准备位置可作为该角色自己的执行步骤：先在获准且无冲突的位置检查仓库 → 原生操作创建位置 → 注册实际位置与 Git 证据 → 在安全边界切到匹配 LaunchContract 的 worker → 开始并行修改。创建后登记前崩溃时恢复角色查 Git worktree list／路径和操作记录，不让 daemon盲重放创建或删除目录。
 
-修改结果先记录 requested，当前 run 正常完成后再按 backend 合同应用，暴露 effective 状态；禁止在工具调用尚未返回时重启承载它自己的 runtime。若仍有旧参数 queue item，按既有冻结语义执行或显式取消重排，不默默篡改。
+位置登记不是无条件相信 Agent 声明：校验路径存在、选定资源关系、host、当前占用、expected generation；不依靠路径字符串替代 shell 权限隔离。Claude 更换工作位置尤其需要新 wrapper/launch，现有 cmd.Dir 不会随 target 自动更新。改项目资源后旧 attempt 输出可读，但不能自动写入新 resource generation 或通过新要求的检查。
 
-同一 Bot 的多个活动 WorkerSession 共享一个目标配置 revision，各自记录 applied revision 和待生效状态；统一模型配置不意味着中途强制重启全部任务。新执行使用适用的新配置，已有冻结执行按既定合同收尾，界面可解释哪些工作仍在旧版本上。
+集成使用 repository＋target ref 的跨项目协调记录，保存 owner/expiry/evidence；Agent 在真正写 ref 前再读实际 HEAD，用 Git／远端支持的竞争检测。协调记录不能阻止外部人直接改 ref，因此 HEAD 前移时重新整合。平台不实现 merge 引擎，也不把 cronrepo 的 mirror、force remove 和自动清理当新基座。人的脏 checkout 不 reset／clean，不把未验证的强推作为默认冲突处理。
 
-## 11. 持久队列、等待与恢复
+完成计算 turn 不自动释放仍在写的后台命令占用；停工、接管、重启都先核实。执行位置丢失时从持久成果与 checkpoint 恢复，无法恢复的未发布工作如实列缺口；不从旧摘要猜出文件后当成原版。
 
-### 11.1 任务状态与执行状态分离
+## 10. T09 参与约定、方法、记忆与设置
 
-运行事实的状态由产品定义；业务流程由项目／事项选择的权威来源与约定解释。下面的状态是常用表达，不是强制所有项目必须采用相同测试、评审、验收和交付阶段。
+### 10.1 自然语言到可执行参与约定
 
-建议任务状态包括待办、进行中、等待依赖／用户、待验收、完成、取消，暂停作为明确调度 gate；这是本产品设计，不照搬 Raft 某个版本的状态名。
+负责人理解输入后调用 `ApplyAgreement(source_message,scope,subject,decision_owner,participation_points,reporting,validity,expected_revision)`。业务层核对真实指令来源和适用范围；这是模型语义理解＋确定性持久迁移，不以关键词“以后”自动扩大权限。
 
-交付可以是答复、演示、当前资源或固定成果。固定版本要求适用时引用 commit、文档 revision 或不可变文件版本，并关联评审依据；否则明确是当前状态或观察结果。完整版本、独立评审及集成能力仍需实现，但不由平台强制每项工作采用。
+约定至少记录：发起人、受影响人、事项/类别/项目/阶段、一次性或持续、有效版本、决策责任、需要人的时点、通知粒度、替代关系。优先关系为明确事项例外优于通用范围；同一来源的明确修订替换旧版；多方权限或意见冲突形成待解决事项，不用全局时间排序擅自判决。没有强制把阶段转成日期 Cron，阶段变化由明确工作事实／用户指令驱动。
 
-依赖条件明确区分结果提交、评审通过和已集成，建立依赖时拒绝环。父任务的完成由必要子项和验收条件决定；研究／文档任务不强制走 Git 集成。需求变更通知受影响依赖，旧成果与评审保留但不能自动满足新验收。
+更新事务同时处理 open DecisionRequest：符合委托范围的转交、保留旧请求 superseded_by、产生负责人 inbox；增加参与点的对尚未越过该阶段的事项生成请求；已越过阶段但未完成的说明当前已发生事实和可调整部分，不倒造“事前批准”。只改变 reporting 不转移 decision owner。旧卡带 request/agreement revision，迟到决定返回当前状态。
 
-ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。`turn.completed` 不等于 Task 完成；当前用户中断也可能使执行 QueueItem 收口，因此业务完成依当前工作要求和实际结果判断；只有项目要求验收证据时才检查相应证据，不能自动把每项工作都升级为待人验收。
+汇报聚合按项目／问题／需要的人去重。没有需人动作的过程可合并到工作卡和交付；真实阻塞不因静音丢失。通知交付失败保留 outbox；参与人不在线不等于默认批准。个人“待我处理”查询带 principal，只在本人私聊／有身份校验入口返回。
 
-暂停先关闭新执行准入；已有 run 时记录 pause requested 并请求中断，直到原生 terminal evidence 到达，才显示实际已停下并释放 slot。回信仍入库，恢复后处理。任务取消、项目归档或角色移除使后续唤醒失效；迟到结果保留在原 attempt，不自动重新打开任务。
+### 10.2 方法库
 
-### 11.1.1 显式交付合同
+PracticeDefinition 是版本化 Markdown 包，含 id/version、用途、适用／不适用、输入、建议步骤、产出、升级条件、依赖能力和来源。内置计划分工、评审、集成回归、交接交付、负责人汇总、记忆资料维护；团队可维护覆盖版本，项目采用记录精确版本与例外，不全量复制模板。
 
-任务从既有规范、阶段和当前需求采用适当交付要求，必要时记录明确要求来源；不要求每次创建任务先填完整验收配置。Agent 通过统一 CLI 用例发布 Delivery，服务端核对 scope、本次实际提交的成果引用与保存状态，再原子关联 Delivery 和通知 outbox。外部资源保存使用前置 operation；不能用扫描 native final 的文件名替代登记，也不能在远端尚未保存时标为可交付。
+`practice discover/read/adopt` 通过薄 CLI 查询，常驻仅索引及选择原则。原生 skill 路径可作便利适配，不依赖 Claude/Codex 自动发现或热加载行为一致。采用只表示选用方法，具体任务／消息／结果由共同用例记录。方法包不引入第二个 workflow engine。
 
-项目明确要求文件等成果的任务缺少对应成果时不能声称交付完成；普通答复或演示不要求额外报告。通知失败保留待发送，人的已读和验收另存，暂停不受此检查阻碍。issue-backed 业务状态仍以 issue 为权威，外部关闭而缺少成果显示实际缺口，不擅自重开 issue 或伪造已验收。
+方法升级在新采用或明确安全边界进行，运行中的采用不悄然变版。减少人的参与不改变 PracticeAdoption；用户明确“这次不评审”按本项范围调整，团队方法仍存在。模型发现的新经验先作为提议／有范围经验，不能自己发布团队默认方法升级。
 
-该补充合同只约束真实发布和已采用的项目要求，不成为统一业务完成门槛。系统能查本次发布记录的完整性，不能自动识别所有未登记文件的价值；责任角色及实际安排的评审者承担内容判断。提示词、工作目录、旧预览边界及人的固定入口见 [交付设计](./feishu-agent-team-human-delivery-design.md)。
+### 10.3 分层记忆
 
-### 11.2 并发为 1 也必须完成交接
-
-1. 负责人通过工具提交任务、目标 inbox 和群消息 outbox；返回“已登记，待处理”。
-2. 负责人可以继续独立工作；确实等待时记录依赖并正常结束当前 turn。
-3. 通过现有 turn 收口路径释放 reservation，不能在真实 runtime 仍运行时提前释放。
-4. scheduler 在目标 ready 且有预算时，把持久待办投影为实际 QueueItem 并执行。
-5. 子任务完成，原子记录结果与负责人 inbox。
-6. 负责人在后续 run 读取结果并继续交付。
-
-任务登记不受执行 slot 限制；执行准入才消耗 slot。[现有 enqueue](../../internal/core/orchestrator/service_queue.go) 在创建新独立执行项前检查 room admission，满额拒绝；不能把团队委派直接伪装成这类用户输入。
-
-等待不占一个长时间未返回的 MCP 调用，也不靠模型 sleep 或轮询。重复无进展互相 @ 应由任务关联、事件去重、有限跟进预算和可见阻塞状态收口。
-
-### 11.3 新唤醒来源
-
-新增 team_assignment、team_reply、task_changed、resource_changed 等有明确身份的工作来源。复用 headless prepare/resume、执行 queue、turn events；新增独立协作 dispatcher，不复用用户消息入口的隐式身份。
-
-[群恢复策略](../../internal/app/daemon/app_surface_resume_policy.go) 当前不普遍后台恢复群；[按需恢复](../../internal/app/daemon/app_group_on_demand_resume.go) 由用户文本触发，continuation 是内存态。这些入口可借用底层启动能力，不能作为持久 inbox。
-
-[AutoContinue](../../internal/core/orchestrator/service_autocontinue.go) 是运行中断恢复，不是团队待办调度。旧 Cron 的产品、scheduler、运行模型与 cronrepo 全部退出本方案，不作为新运行层的复用或迁移基础。团队依赖完成和消息到达靠事件唤醒，不依赖定时任务；重试退避属于运行可靠性，也不等于 Cron 产品。若另有用户定时业务需求，重新设计时间语义、漏执行与变更规则后再接持久 inbox，不把新日历／定时系统强行加入本次交付。
-
-### 11.4 持久化与原子性
-
-建议新增一个 SQLite collaboration store；仓库已有 `modernc.org/sqlite` 依赖。任务变更、接收者 inbox、待发送 outbox、幂等记录在同一事务内提交，不分别写多个独立 JSON 文件。
-
-领域决策由 orchestrator 提供，daemon 用 unit-of-work 驱动仓储。先校验 revision 并提交 durable transaction，再发布 committed events、刷新内存投影和回复已受理；失败不留下仅内存成功的任务。不得把未提交的状态提前投影为已完成。
-
-外部 API、进程启动和慢 IO 在锁外；用 operation/run/revision 关联回调。数据库事务保持短小，采用串行命令执行或 optimistic revision 明确处理并发，不把网络操作包在数据库事务或 app 大锁中。
-
-重启重建 pending inbox/outbox；running attempt 依据 instance/thread/turn 证据对账。无法确定外部副作用是否已发生时进入 reconciliation，不直接重新执行。承诺可恢复和业务幂等，不承诺跨数据库、飞书和任意 shell 操作的严格 exactly-once。
-
-领取 inbox 与创建 ExecutionAttempt 在同一事务完成，同时冻结明确的 inbox IDs 及 task/config/role/memory 版本；启动 runtime 前已有 durable attempt。使用领取代次／lease 与唯一执行约束阻止重复调度；已领取未启动、启动结果未记录、执行结束未提交分别对账。消息读取本身不等于工作已处理；确认消费必须与处理结果或下一步 durable 状态一起提交，仅确认本次实际处理的 inbox IDs，不连带确认执行期间新到的消息。lease 过期只触发核查，不代表可以无条件再次执行。
-
-内部 message ID 与飞书 message ID 建立 delivery mapping；平台请求可用幂等键时复用稳定键，且处理幂等窗口限制。发送成功但回执落库前崩溃的情况需通过查询和 evidence 对账；无法辨识时显示不确定状态，不能制造重复工作。
-
-## 12. 独立执行工作区与并行集成
-
-当前 room 共享目录与 claim 不足以支持目标。项目资源与执行位置分离，Agent 通过已有 shell/Git 自主准备、复用、恢复和清理工作目录；平台不建立 worktree provisioning、TTL 回收、自动合并引擎。负责人协调并行与共享资源，平台记录 host/cwd、绑定代次、占用、恢复检查点及成果版本。
-
-采用固定版本评审时使用真实 commit／资料快照，当前页面走查则如实记录观察对象；需要集成时由项目指定的责任角色承担，通过 Git／PR 的真实结果交付。系统保存 repository＋target ref 的共享协调记录，Agent 在实际操作时核对 HEAD、解决冲突、验证和合入。占用记录不是操作系统沙箱，也不能代替 Git 竞争检查。
-
-目录缺失或操作回执不确定时由恢复角色检查证据，不由平台自动 reset／重建／删除。完整边界见 [执行设计](./feishu-agent-team-execution-design.md#4-并行开发与成果集成)。
-
-同一 Bot 跨项目使用独立 worker/session 和记忆命名空间；不能把项目 A 的已有 runtime 会话改标签后直接借给项目 B。更换群目录时保留 ProjectID 和长期资料，旧 execution-location generation 的结果保留在原 attempt／成果版本，但禁止自动应用到新目录、更新新任务版本或通过验收；需要重新验证才能纳入当前交付。新项目复用旧群必须显式创建新项目绑定。
-
-这需要修改现有 headless 复用合同。当前 [候选选择](../../internal/core/orchestrator/service_surface_contract_resolution.go)、[目录亲和评分](../../internal/core/orchestrator/service_thread_global.go) 和 [预热池](../../internal/app/daemon/app_headless_pool.go) 不以工作流为独立绑定键。worker 的复用／恢复必须检查 role、scope/context（含个人 principal 或项目绑定）、workstream、execution-location generation、controller lease、Bot generation、工具绑定代次和常驻指令版本；相同模型、profile 和目录不足以证明可复用。未绑定预热实例完成受控初始化后才能使用，已绑定实例不得通过改 surface 归属借给另一角色；不能热改工具配置时安全重建 child。
-
-### 12.1 会话 Goal 与资料接线
-
-会话 Goal 放在原生运行策略，绑定 context/session 与当前需求版本，不是 Project 目标对象。当前仅 Codex headless 实现 thread/goal 系列；其他 backend 按明确能力使用持续执行策略。暂停、改要求、重建会话时协调原生 goal 与 dispatcher，避免两个循环重复推进。详见 [Goal 合同](./feishu-agent-team-execution-design.md#61-会话-goal-与业务目标)。
-
-资料层使用 CLI → ResourceService → 工作库中的引用／operation → 各原生 connector。Feishu tenant token 支持 Docx、Sheets、Bitable 的相应读写；Wiki 新建知识空间需用户身份，因此纯 Bot 路线挂接既有 Wiki，或使用应用可管理的云空间文件夹＋固定项目资料首页。不能承诺纯 Bot 自动新建 Wiki 空间。接口证据、创建不确定回执、编辑冲突、版本与 issue/PR/repo 边界完整定义在 [共享资料设计](./feishu-agent-team-materials-design.md)。
-
-## 13. 实施依赖与完整交付
-
-| 工作面 | 实现内容 | 完成证据 |
+| Scope | 典型内容 | 自动写入的上限 |
 | --- | --- | --- |
-| A 领域与迁移 | Role、个人／项目 scope、资源、执行 owner、统一工作库、单聊及旧群归属切换 | 没有双写配置，原目录和已有工作归属可追溯 |
-| B 原生运行生命周期 | 多身份 CLI、上下文组装、start/resume/steer/compact/rebuild、控制权交接 | Claude／Codex 等受支持后端具有明确 ready、输入回执、版本生效和恢复行为 |
-| C 持续协作 | 任务依赖、inbox/outbox、多 WorkerSession 调度、参与／汇报约定、按需方法库和公平预算 | 并行工作、忙碌消息、依赖等待与无人工唤醒恢复成立 |
-| D 执行位置与交付 | Agent 自主 Git、位置绑定、成果版本、评审、返工与集成交接 | 并行闭环和证据恢复成立，无平台隐式重置／清理 |
-| E 共享资料 | Docx／Wiki／Sheets／Bitable connector、稳定资源身份、原位更新、版本与权威来源 | 固定资料反复更新不增生副本，人工改动与发布冲突可恢复 |
-| F 飞书与整体验收 | 群／话题／任务卡、成员邀请、反馈、记忆和统一设置，Cron 退役 | 完整产品场景及故障场景通过，代码和实际行为一致 |
+| role | 明确通用职责、方法引用、提炼后的经验 | 不能从一次项目聊天自动提升全局规则 |
+| team | 共享术语／资料索引及摘要 | 引用权威原件，不复制成第二规范 |
+| project | 当前决定、约定摘要、资料索引 | 原文变更失效摘要，业务要求仍以采用来源为准 |
+| role_project | 某同事的项目经验／恢复索引 | 不覆盖其他同事或其他项目笔记 |
+| personal | 稳定 principal 的偏好与私人资料 | 不因进入项目自动公开 |
+| task/context | 当前工作检查点、未解决问题、必要证据 | 不替代 Task/Inbox/Operation 真正状态 |
 
-这些阶段是依赖顺序，允许独立组件交叉实施；A—F 都属于本目标，不以中间阶段代替完整交付。验证是实现者的交付责任：失败时修复 adapter 或生命周期，不能以版本未验证、权限待开启或实现困难为由改成缩减产品。
+MemoryEntry 使用 expected revision，包含 source refs、作者、适用条件、撤销状态、来源版本。检索先按授权 scope 过滤，再关键词／全文；向量检索不是实现连续性的前提。startup brief 有大小预算，只含角色、当前工作、关键约定、最近检查点及资料入口；长文按需读，不能为节约上下文删掉底层原文。
 
-## 14. 必须通过的验证矩阵
+可导出 MEMORY.md 式只读索引与按需正文，注明生成版本；Agent 文件笔记若未提交 memory 用例，不自动当共享真相。Task requirement、外部原文或实际 Git 状态优先于过期摘要；冲突时标失效并重新读取。删除/纠正使后续检索和导出更新，活动 native session 的处理按 T06。
 
-- Codex、Claude、OpenCode：工具发现、一次调用、start/resume、常驻指令变更、compact/restart 后角色不丢失。
-- 默认／built-in profile 也得到角色指令；同模型同目录的两个角色不会借用彼此已绑定的 worker。
-- 同一 Bot 两项目：工具凭据、run 引用、输出话题、记忆查询和模型配置各自归属正确。
-- 同 Bot 多用户私聊与项目群共用内核，个人记忆隔离；精确模型／已有目录选择保留，内部工作区无需用户操作。
-- 委托确实转移待处理责任而非仅关闭通知；增加人参与影响相关未完成工作，旧卡／旧约定不覆盖新决定。
-- 群旧 Slash 不进入旧 handler；单聊适用命令与别名仍调用新内核；模型繁忙时停止控件不依赖模型响应。
-- 方法按需发现并版本化采用；减少人的参与不取消角色间检查，升级方法不静默改正在执行的事项。
-- 同角色同项目两个独立工作流并行，任务、原生会话和可写目录不串用；不同项目可关联同仓库。
-- 两个实现任务并行交付，第三个角色在指定版本评审；基线前移、冲突和返工进入集成闭环。
-- Agent 创建目录、更新目标 ref 后崩溃可通过 Git 与检查点核查；平台不盲目重放 shell；迁移前后只有一个项目配置权威。
-- 长期资料更新、并发编辑、快照、事件遗漏及外部创建回执丢失按资料设计验证；旧预览清理不删除永久资料。
-- Session Goal 与暂停、需求修订、恢复联动，但不代替业务验收；旧 Cron 关闭且不自动迁移执行。
-- 迟到调用：旧 run、旧会话、旧 AppID generation 不能修改新任务。
-- 任务版本变化：执行中追加要求有明确 steering/下一轮语义，旧成果不自动按新要求验收。
-- room limit=1：委派能登记；负责人释放真实执行后下属运行；结果能唤醒负责人。
-- 角色忙碌：两个待办不丢、不重放、不串任务；暂停期间只接收信息不自动恢复执行。
-- 多 gateway 收到同一消息、内部发送回流和平台重复事件：只产生预期的一次业务动作。
-- 崩溃窗口：事务前后、飞书发送前后、worker 启动前后、结果提交前后均有可解释恢复。
-- 群无新用户消息：已有待办可以恢复；没有待办的普通群不被无条件启动。
-- Bot 邀请：已在群、超时后实际成功、事件延迟、目标 runtime 不可用分别有状态。
-- UI/CLI 并发改设置或记忆：版本冲突可见，没有最后写入者静默覆盖。
-- CLI 帮助和结果分页保持按需；目录扩展不导致全量说明被注入每轮。
-- 话题反馈：文字、图片、引用与卡片反馈均定位正确；不捕获群里无关下一条消息。
-- 目录变更：保留长期资料，旧执行不能把成果写到新项目；共享 checkout 写入策略有效。
-- Provisioning 期间用户改目录：旧 operation 不覆盖新选择，未 ready 项目不启动团队执行。
-- 锚点发送延迟：后续回复等待映射，不串群、不乱序；旧 generation 成果仍可追溯。
-- 暂停中断尚未确认：slot 保持实际占用，回信只入库，不通过虚假完成状态释放资源。
+### 10.4 模型与角色配置变更
 
-测试应分别覆盖领域状态迁移、持久事务与恢复、adapter 协议、真实 runtime 和飞书群闭环。当前代码的专项测试只能证明已有接入基础，不能替代新增团队功能的验收。
+抽出 [Bot settings](../../internal/core/orchestrator/service_bot_capability_settings.go) 中依赖私聊 surface 的写入规则，改为接受真实 principal/授权来源的 typed use case。Agent 可完成用户已明确选择的配置动作，不自行猜 provider/model，也不编辑配置文件绕开校验。
 
-## 15. 已有证据与实现责任
+变更返回 desired revision 和受影响 worker 概况；active/frozen attempt 保留原快照，新准入采用新配置。工具调用返回前不重启承载它自身的进程。队列项已冻结时显式取消重排才换版本；pending inbox 尚无执行项时在领取瞬间冻结。换 AppID 走身份切换，不等同换模型；撤销旧凭据和 generation 后保留隔离历史，不能清除全部个人记忆。
 
-本次已只读核查 MCP publication、指令注入、工具目录及 caller 解析、群队列与恢复、消息接口和 Bot 设置实现。产品与技术文档是本次唯一仓库变更。
+## 11. T10 资料 connector 与飞书固定入口
 
-2026-11-21 初版草案验证：`internal/app/wrapper`、`internal/app/daemon`、`internal/adapter/codex` 三个包的 11 个定向测试入口及其子测试通过，使用 `-count=1`，清除 proxy 环境变量后执行。覆盖 Codex/Claude/OpenCode MCP publication、VS Code 排除、Claude initialize 指令、MCP 工具目录与 caller 解析、Codex profile policy 以及 compact/restart 恢复。未启动真实 Bot 群协作或修改本机服务配置。后续 CLI／按需加载修订仅为文档研究，尚未实现或实测，也不把这些既有测试视为新路线验收。
+### 11.1 统一资源接口和事实边界
 
-可复核测试入口：
+`Resolve/Register/Read/ProposeUpdate/ApplyUpdate/ReadBack/CaptureVersion/Reconcile` 接收 ResourceID、明确 connector identity、范围与基线，返回来源标识、revision/evidence、内容引用、完整性及 operation 状态。既有 Wiki URL 先解析 node→obj token，不当成可直接读评论的 Docx token。
 
-- [wrapper MCP 注入测试](../../internal/app/wrapper/app_child_mcp_test.go)
-- [Claude initialize 测试](../../internal/app/wrapper/app_headless_claude_test.go)
-- [MCP 调用与身份测试](../../internal/app/daemon/tool_mcp_test.go)
-- [Codex policy 恢复测试](../../internal/adapter/codex/translator_resume_policy_test.go)
+资料正文由外部权威载体持有；注册表保存身份、来源、用途、引用、操作回执与所需历史物料。附件接收、下载、解析、采用和持久登记分阶段记录；未说明用途的附件保留在当前输入范围，不自动公开或启动任务。被任务采用的临时附件要进入持久引用保护，不能只依赖 `.codex-remote/inbox` 文件仍在；超限／不支持／部分读取返回可解释状态，不据文件名生成伪摘要。一个源可以被多个 collection 引用，引用不意味着跨项目扩大访问。凭据固定到资料操作身份，不能让 Agent 遇到拒绝就换更高权限 Bot。团队／个人资料复制或分享是明确操作，保存来源与公开边界。
 
-实现必须补齐并证明：原生会话 ready 与恢复输入；desired/applied 指令版本；默认 profile 的角色注入；WorkerSession 复用与并行归属；原生自动记忆隔离／关闭；执行工作区与集成；飞书话题、Bot 身份与卡片映射。不能即时刷新说明的后端采用持久检查点加受控 fresh session；不能中途接收输入的边界持久排队，均有确定处理路径。
+| 平台／当前基础 | 新增实现 | 硬限制与确定路径 |
+| --- | --- | --- |
+| 已有 Drive preview/upload/meta/permission | 独立持久 Resource 管理、Docx create/get/blocks、局部 patch、回读 | 不复用 24h 预览生命周期或 hardcoded full_access 分享策略 |
+| 已有 Bitable adapter | 通用 app/table/schema/record 局部操作及归属 | 同表写队列；人工字段与系统字段分离，不复用 Cron schema |
+| SDK 有 Sheets metadata | range 读写、公式／值处理、采集清单 | 当前缺数据面 connector；revision 不是强 CAS |
+| SDK 有 Wiki 节点 API | URL 解析、既有 parent 创建节点、索引 | tenant 不能新建知识空间；用已有 Wiki 或 Drive＋Docx |
+| 已有文档评论读取 | Wiki 解析后评论读取／关联／补读及反馈事件 | 不承诺所有事件实时覆盖；dirty signal 后读取 |
+| [附件落地](../../internal/app/daemon/app_inbound_file.go)与 StagedFileRecord | 输入附件关联 Message/scope/context、读取状态、采纳时转存 Resource/Version | IM message_id/file_key 与 Drive token 分开；解析不完整必须保留范围信息 |
+| 原生 Git/gh 与仓库 issue 工具 | 产品级 source refs、issue/PR 更新操作和回执 | 本仓 issueworkflow 是研发工具，不直接当所有用户项目 connector |
+| 已有 FeishuCallBroker、多 Bot SDK | ChatTab、TopNotice、Pin、成员 create/query | 缺业务 operation 与持久绑定，不是 SDK 存在即功能已完成 |
 
-源码对照与完整合同见 [执行设计](./feishu-agent-team-execution-design.md)。本次文档明确了必须实现的行为；未完成的测试不是产品范围豁免，已有测试也不能被用于宣称新增团队能力已经实现。
+资源写入 operation 包含 request key、基线、目标 block/field/range、调用身份、受影响引用、分步进度和结果。网络超时进入 unknown；有 client_token 的接口使用稳定值，仍核实窗口与能力。不能假设所有 API 支持同一幂等键。
 
-## 16. 官方资料与关联规范
+### 11.2 共同编辑与版本
 
-- [产品草案](./feishu-agent-team-product-design.md)
-- [完整执行与工作区设计](./feishu-agent-team-execution-design.md)
-- [代码复用与操作归属审计](./feishu-agent-codebase-reuse-assessment.md)
-- [架构与产品状态所有权](../general/architecture.md)
-- [配置冻结与持久化规则](../general/config-state-storage-guidelines.md)
-- [Profile instruction 设计](../inprogress/codex-claude-profile-instruction-design.md)
-- [远程面状态机](../general/remote-surface-state-machine.md)
-- [飞书卡片状态机](../general/feishu-card-ui-state-machine.md)
-- [Raft Agent 与记忆](https://docs.raft.build/features/agents/)
-- [Raft durable inbox 与唤醒](https://docs.raft.build/developers/sdk/external-agents/wake-and-status/)
-- [Raft Agent 提示词源码](https://github.com/botiverse/raft-source/blob/main/packages/daemon/src/drivers/__snapshots__/systemPrompt/common.md)
-- [Raft CLI HTTP client](https://github.com/botiverse/raft-source/blob/main/packages/cli/src/client.ts)
-- [Raft CLI wrapper 注入](https://github.com/botiverse/raft-source/blob/main/packages/daemon/src/drivers/cliTransport.ts)
-- [Raft 服务 CLI 迁移建议](https://docs.raft.build/developers/best-practices/service-cli-migration/)
-- [Claude Code MCP Tool Search](https://code.claude.com/docs/en/mcp#scale-with-mcp-tool-search)
-- [Codex app-server](https://developers.openai.com/codex/app-server/)
-- [Codex dynamic tool 协议](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/dynamic_tools.rs)
-- [Codex deferred tool 与搜索选择](https://github.com/openai/codex/blob/main/codex-rs/core/src/tools/spec_plan.rs)
-- [OpenCode execute / Code Mode](https://opencode.ai/docs/tools/#execute)
-- [OpenCode MCP](https://opencode.ai/docs/mcp-servers/)
-- [飞书机器人互聊事件](https://open.feishu.cn/document/server-docs/im-v1/message/events/receive)
-- [飞书添加已有用户或机器人](https://open.feishu.cn/document/server-docs/group/chat-member/create)
-- [飞书话题回复](https://open.feishu.cn/document/server-docs/im-v1/message/reply)
-- [飞书历史读取](https://open.feishu.cn/document/server-docs/im-v1/message/list)
-- [飞书卡片回调](https://open.feishu.cn/document/uAjLw4CM/ukzMukzMukzM/feishu-cards/handle-card-callbacks)
+Docx `document_revision_id` 不作为 expected-current CAS；Sheets revision 与 Bitable update 同样不提供通用条件覆盖保证。内部按文档／表串行只防止我们自己互撞，不锁住人。按目标块／字段最小更新、基线比较、回读，发现变化先生成建议；要求强不覆盖的人工区域采用建议后人采纳或明确编辑窗口，不能声称 read-modify-write 绝对安全。
+
+ResourceVersion 分类：native historical revision、content-addressed immutable snapshot、observed dataset、current reference。命名版本是异步展示辅助，与编辑 revision 不混号。Docx 历史读取按权限和可用性核实；需要长期稳定交付时保存所需持久物料。Sheets/Bitable 采集记录分页、范围、开始结束时间、公式／输入、source metadata和一致性声明；没有同版保证不能标 atomic。
+
+变更事件只标 dirty，读取、启动恢复、反馈处理和运行退避对账补齐遗漏；这是可靠性维护，不恢复 Cron 产品。外部人改原文后影响活动任务，产生 resource_changed input，负责人明确采用／修订要求，不让模型摘要自动覆盖正在执行的需求。
+
+### 11.3 固定入口与公开投影
+
+建立 EntryBinding(project,chat,binding_generation,purpose,resource_id,external_id,desired/applied target,state)。普通群默认 doc Tab“项目”＋导航消息及 Pin；顶部置顶只在明确托管条件下操作。API 能添加 doc/url，不能任意自建 file/doc_list 系统 Tab；话题群不支持 Tab 时用实际可用导航路径。普通群中的任务话题与“话题群”不可混淆。
+
+恢复时列出 Tabs 对照登记 ID／精确目标，不靠标题认领；人工删除的入口标 removed_by_user，不无限重建。TopNotice 当前占用无法可靠从已有证据读取时不盲目覆盖。入口创建与文档访问独立，分享／访问状态单列；URL Tab 不提供页面托管或鉴权。
+
+首页使用系统管理的索引段／块，存 block IDs 和 projection cursor，只展示公开工作。人编辑自己维护的说明段不受状态刷新覆盖。任务投影更新失败不影响工作库事实，页面显示更新时间／待同步；“待我处理”私人汇总不写共享文档。群文件仅为聊天资料浏览面，长期版本／保留仍由 Resource/Delivery 管理。
+
+外部能力证据及具体 API 链接完整保留在[资料专项](./feishu-agent-team-materials-design.md#2-已核实的-api-接线)。权限尚未开启不缩减目标；接口本身无该原语时采用上述真实替代路径。
+
+## 12. T11 飞书投影、私聊命令与请求处理
+
+### 12.1 展示不拥有执行
+
+Conversation 先有内部 ID，创建根消息 outbox 成功后取得平台 root/thread；后续回复依赖这个锚点，不在失败时乱发主群或最近消息。锚点丢失生成 Reanchor operation，保留旧／新映射，旧反馈仍归原工作。reply target 在 attempt/delivery 时冻结，不取当前 surface selected thread。
+
+输出按 audience/source/intent 分类：内部协作事件、公开协作摘要、状态投影、直接答复、成果交付。不同角色用真实 Bot 身份发消息；系统状态可用明确系统／负责人出口，不冒充人的发言。内部 bot echo 不执行人类设置或批准。详细执行轨迹留在诊断／工作详情，默认主群不播放每个 native token。
+
+卡片 payload 带 object ID、action、revision、binding generation、request ID；回调先经过现有 gateway/chat/operator 校验，再由用例重新查 scope/actor/当前状态。旧卡返回 stale＋当前入口，不捕获群下一条消息。长期动作只同步返回 accepted，异步更新投影；飞书消息发送回执与业务完成分开。
+
+### 12.2 私聊完整兼容映射
+
+命令解析和别名可以复用 [registry](../../internal/core/control/feishu_commands.go)、[parser](../../internal/core/control/feishu_commands_parse.go)、[capability display](../../internal/core/control/feishu_command_display_profiles.go)。群判断必须在旧 dispatcher 前发生，不能只从 help 隐藏。
+
+- `/new`：在当前明确 scope 创建新 WorkContext／native session，默认个人 scope；不清长期记忆，不改变原项目工作归属。“重建当前会话”另外走 maintenance。
+- `/history /list /use /useall`：列表同时可关联已有 native history，但选择只是查看／后续输入目标。可用的未绑定 native session 经明确 adopt/import 检查后绑定，不能按 cwd 偷借。
+- `/detach /follow /mode`：区分观察、controller 和 native 宿主；原入口功能保留，底层改为有证据交接，不再最后 surface detach 就杀后台执行。
+- `/stop /steerall /compact /goal`：按选定 context/session 调运行用例；能力不足给真实说明。`/stop` 在个人工作撤销尚未派发的用户输入并留审计；私聊选中项目工作时走项目暂停语义，保留所有项目 inbox，不撤销其他成员要求。同事结果始终保留。
+- `/model /reasoning /*profile`：统一 Bot 策略；`/access /plan`：当前 session 控制；不能归为一个全局“设置”对象。
+- `/review /autowhip /autocontinue /bendtomywill`：保留原 backend 支持的局部能力，绑定新 owner；不以 native 最后回复改写或停止词作为 Task 完成证明。AutoContinue 只做已归属执行恢复，不与团队 scheduler 再发第二份工作。
+- workspace、sendfile、admin/upgrade/debug 等复用适用功能；worktree 人工命令保留可选私聊能力，不作为群用户必经步骤。`/primary /coworkers` 不移植到 DM；Cron 不因兼容恢复。
+
+现有注册 44 specs／43 canonical 及别名、隐藏但可派发和不支持的分支详见[Slash 盘点](./feishu-agent-codebase-reuse-assessment.md#51-slash-command-盘点与去向)。没有注册的 `/attach /patch /cancel` 不列兼容承诺。
+
+### 12.3 原生请求与业务决定分开
+
+原生 Request 以 worker/session generation＋attempt/native turn＋native request ID 唯一定位，冻结允许操作者、动作、工具内容与 response contract。没有 surface 时也落库；route policy 选择当前工作话题、适用私聊或接管入口。原生 request 没有相应协议重放能力且重启后失效时标 aborted/unknown，不能批准旧卡去解新 request。
+
+响应时以唯一条件写提交决定，再发给 wrapper；原生收到后才 resolved。用户重复点击返回已登记决定与应用状态；发送失败保留 retry/reconcile，不改成人拒绝。业务“你决定即可”改变 DecisionRequest 责任，不自动回答一个不相关的原生 shell 权限问题。原生既有权限策略按当前 session 配置处理，避免额外造一套每个工具都需人审的产品。
+
+## 13. T12 恢复、迁移、归档与错误矩阵
+
+### 13.1 重启恢复顺序
+
+1. 检查数据库版本和迁移 journal，先加载 scope／身份／controller gates，相关执行准入保持关闭。
+2. 恢复未完成 Operation/Outbox、关键 event receipts、原生 bindings；向在线 wrapper 协商能力、补回关键事件，查询原生状态。
+3. 对 attempt 分流：可证明未发送的 prepared 可发送；dispatch_pending/unknown 先对账；running 可接回则继续观察；已结束缺回执则补 terminal；确实无可恢复 native 时才走 checkpoint rebuild。
+4. 核对外部已发生效果和位置占用后，按当前 task/config/agreement generation 恢复输入。暂停／取消／归档优先，不能被恢复逻辑打开。
+5. 重建投影与消息发送；无待办的项目不启动模型。新到输入正常持久接收，等待适用恢复完成。
+
+| 失败点 | 必须保存／读取的证据 | 恢复动作与用户反馈 |
+| --- | --- | --- |
+| 收到平台消息但持久保存失败 | 原 envelope、平台重试／查询能力 | 不称已接单；接收链失败或缺口补读，不凭内存确认 |
+| commit 成功、受理回复未发 | message/idempotency/outbox | 重试反馈，不第二次建立任务 |
+| attempt 已建但启动前崩溃 | command operation=未发送、claim generation | 核实后继续同操作，避免重新领 input |
+| native 写入前后回执丢失 | journal、native IDs/history、CLI receipt | unknown/reconciling；不盲重放 turn 或 shell |
+| started/terminal 丢失或重复 | incarnation/seq、native result | 重放归并一次；必要状态核查，不按连接时间猜 |
+| inbox 已读但 outcome 未提交 | read receipt、claimed input IDs、checkpoint | 保留未处理状态，恢复输入要求核实已发生效果 |
+| 资料创建／消息发送超时 | operation id、可用幂等键、外部 mapping | 查证后完成或明确 unknown，不乱建副本 |
+| 进程失联／Goal 未停 | continuation lease、process/background evidence | 禁冲突执行，显示停止待核查 |
+| 位置不存在／Git 基线前移 | resource/location generation、Git refs、artifact | Agent 检查并修复，不平台 reset；不足证据报告缺口 |
+| 配置／身份变更途中崩溃 | desired/applied、binding generations、operation | 固定旧 attempt，恢复新配置应用；旧凭据失效 |
+| 队列处理期间取消／委托 | task/agreement revisions、superseded request | 迟到结果留原记录，不恢复旧责任或自动批准 |
+| 卡片／首页被人改或删 | entry binding、projection cursor、actual platform facts | 不夺回人工入口；提示一次可恢复路径 |
+
+### 13.2 数据迁移与权威切换
+
+迁移单元以明确个人 context／旧群绑定为单位；同一 unit 不能两个 runtime 同时写。流程与 checkpoint：
+
+| 阶段 | 内容与门槛 | 失败处理 |
+| --- | --- | --- |
+| captured | 备份旧 store、identity generation、surface queue/resume、native catalog、配置和预览引用，存来源 hash | 不改旧权威；无法认人／认工作则隔离 |
+| quiescing | 停新派发／Cron，接收新输入到 durable 缓冲；停止或交接在途执行，记录 native requests | 未停继续等待／核查，不伪造安全窗口 |
+| imported | 创建 scope/context/session、保留原 thread/位置/来源；显式用户输入和确认要求导入 | 不把全部历史摘要当确认记忆；缺失资料列缺口 |
+| authority_committed | 单事务切 authority generation、新 owner 与库内授权／claim 记录；旧 store executor gate 拒绝写；外部撤销另存回执 | quiescing 已核实在途命令与原生停止／受控交接，否则不得切换 |
+| finalized | 重建单聊／项目投影、验证恢复、旧群卡 redirect、移除旧 writer 路径 | 已有新工作后只能按 journal 前滚修复 |
+
+旧存储不支持 SQL 原子切换，因此 **新 durable authority registry 是切换裁决点**：旧路径在所有派发／写执行事实入口和发送前最终 gate 检查 authority generation；发送 gate 与切换共享受控屏障，并登记已接受／在途命令，避免检查后切换又发送。quiescing 必须核实所有在途命令、native continuation 和停止／交接证据；不能把 SQL 撤销记录当作撤回已发给 wrapper 的命令。迁移窗口先令旧 writer quiescent；切换后旧 JSON 即使仍存在也不能再派发。配置唯一 store继续保留，不能把所有旧 JSON 都粗暴删除。
+
+个人 identity 含 tenant/App 域/ID type，不拿 surface.LastActorUserID 或 gateway 槽位导入个人记忆；现有 AppID 切换 purge 逻辑须改为旧绑定失效与资料隔离保留。无法映射时让管理员／本人明确关联，不越权自动继承。只换模型无需身份迁移。
+
+原有单聊命令入口迁到相同用例，旧群 primary、workspace monopoly 与 coworkers 退出；旧 Cron 停止执行／触发／清理，保留计划和历史只读出口，不自动迁成新定时业务。显式继续使用的旧预览先复制／转存为持久 Resource 并验证，再允许清缓存。
+
+原生会话不兼容时使用 checkpoint fresh rebuild，保留旧历史只读链接。切换前可以回滚旧权威，但保留 durable 缓冲、接收回执和已记录决定；恢复旧执行时经唯一桥接按原 input/decision ID 投递并保存去重证据。旧运行层无法安全消费的输入继续显示等待迁移恢复，不称全部恢复完成。切换后有新输入／操作时禁止拿旧备份覆盖，需要兼容前滚修复或导出迁移，不能承诺降级二进制无损打开新 schema。
+
+### 13.3 生命周期和成员调整
+
+Role 移出项目先关闭新 assignment，旧工作交接／中断，保留成果；负责人更换另转移协调职责、open decisions 和约定。平台 Bot 被移除只改变通信状态，不自动删 Role/Project；无负责人时暂停新的自主委派，已有独立授权工作可完成；所有输出入口失效时关闭项目自动执行，恢复前核查可联系入口。
+
+项目归档保存 gate 后停止执行、核查未完成外部操作，真实结束才 archived。归档保留资料，停止系统写投影外的业务维护；重新打开恢复同 ProjectID，但未完任务只在用户明确范围内继续。群解绑无替代入口则暂停，群改作新项目必须增加 binding generation，旧回执不能改新项目。
+
+## 14. 实施拆解、依赖和验收追踪
+
+以下工作包可以按边界分配团队，全部属于交付目标。基础协议／数据模型先稳定，再并行做独立 adapter 与体验，最后在真实双后端、飞书和故障注入中闭环；不是实现 A 就宣称产品完成。
+
+| 包 | 可交付代码／契约 | 前置依赖 | 产品故事 | 验证重点 |
+| --- | --- | --- | --- | --- |
+| T01 分层 | 领域 API、application UoW、投影边界、兼容协议入口 | 无 | 全部 | 无双业务状态机、无慢操作持 App.mu |
+| T02 数据归属 | schema/indexes、identity/scope/context/session、revision 和 store | T01 | 01—05、20、26—28 | FK/唯一约束、scope 隔离、identity 重绑 |
+| T03 入站与调用 | durable receive、路由、bootstrap saga、CLI/context credential | T02 | 03—06、09、20、21、29 | 多 Bot 去重、迟到 run、首任务一次 |
+| T04 工作与交接 | task/inbox/dependency/decision transactions、暂停和修订 | T02 | 06—11、14、23、26、29 | 容量 1 交接、环、委托、旧 revision |
+| T05 调度与回执 | scheduler、controller、occupancy、journal/ACK/replay | T02、T04，联合 T06 | 07、22—27 | 真并行、停止待核查、Goal 双启动防护 |
+| T06 Native runtime | 两后端 launch/input/maintenance/recovery、上下文组装 | T02、T05 合同 | 08、19—25、30 | fresh/resume/steer/rebuild 真实差异；默认 profile |
+| T07 成果交付 | artifact/review/integration refs、delivery/retention | T04、T10 接口 | 13—15、18 | 文件缺交付、旧版本评审、通知失败 |
+| T08 执行资源 | location登记、Agent Git handoff、跨项目 ref 协调 | T02、T05、T06 | 04、07、15、22、26 | 同仓并行、位置改变、用户脏目录 |
+| T09 约定与知识 | participation迁移、方法包、scope memory、设置用例 | T02、T04、T06 输入合同 | 01、02、08、10—12、19、22 | 责任真转交、按需方法、记忆失效、配置生效 |
+| T10 资料与入口 | connectors、version semantics、operations、Tab/Pin/home | T02、T03 | 02—05、13—18、27、30 | 原位更新、人工冲突、可访问性、永久保留 |
+| T11 飞书／私聊 | 持久投影、cards/request、DM command compatibility | T03—T07 合同 | 05—11、13、20—25、29、30 | 旧卡、native批准、slash、单一内容 owner |
+| T12 迁移恢复 | journal/cutover、数据导入、Cron退役、异常对账 | T02—T11 | 24、26—30及全部回归 | 单权威、崩溃窗口、现有单聊不丢能力 |
+
+### 14.1 代码与 UAT 的证据分层
+
+1. 领域测试：状态迁移、权限来源与 revision、依赖环、参与规则转交、scope/identity、Task 与 attempt 分离。
+2. Store 测试：事务失败、唯一竞争、迁移 crash checkpoint、inbox/outbox 重放、旧 writer fencing；需要真实 SQLite，不只 mock repository。
+3. 协议测试：按捕获的真实 Codex／Claude 帧验证 start/resume/steer/stop/compact、未知目标、默认 profile、事件重放与 ACK 强度；模拟乱序／重复／断连。
+4. 原生端到端：安装版本的 fresh/resume/rebuild、常驻说明变化、位置变化、native memory 隔离、Goal 与调度协调。记录 binary/protocol/profile 版本、输入和实际帧；参数发出不当生效证据。
+5. 飞书闭环：普通群／不支持 Tab 的入口、两项目同 Bot、角色互聊、文字图片反馈、实际 Docx/Sheet/Bitable 更新、卡片过期、成员邀请和权限可访问性。
+6. 完整 UAT：产品文档 60 场景逐项留结果；高风险窗口故障注入和迁移回归必须运行，不能用当前旧功能定向测试替代。
+
+共同失败注入点：事务提交前后、native send 前后、关键事件 ACK 前后、文档保存和消息发送前后、controller 切换、authority cutover、版本变更和迟到回调。所有结果检查业务记录、实际外部效果和用户反馈三者一致。
+
+### 14.2 完整交付的拒收条件
+
+出现以下任一情况不能收口：靠人再次发消息才能恢复团队；同 cwd 借另一项目 native session；Claude ACK 当已消费；指令 desired 直接当 applied；私聊命令仍写旧 surface owner；所有并行工作实际串行；旧 Cron 仍在跑；旧 preview cleanup 可删正式资料；委托只关通知不转责任；用 turn completed 宣称业务完成；丢失 critical event 后盲重跑；有双权威 store 或旧 writer 未 fencing。
+
+本轮只有设计文件变更。现有定向测试用于证明接线基础；本轮 runtime 附录作者重跑了 Codex／Claude／wrapper 的 profile、steer、bootstrap、fork、restart/resume 与 IO fencing 定向测试，均通过，未执行真实 provider／飞书新团队闭环。实施阶段上述证据不足时应补实现和验证，不削减目标。
+
+## 15. 需要重点审阅的架构取舍
+
+本设计已经给出可以实施的默认路线，无需因实现细节等待用户逐项拍板。最值得评审的三个改变是：
+
+1. **Surface 彻底退出执行所有权**，个人也走 WorkContext/WorkerSession。影响 queue、claim、request、headless、resume 和工具身份；只改“群聊天 session”字段不足以完成。
+2. **原生协议保持不同，产品连续性统一**。Claude 固定 cwd、launch env、合成 turn 与不确定输入回执需要明确新合同；Codex 同 thread fast path 和 native Goal 要纳入维护／调度，不把二者包成伪统一 session。
+3. **交付与持久状态成为显式业务能力**。原生 final、飞书消息、资料版本、用户验收各自保留事实；已有自动上传与逐次监督留在适用私聊场景，不能继续承担新团队闭环。
+
+这些不是额外增加项目流程，而是实现用户指定体验的必要基础。没有要求平台接管 Agent 的 Git／worktree 操作，也没有强制每项目使用相同 issue、评审、合入或验收规则。
+
+## 16. 专项依据与阅读索引
+
+- [产品故事与 UAT](./feishu-agent-team-product-design.md)：唯一目标体验入口。
+- [Codex／Claude 原生运行合同](./feishu-agent-team-runtime-contracts.md)：启动、恢复、输入证据、注入和具体改文件清单。
+- [执行原则与 Raft 对照](./feishu-agent-team-execution-design.md)：工作区、并行、记忆与早期推导证据；主合同在本文。
+- [资料 API 专项](./feishu-agent-team-materials-design.md)：Feishu API、版本与并发限制、来源边界。
+- [Raft 成果与人工交付调查](./feishu-agent-team-human-delivery-design.md)：CLI 发布、Artifact、反馈与 recipes 的事实边界。
+- [原代码复用与 Slash 全盘点](./feishu-agent-codebase-reuse-assessment.md)：同仓演进依据及旧入口去向。
+- [现有架构](../general/architecture.md)、[配置冻结](../general/config-state-storage-guidelines.md)、[远程状态机](../general/remote-surface-state-machine.md)、[卡片状态机](../general/feishu-card-ui-state-machine.md)：实现变动时同步 canonical 规范。
+- [Raft Agents](https://docs.raft.build/features/agents/)、[wake 与 durable inbox](https://docs.raft.build/developers/sdk/external-agents/wake-and-status/)、[固定快照 systemPrompt](https://github.com/botiverse/raft-source/blob/5214e34e726ed715f455e78c96fa521791ef2de3/packages/daemon/src/drivers/systemPrompt.ts)：参考机制，不作为本仓已有能力证明。
