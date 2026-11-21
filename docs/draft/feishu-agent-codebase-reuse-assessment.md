@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 依据现有代码建议同仓库重构统一运行层；单聊获得记忆，旧群体验替换，并区分人、Agent 与运行层的操作职责。
+> Summary: 弃用 Cron，改为 Agent 原生 Git 自主管理，区分会话 Goal，并补齐长期共享资料的复用边界。
 
 ## 1. 决策与范围
 
@@ -13,8 +13,9 @@
 1. 最高优先级是 Raft 式群工作体验：固定同事、负责人协调、同事直接协作、并行执行、评审、交付与持续记忆。
 2. 单聊迁入同一底层并获得记忆；保留对话、工作的便利与连续性，不要求旧菜单逐项原样保留。
 3. 原群聊体验可以整体丢弃，不维持旧 primary/workspace/coworkers 操作流程。
-4. Worktree 等执行细节由 Agent 与运行层操作，用户无需理解或管理。
+4. Worktree 由 Agent 通过原生 Git 自主管理，平台不另造目录生命周期或合并引擎，用户无需理解或管理。
 5. 模型、已有工作目录等精确选择保留控件；用户明确给出的选择直接采用，Agent 不自行猜选已有资源。
+6. 旧 Cron 产品与实现弃用；会话 Goal 不充当项目目标；团队／项目共享资料拥有稳定入口及版本。
 
 本文是代码审计与目标设计，不是生产变更。依据为当前源码、既有测试和本次定向验证，不以文件数量估算“复用百分比”。完整团队行为见 [产品草案](./feishu-agent-team-product-design.md)、[技术方案](./feishu-agent-team-technical-design.md) 和 [执行设计](./feishu-agent-team-execution-design.md)。
 
@@ -44,9 +45,7 @@
 | 多 Bot 与飞书投递 | [controller gateway](../../internal/adapter/feishu/controller_gateway.go)、[SDK 调用](../../internal/adapter/feishu/gateway_im_calls.go) | 保留连接、按 Bot 发消息、回复、附件、卡片更新；输入与输出目标由 scope/task/attempt 明确提供 |
 | 身份与卡片校验 | [入口身份](../../internal/adapter/feishu/gateway/routing.go:709)、[回调校验](../../internal/adapter/feishu/gateway_runtime_support.go:95)、[request 校验](../../internal/core/orchestrator/service_request.go:75) | 保留操作者、gateway、chat、revision 的校验；冻结 owner 从 surface 上移到 session/run，surface 只负责交互 |
 | 展示组件 | [projector](../../internal/adapter/feishu/projector.go)、[renderer](../../internal/core/renderer/planner.go) | 复用文本、卡片、文件／差异展示；新群业务投影重写，不保留人工管理底层运行的菜单逻辑 |
-| 本地 Git worktree | [CreateWorktree](../../internal/app/gitworkspace/worktree.go:36)、[preview](../../internal/core/gitmeta) | 已有创建和错误分类；当前固定从 HEAD 建分支，需明确任务基线、operation、租约和可恢复生命周期 |
-| 后台 Git 隔离 | [cronrepo.Materialize](../../internal/app/cronrepo/manager.go:40) | 已有镜像、来源锁、ref→SHA、detached worktree；可抽取这些构件，不能继承强制删除运行目录／按 TTL 清理未交付成果的策略 |
-| 时钟与后台运行 | [Cron scheduler](../../internal/app/daemon/app_cron_scheduler.go)、[Cron launch](../../internal/app/daemon/app_cron_launch.go) | 复用触发与宿主能力；当前满额可 skipped，不能用作不能丢的协作收件箱；到期事件改写持久输入 |
+| 本地 Git worktree | [CreateWorktree](../../internal/app/gitworkspace/worktree.go:36)、[preview](../../internal/core/gitmeta) | 已有 Git 调用与诊断可按需保留；不要求扩建管理器。Agent 使用原生 shell/Git，人工 picker 不继承 |
 | 进程与安装升级 | [runtime](../../internal/runtime)、[local upgrade](../../internal/app/install/local_upgrade.go:37) | 保留平台、安装、版本和恢复基础；调度升级/回收前必须考虑统一运行层的活动执行及持久待办 |
 | 配置存储与组合根 | [statestore](../../internal/app/daemon/statestore/statestore.go)、[App wiring](../../internal/app/daemon/app.go:195) | 保留配置 atomic save 和 daemon wiring；任务/记忆/待办需要事务库，不能把单文件保存当跨对象事务 |
 
@@ -55,6 +54,19 @@
 Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude 当前命令 switch 不具备同样的 compact handler；OpenCode 默认能力不提供 TurnSteer。完整运行层必须补齐适配，或在不支持即时操作的边界持久排队／受控重建，不能把声明字段存在视为功能已完成。
 
 现有 Bot record 还保存 `ProductMode`（headless/vscode）。新内核须把“使用哪个 backend/model”的角色策略与“这项工作由后台还是本地界面控制”分开：前者继续 Bot 级统一，后者属于 WorkerSession/controller。私聊接管本地编辑器不能把同 Bot 的所有项目群一起切换执行方式；旧 `/mode` 的混合含义要拆解，而不是照搬全局字段。
+
+
+### 3.1 资料接入的新增审计
+
+当前 [上传预览](../../internal/adapter/feishu/preview/markdown_preview.go) 默认 24 小时清理；[缓存 key](../../internal/adapter/feishu/preview/markdown_preview_helpers.go) 含 scope、路径与 content hash，内容改变通常新建远端文件；[后台清理](../../internal/adapter/feishu/preview/markdown_preview_managed.go) 会实际删除远端对象。这解释了“每次都产生新文件”的现状，不能当作长期资料管理的底座。
+
+- 可复用 [Drive adapter](../../internal/adapter/feishu/markdown_preview_lark_api.go) 的上传／元数据／共享传输，必须新设永久资料目录、记录及清理边界，不沿用预览的默认 full_access 授权。
+- [BitableAPI](../../internal/adapter/feishu/bitable_api.go) 已有表、字段、记录增改和分页；仅保留通用 API adapter，不复用 Cron 表 schema、绑定业务、时钟或任务模型。
+- [附件落地](../../internal/app/daemon/app_inbound_file.go) 与 StagedFileRecord 只有消息／surface／本地路径，需接入长期 Resource 与版本；IM file_key 不是云文档身份。
+- [评论工具](../../internal/app/daemon/tool_service_drive_comments.go) 只有评论，当前拒绝 Wiki 链接；Docx 正文与 blocks、Wiki 节点解析、Sheets 内容读写需新增接入，不能用已有 SDK 类型冒充功能完成。
+- [issueworkflow](../../internal/issueworkflow/github.go) 是本仓研发流程工具，不是产品通用 GitHub connector。新产品需将 repo/issue/PR 身份和回执接到工作与资料领域。
+
+新增 ResourceService 管理资源引用、共享集合、版本、发布更新与索引，不重造飞书编辑器。接口证据、身份限制、冲突与版本合同见 [共享资料设计](./feishu-agent-team-materials-design.md)。
 
 ## 4. 必须重构的四个耦合点
 
@@ -70,7 +82,7 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 
 [入队](../../internal/core/orchestrator/service_queue.go:81) 会先检查 room 限制；旧 QueueItem 完成包含用户中断。新运行层先持久保存输入／任务，再准入执行；attempt 的 completed/interrupted/failed 与 Task 的交付状态分开。
 
-[routing claims](../../internal/core/orchestrator/service_routing_claims.go) 以 room/surface 持有 workspace，以 surface 持有 instance/thread；selected thread 不匹配可能清理 claim。新 claim 统一以实际执行 session、原生资源和目录租约为依据，单聊与团队共用仲裁，不能各建一套锁后互相抢资源。
+[routing claims](../../internal/core/orchestrator/service_routing_claims.go) 以 room/surface 持有 workspace，以 surface 持有 instance/thread；selected thread 不匹配可能清理 claim。新 claim 以实际执行 session、原生资源和已登记执行位置占用为依据，单聊与团队共用仲裁，不能各建一套锁后互相抢资源。
 
 当前 [turn runtime](../../internal/core/orchestrator/service_runtime_clusters.go:323) 按 instanceID 保存单个 pending/active turn。完整并行可由多个执行 instance 承载；不能仅增加几条 WorkerSession 就在当前单值结构里同时运行多个 turn。若改为同 carrier 多 turn，必须整体改变关联合同，不能默默放宽 busy 检查。
 
@@ -96,16 +108,17 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 | --- | --- | --- | --- |
 | 选择模型／provider | 下拉或明确指令选择，知道影响哪个 Bot | 读取配置、在安全边界应用，解释待生效状态 | 保留 catalog、选择组件和配置；抽统一用例 |
 | 选择已有目录／仓库 | 明确指定或用目录选择器选真实资源 | 校验与登记，不猜选其他目录；之后管理内部工作副本 | 保留路径浏览／校验；分离资源选择与执行目录 |
-| 新建 worktree／分支／派生目录 | 表达要做的任务，不填写内部路径 | Agent 申请隔离工作环境，运行层创建、绑定、恢复、清理 | 复用 Git；替换 target-picker/确认卡/内存取消态为持久操作 |
+| 新建 worktree／分支／派生目录 | 表达任务，不填写内部路径 | Agent 原生 Git 自主管理并登记恢复位置，平台记录绑定与成果 | 人工 picker 退出主流程，不另建目录生命周期／自动合并引擎 |
 | `/list`、`/use`、`/attach`、`/follow` | 打开某项工作、切换项目、接管执行 | 自动绑定正确 session 和后台进程 | 保留工作导航与接管能力，原生 instance/thread 列表转诊断 |
 | `/new` | 表达新事项或重新开始，必要时选择是否沿用资料 | 判断 context/session 的复用或新建 | 保留原生创建能力；不能把新模型 thread 当新项目或删记忆 |
 | `/compact`、会话重建 | 不必管理上下文窗口 | 运行层整理检查点、compact／恢复／重建并继续投递 | 保留已有命令能力，替换“先选线程再清空队列点卡”的主流程 |
 | `/review` 与 commit 选择 | 提出检查重点，阅读结论、验收 | 依据成果版本自动安排角色审查，返工与复查 | 复用差异／审阅构件；替换每次人挑 commit 的例行流程 |
 | `/autocontinue` | 控制是否暂停／取消工作 | 按明确剩余工作和错误原因恢复，有退避和边界 | 复用可用恢复策略，状态归 attempt，不要求人逐群打开开关 |
 | `/autowhip` | 不需要反复催或配置停止口令 | 用任务、依赖、成果和阻塞决定继续／结束 | 旧提示循环不作为新内核，停止口令完成判定退役 |
-| `/cron`、提醒 | 表达时间、内容、范围，查看／修改／暂停计划；精确时间可选控件 | Agent 整理计划，运行层持久触发到任务／inbox | 复用时钟和记录，替换满额丢周期作为协作语义 |
-| `/sendfile`、成果发布 | 指定需要什么或打开成果 | Agent 主动提交正确版本，系统按目标投递 | 复用附件／预览能力，减少找文件再手动发送的主流程 |
-| `/primary`、`/coworkers`、旧群 workspace | 选择负责人／团队及明确资源预算 | 项目成员、任务调度和工作区租约管理 | 旧群命令与交互可移除，不保持兼容流程 |
+| `/cron` | 新主流程没有此入口 | 不导入旧计划为自动运行，不沿用 scheduler、run、cronrepo 业务模型 | 旧产品与实现退役；确需定时业务时另行完整设计，不是本次交付前提 |
+| `/goal` | 可查看、调整当前工作的持续执行约束与预算 | 支持的 backend 使用会话 Goal，暂停与任务修订联动 | 当前仅 Codex headless；移到执行详情，不升格为项目目标管理 |
+| `/sendfile`、成果发布 | 打开资料、指定更新或下载版本 | Agent 更新同一资料或登记成果，群内发送稳定链接 | IM 传输保留；临时预览与长期资料存储及清理彻底分开 |
+| `/primary`、`/coworkers`、旧群 workspace | 选择负责人／团队及明确资源预算 | 项目成员、任务调度和执行位置绑定 | 旧群命令与交互可移除，不保持兼容流程 |
 | 停止、暂停、取消、验收 | 随时直接控制工作与最终取舍 | 对正确任务执行控制、展示实际状态 | 保留简短可靠入口，不藏到 Agent 内部 |
 | 管理、凭据、执行授权、升级 | 管理连接和政策，处理确实需人的授权 | 系统执行确定的配置／升级事务，遵守既有规则 | 保留管理能力；不让 Agent 代替人自我批准权限 |
 
@@ -126,6 +139,8 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 ## 7. 旧群退役与现有行为影响
 
 可替换的群专用行为包括：[primary 命令](../../internal/core/orchestrator/service_feishu_primary_command.go)、[入群 primary bootstrap](../../internal/app/daemon/app_feishu_primary_bootstrap.go)、[单 workspace 与 reservation](../../internal/core/orchestrator/service_feishu_room_context.go)、[room 持久投影](../../internal/app/daemon/app_feishu_room_state.go)。群身份索引、多 Bot 连接、发送和回调能力继续保留。
+
+旧 Cron 在迁移切换时停止触发并核对在途执行，保存旧计划／历史供只读查阅或导出，不自动转成新任务，也不继续运行旧清理器删除资料。删除 Cron 业务代码时通用 Bitable adapter 按职责留下，不继续保留 Cron schema。
 
 不兼容旧群 UX 不等于清除用户文件、Bot 凭据或历史。迁移仍需核对活动执行、旧目录和资料来源；不自动把历史对话全量变成可信长期记忆，也不凭空补出旧任务的验收状态。
 
@@ -159,7 +174,9 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 - 人选模型／已有目录准确生效；Agent 创建内部工作区无需人操作，也不改变人所选项目资源。
 - 私聊与项目使用同一恢复和记忆机制；新会话保留应有记忆，重新开始任务不意外抹去角色。
 - 事件只由一个 session/attempt owner 处理；查看／退出界面不终止后台工作，明确停止不会被自动继续绕过。
-- 多独立工作区并行、固定成果评审、跨项目同目标分支集成和冲突恢复。
+- Agent 自行创建／恢复独立工作位置、固定成果评审、跨项目集成与冲突处理；平台不私自重置或清理目录。
+- 同一资料原位更新、团队引用不复制、旧预览清理不碰永久资料；issue/PR 与文档的权威范围不冲突。
+- 会话 Goal 停止／恢复不绕过工作控制，原生完成不等于项目验收；旧 Cron 迁移后不再触发。
 - 消息／审批／compact／重启边界不丢输入、不错误确认；缺失原生能力的适配分支真实可运行。
 - App 重绑、旧卡、旧 run、迁移中崩溃不会混用身份或出现双写。
 

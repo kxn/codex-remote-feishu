@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 基于代码审计确定同仓库统一运行层，单聊与项目共用记忆和恢复，替换旧群 UX 并重分人和 Agent 的操作职责。
+> Summary: 落实 Agent 自主管理 Git、会话 Goal 边界、Cron 退役及长期共享资料的 API 接线与权威分工。
 
 ## 1. 结论与范围
 
@@ -19,7 +19,7 @@
 7. 角色指令和项目记忆复用后端注入通道，但须新增组合、版本、生效及恢复合同。
 8. 多角色、多工作流并行、独立执行目录、成果评审及集成属于目标本身；容量为 1 只是资源不足时的退化情况，不能替代完整交付。
 9. 单聊也进入相同运行层，使用个人 scope 和记忆；旧群使用体验可全部替换，旧 surface owner 仅在迁移期存在。
-10. 人保留模型与已有工作目录等精确选择，内部工作区、原生会话、compact 与例行协作由 Agent／运行层管理，不复刻旧手动菜单。
+10. 人保留模型与已有工作目录等精确选择，Git 工作区由 Agent 原生管理，原生会话与 compact 由运行层维护，例行协作由角色组织，不复刻旧手动菜单。
 
 完整对象、并行与迁移合同见 [执行与工作区设计](./feishu-agent-team-execution-design.md)。实施顺序只表达工程依赖，不将后续依赖项移出目标。原文中“第一版共享目录串行”“工作区和每任务会话留待扩展”的取舍已撤回。
 
@@ -96,7 +96,7 @@ flowchart TD
 
 业务命令返回结构化结果，例如 accepted、completed、conflict、waiting、failed，并包含 operation/task/revision。UI 根据结果生成展示；工具把同一结果返回模型。agent 调用不需要先生成一张供自己点击的卡片。
 
-统一运行层包含上下文组装、worker 生命周期、inbox 投递、调度、工作区与成果管理，底层 adapter 继续负责原生协议。最终单聊与项目都由 WorkerSession 拥有执行，WorkScope 区分 personal/project；legacy surface owner 只作迁移桥。queue、claim、approval、pending launch 和 turn 归属须贯穿该合同，不能伪造更多 surface 来容纳并行任务。
+统一运行层包含上下文组装、worker 生命周期、inbox 投递、调度、执行位置引用与成果记录，底层 adapter 继续负责原生协议。最终单聊与项目都由 WorkerSession 拥有执行，WorkScope 区分 personal/project；legacy surface owner 只作迁移桥。queue、claim、approval、pending launch 和 turn 归属须贯穿该合同，不能伪造更多 surface 来容纳并行任务。
 
 ## 4. 稳定对象及事实所有权
 
@@ -109,11 +109,12 @@ flowchart TD
 | `ProjectChannelBinding` / `ProjectResource` | 群及资源关联、repository 身份、目标分支、绑定代次 | 新协作存储 |
 | `ProjectMember` | role、加入意图、平台成员证据、ready 状态 | 新协作存储 |
 | `Conversation` | project、群、话题／根消息、参与者 | 新协作存储 |
-| `Task` | owner、目标、验收、依赖、状态、revision、成果引用 | 新协作存储 |
+| `Task` | owner、业务来源、采纳的范围／验收版本、执行依赖与成果 | 内部工作库存执行事实；issue-backed 工作的范围／验收／业务状态以 issue 为权威，其余 Task 内部为权威 |
 | `Message` / `InboxItem` | 来源、正文或引用、接收角色、处理状态 | 新协作存储 |
 | `Outbox` / `Operation` | 外部副作用意图、幂等键、状态、回执 | 新协作存储 |
 | `ExecutionAttempt` | run、role/scope/context/session、可选 project/task、thread/turn 证据与冻结版本 | 统一工作存储；运行投影交给现有执行 cluster |
-| `WorkerSession` / `ExecutionWorkspace` | 工作流上下文、原生会话、独立 checkout、基线与写入租约 | 新协作存储；宿主与 Git 状态为外部执行证据 |
+| `WorkerSession` / `ExecutionLocation` | 工作上下文、原生会话、host/cwd、位置绑定代次与占用 | 工作库保存绑定；Agent 操作 Git，Git 保存自身事实 |
+| `Team` / `ResourceCollection` / `Resource` / `ResourceVersion` | 团队与项目共享资料的身份、引用、权威来源、版本和来源锚点 | 资料注册表保存关联与回执；正文在指定权威载体，见资料设计 |
 | `ArtifactVersion` / `Review` / `Integration` | 不可变成果、对应评审与集成状态 | 新协作存储；不可变文件／Git 引用作为成果载体 |
 | `MemoryEntry` | scope、key、内容、来源、版本、撤销状态 | 新协作存储 |
 | Bot 模型配置 | profile/model/reasoning 等 | 保持现有 Bot capability store 为唯一写源 |
@@ -123,7 +124,7 @@ flowchart TD
 
 旧 Bot record 中的 ProductMode（headless/vscode）不能继续决定全部项目的执行控制。backend/model/profile 仍是统一 Bot 策略，实际宿主与控制权归 WorkerSession；私聊接管编辑器不影响其他项目 worker。普通单聊不必创建 Task，但其输入、attempt 和记忆具有与项目相同的持久归属。
 
-`ProjectID` 不由群或目录字符串生成。Project 关联资源与沟通入口，实际执行目录归 ExecutionWorkspace。多个项目可关联同一仓库，不共用可变会话和可写 checkout。不同角色及工作流可以并行，同一个原生 session 和同一可写 checkout 分别保持单 owner。
+`ProjectID` 不由群或目录字符串生成。Project 关联资源与沟通入口，实际执行位置登记为 ExecutionLocation。多个项目可关联同一仓库，不共用可变会话和可写 checkout。不同角色及工作流可以并行，同一个原生 session 和同一可写 checkout 分别保持单 owner。
 
 项目建立、旧群与个人上下文迁移均采用持久 operation。切换事务记录 authority generation，之后统一工作库拥有相关工作事实；旧 JSON 是迁移来源／只读投影，不能继续独立写入。旧群命令和菜单无需兼容，新群直接使用项目业务入口；单聊保留有用的精确选择与工作控制并接入新用例。切换前可退回旧状态，切换后已有新工作时按 journal 前滚修复，不能用旧快照覆盖新任务。
 
@@ -189,10 +190,13 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 | `task_create` / `task_assign` | 目标、验收、owner、依赖 | 原子登记工作和交接；忙碌也接受待办 |
 | `task_update` | task、expected revision、状态／成果 | 校验迁移，通知受影响角色 |
 | `artifact_submit` / `review_request` / `review_submit` | 不可变成果、任务 revision、检查结论 | 保存实现、评审与返工的版本关联 |
-| `integration_request` / `integration_status` | 目标分支、成果及评审引用 | 受控集成、基线前移处理、冲突和验证回执 |
+| `integration_request` / `integration_status` | 目标分支、成果及评审引用 | 向集成角色交接工作并读取证据，不由 daemon 包办 merge |
+| `resource_register/read/update` / `resource_version` | 资料链接或 ID、范围、基线版本、变更 | 更新既有资料、冲突核对、冻结交付；按需发现，详见共享资料设计 |
 | `memory_read` / `memory_update` | scope、key、版本、来源 | 按命名空间读取或更新长期资料 |
 | `role_update` | 职责／通用方法的明确变更 | 调用统一角色配置用例，记录影响范围 |
 | `bot_settings_update` | 已支持设置的明确变更 | 共用设置用例，记录 requested/effective，不即时自毁当前执行 |
+
+issue-backed Task 的业务变更先登记 outbox／operation，外部更新并回读后再确认业务状态；内库原子事务只保证执行状态与发送意图，不与 GitHub 假造跨系统事务。外部关闭／重开按资料设计归并，不能以本地旧字段覆盖外部事实。
 
 消息、任务和配置变更必须保留来源 actor、作用范围与 idempotency key。工具重试返回既有 operation 结果；版本冲突返回当前 revision，由 agent 重新读取后决定，不静默覆盖他人更新。
 
@@ -204,7 +208,7 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 
 当前 `requireToolAuth` 使用 loopback + daemon 共用 bearer，URL 携带 instance ID；随后从 active/pending remote turns 查 surface。该实现用于“给本轮用户发送附件”，并要求 normal mode。
 
-团队执行可能由同事回信、任务指派或提醒触发，没有新的人类消息。不能伪造用户 turn、任意传 `surface_session_id`，或者从多个 active turn 中取第一个来决定项目。
+团队执行可能由同事回信、任务指派或资料变更触发，没有新的人类消息。不能伪造用户 turn、任意传 `surface_session_id`，或者从多个 active turn 中取第一个来决定项目。
 
 推荐引入两级绑定，兼容 CLI 环境与 MCP 配置通常在进程／session 启动时注入的事实：
 
@@ -213,9 +217,11 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 
 这避免依赖“每一轮热改 MCP Authorization header”才能工作。旧轮迟到请求携带旧 run reference 时应被拒绝，不应被重新解释成当前轮操作。
 
-同一角色在项目中可有多个明确工作流与 WorkerSession，每个 session 一次承载一个 run，不同 session 可并行。绑定加入 workstream、workspace generation 与 controller lease；工具入口捕获固定 execution context，异步操作保存该 context。结束、暂停、重绑或 generation 变化后按状态拒绝后续旧调用。
+同一角色在项目中可有多个明确工作流与 WorkerSession，每个 session 一次承载一个 run，不同 session 可并行。绑定加入 workstream、execution-location generation 与 controller lease；工具入口捕获固定 execution context，异步操作保存该 context。结束、暂停、重绑或 generation 变化后按状态拒绝后续旧调用。
 
 拒绝新的旧 run 调用，不代表取消已经受理的异步 operation。邀请、消息投递等操作保存受理时的身份与作用域快照，独立推进自己的状态；只有项目取消、绑定失效或显式取消等规则使其停止，不能因为发起者 turn 结束就遗失副作用回执。
+
+资料读写复用执行绑定并解析其关联 Team／ResourceCollection；Team 共享操作校验成员、资源关联和操作范围，不因角色参加多个项目便放开其他项目。外部资料 connector identity 固定绑定，真实 actor 另记审计，见 [资料身份合同](./feishu-agent-team-materials-design.md#53-多-bot-的访问身份)。
 
 `project_create` 使用受限的项目建立上下文：绑定 role、Bot generation、chat、真实发起人及 provisioning operation，尚不假设已有 ProjectID。该上下文只允许查询可用角色、选择项目资源和建立当前群项目，不能访问任意既有项目记忆。建立完成后生成正式 worker 绑定；不能把原始 bootstrap 凭据通过修改模型参数升级为跨项目权限。
 
@@ -272,11 +278,12 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 | --- | --- | --- |
 | role | 核心职责、通用方法、明确适用于所有项目的规则 | 职责配置与经验分别管理，记录跨项目影响 |
 | personal / role_personal | 个人偏好、私聊资料及该角色的个人工作恢复线索 | 按稳定用户和 scope 隔离，不自动写入 role/project |
-| project | 需求、约定、决定和资料索引 | 项目内共享；决定有来源和版本 |
+| team | 团队经验与通用资料摘要／索引 | 引用团队原件与版本，不与通用规范形成双写源 |
+| project | 需求、约定、决定的摘要与资料索引 | 原件由资料／工作项权威源维护；摘要有来源和版本 |
 | role_project | 角色在本项目的经验、恢复索引 | 该角色维护，避免覆盖其他角色笔记 |
 | task | 当前任务的检查点、证据与下一步 | 关联任务 revision，不替代 Task 状态 |
 
-权威内容建议由 memory service 写入协作库；可生成 `MEMORY.md` 风格的只读索引供 runtime 阅读，但导出文件不是第二份可独立修改的真相。个人临时笔记可以保留文件形式，只有通过服务提交的内容才进入团队恢复与共享合同。
+记忆条目由 memory service 写入协作库；资料正文、业务要求及合并事实分别以资料载体、issue／Task 和 Git／PR 为权威，不由 memory service 再写一份。可生成 `MEMORY.md` 风格的只读索引供 runtime 阅读，但导出文件不是第二份可独立修改的真相。个人临时笔记可以保留文件形式，只有通过服务提交的内容才进入团队恢复与共享合同。
 
 memory_update 使用 expected revision，记录作者、来源任务/消息、作用范围和撤销历史。冲突时先重新读取，不让模型盲目整文件覆盖。删除或纠正后，使后续注入与查询使用新版本；对正在执行的上下文需要显式通知或重建，不能保证删除存储就使模型立即忘记。
 
@@ -376,11 +383,11 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 
 ### 11.3 新唤醒来源
 
-新增 team_assignment、team_reply、task_changed、reminder 等有明确身份的工作来源。复用 headless prepare/resume、执行 queue、turn events；新增独立协作 dispatcher，不复用用户消息入口的隐式身份。
+新增 team_assignment、team_reply、task_changed、resource_changed 等有明确身份的工作来源。复用 headless prepare/resume、执行 queue、turn events；新增独立协作 dispatcher，不复用用户消息入口的隐式身份。
 
 [群恢复策略](../../internal/app/daemon/app_surface_resume_policy.go) 当前不普遍后台恢复群；[按需恢复](../../internal/app/daemon/app_group_on_demand_resume.go) 由用户文本触发，continuation 是内存态。这些入口可借用底层启动能力，不能作为持久 inbox。
 
-[AutoContinue](../../internal/core/orchestrator/service_autocontinue.go) 是运行中断恢复，不是团队待办调度。[Cron](../../internal/app/daemon/app_cron_scheduler.go) 有时钟和启动基础，但满并发的周期可能 skipped，也不等于可恢复的角色提醒。角色提醒应创建 durable inbox item，到期后等待执行资格，不因忙碌直接丢弃。
+[AutoContinue](../../internal/core/orchestrator/service_autocontinue.go) 是运行中断恢复，不是团队待办调度。旧 Cron 的产品、scheduler、运行模型与 cronrepo 全部退出本方案，不作为新运行层的复用或迁移基础。团队依赖完成和消息到达靠事件唤醒，不依赖定时任务；重试退避属于运行可靠性，也不等于 Cron 产品。若另有用户定时业务需求，重新设计时间语义、漏执行与变更规则后再接持久 inbox，不把新日历／定时系统强行加入本次交付。
 
 ### 11.4 持久化与原子性
 
@@ -398,15 +405,21 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 
 ## 12. 独立执行工作区与并行集成
 
-当前 room 共享目录与 claim 不足以支持目标。必须将 Repository／项目资源与 ExecutionWorkspace 分开，为独立写工作流创建 checkout/worktree；每个工作区保持单一写 owner，多个工作区并行开发。同一仓库来源可以服务多个项目，不能继续按群独占仓库。
+当前 room 共享目录与 claim 不足以支持目标。项目资源与执行位置分离，Agent 通过已有 shell/Git 自主准备、复用、恢复和清理工作目录；平台不建立 worktree provisioning、TTL 回收、自动合并引擎。负责人协调并行与共享资源，平台记录 host/cwd、绑定代次、占用、恢复检查点及成果版本。
 
-评审使用不可变成果与独立环境。目标分支由明确 integration owner 管理，集成按目标 head 核对与更新；冲突回到修复工作流，基线前移重新构造并检查集成结果。只有冲突资源／目标分支更新需要互斥，不能串行化全部实现任务。
+评审基于固定 commit／资料快照，集成是指定角色承担的工作，通过 Git／PR 的真实结果交付。系统保存 repository＋target ref 的共享协调记录，Agent 在实际操作时核对 HEAD、解决冲突、验证和合入。占用记录不是操作系统沙箱，也不能代替 Git 竞争检查。
 
-工作区创建、复用、保留与清理是持久 operation，完整合同见 [执行与工作区设计](./feishu-agent-team-execution-design.md#4-并行开发与成果集成)。取消或崩溃不能直接删除未提交文件，清理等待执行进程、恢复、成果评审和集成引用解除。
+目录缺失或操作回执不确定时由恢复角色检查证据，不由平台自动 reset／重建／删除。完整边界见 [执行设计](./feishu-agent-team-execution-design.md#4-并行开发与成果集成)。
 
-同一 Bot 跨项目使用独立 worker/session 和记忆命名空间；不能把项目 A 的已有 runtime 会话改标签后直接借给项目 B。更换群目录时保留 ProjectID 和长期资料，旧 workspace generation 的结果保留在原 attempt／成果版本，但禁止自动应用到新目录、更新新任务版本或通过验收；需要重新验证才能纳入当前交付。新项目复用旧群必须显式创建新项目绑定。
+同一 Bot 跨项目使用独立 worker/session 和记忆命名空间；不能把项目 A 的已有 runtime 会话改标签后直接借给项目 B。更换群目录时保留 ProjectID 和长期资料，旧 execution-location generation 的结果保留在原 attempt／成果版本，但禁止自动应用到新目录、更新新任务版本或通过验收；需要重新验证才能纳入当前交付。新项目复用旧群必须显式创建新项目绑定。
 
-这需要修改现有 headless 复用合同。当前 [候选选择](../../internal/core/orchestrator/service_surface_contract_resolution.go)、[目录亲和评分](../../internal/core/orchestrator/service_thread_global.go) 和 [预热池](../../internal/app/daemon/app_headless_pool.go) 不以工作流为独立绑定键。worker 的复用／恢复必须检查 role、scope/context（含个人 principal 或项目绑定）、workstream、workspace generation、controller lease、Bot generation、工具绑定代次和常驻指令版本；相同模型、profile 和目录不足以证明可复用。未绑定预热实例完成受控初始化后才能使用，已绑定实例不得通过改 surface 归属借给另一角色；不能热改工具配置时安全重建 child。
+这需要修改现有 headless 复用合同。当前 [候选选择](../../internal/core/orchestrator/service_surface_contract_resolution.go)、[目录亲和评分](../../internal/core/orchestrator/service_thread_global.go) 和 [预热池](../../internal/app/daemon/app_headless_pool.go) 不以工作流为独立绑定键。worker 的复用／恢复必须检查 role、scope/context（含个人 principal 或项目绑定）、workstream、execution-location generation、controller lease、Bot generation、工具绑定代次和常驻指令版本；相同模型、profile 和目录不足以证明可复用。未绑定预热实例完成受控初始化后才能使用，已绑定实例不得通过改 surface 归属借给另一角色；不能热改工具配置时安全重建 child。
+
+### 12.1 会话 Goal 与资料接线
+
+会话 Goal 放在原生运行策略，绑定 context/session 与当前需求版本，不是 Project 目标对象。当前仅 Codex headless 实现 thread/goal 系列；其他 backend 按明确能力使用持续执行策略。暂停、改要求、重建会话时协调原生 goal 与 dispatcher，避免两个循环重复推进。详见 [Goal 合同](./feishu-agent-team-execution-design.md#61-会话-goal-与业务目标)。
+
+资料层使用 CLI → ResourceService → 工作库中的引用／operation → 各原生 connector。Feishu tenant token 支持 Docx、Sheets、Bitable 的相应读写；Wiki 新建知识空间需用户身份，因此纯 Bot 路线挂接既有 Wiki，或使用应用可管理的云空间文件夹＋固定项目资料首页。不能承诺纯 Bot 自动新建 Wiki 空间。接口证据、创建不确定回执、编辑冲突、版本与 issue/PR/repo 边界完整定义在 [共享资料设计](./feishu-agent-team-materials-design.md)。
 
 ## 13. 实施依赖与完整交付
 
@@ -414,11 +427,12 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 | --- | --- | --- |
 | A 领域与迁移 | Role、个人／项目 scope、资源、执行 owner、统一工作库、单聊及旧群归属切换 | 没有双写配置，原目录和已有工作归属可追溯 |
 | B 原生运行生命周期 | 多身份 CLI、上下文组装、start/resume/steer/compact/rebuild、控制权交接 | Claude／Codex 等受支持后端具有明确 ready、输入回执、版本生效和恢复行为 |
-| C 持续协作 | 任务依赖、inbox/outbox、多 WorkerSession 调度、提醒和公平预算 | 并行工作、忙碌消息、依赖等待与无人工唤醒恢复成立 |
-| D 工作区与交付 | 独立 checkout、成果版本、评审、返工、冲突处理和集成 | 并行实现到集成交付闭环，崩溃后可核对 Git 与业务记录 |
-| E 飞书与整体验收 | 群／话题／任务卡、成员邀请、反馈、记忆和统一设置 | 用户三个场景及完整并行／故障场景通过，代码和实际行为一致 |
+| C 持续协作 | 任务依赖、inbox/outbox、多 WorkerSession 调度、事件唤醒和公平预算 | 并行工作、忙碌消息、依赖等待与无人工唤醒恢复成立 |
+| D 执行位置与交付 | Agent 自主 Git、位置绑定、成果版本、评审、返工与集成交接 | 并行闭环和证据恢复成立，无平台隐式重置／清理 |
+| E 共享资料 | Docx／Wiki／Sheets／Bitable connector、稳定资源身份、原位更新、版本与权威来源 | 固定资料反复更新不增生副本，人工改动与发布冲突可恢复 |
+| F 飞书与整体验收 | 群／话题／任务卡、成员邀请、反馈、记忆和统一设置，Cron 退役 | 完整产品场景及故障场景通过，代码和实际行为一致 |
 
-这些阶段是依赖顺序，允许独立组件交叉实施；A—E 都属于本目标，不以中间阶段代替完整交付。验证是实现者的交付责任：失败时修复 adapter 或生命周期，不能以版本未验证、权限待开启或实现困难为由改成缩减产品。
+这些阶段是依赖顺序，允许独立组件交叉实施；A—F 都属于本目标，不以中间阶段代替完整交付。验证是实现者的交付责任：失败时修复 adapter 或生命周期，不能以版本未验证、权限待开启或实现困难为由改成缩减产品。
 
 ## 14. 必须通过的验证矩阵
 
@@ -428,7 +442,9 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 - 同 Bot 多用户私聊与项目群共用内核，个人记忆隔离；精确模型／已有目录选择保留，内部工作区无需用户操作。
 - 同角色同项目两个独立工作流并行，任务、原生会话和可写目录不串用；不同项目可关联同仓库。
 - 两个实现任务并行交付，第三个角色在指定版本评审；基线前移、冲突和返工进入集成闭环。
-- 工作区创建、目标 ref 更新与回执落库各崩溃窗口可恢复；迁移前后只有一个项目配置权威。
+- Agent 创建目录、更新目标 ref 后崩溃可通过 Git 与检查点核查；平台不盲目重放 shell；迁移前后只有一个项目配置权威。
+- 长期资料更新、并发编辑、快照、事件遗漏及外部创建回执丢失按资料设计验证；旧预览清理不删除永久资料。
+- Session Goal 与暂停、需求修订、恢复联动，但不代替业务验收；旧 Cron 关闭且不自动迁移执行。
 - 迟到调用：旧 run、旧会话、旧 AppID generation 不能修改新任务。
 - 任务版本变化：执行中追加要求有明确 steering/下一轮语义，旧成果不自动按新要求验收。
 - room limit=1：委派能登记；负责人释放真实执行后下属运行；结果能唤醒负责人。
