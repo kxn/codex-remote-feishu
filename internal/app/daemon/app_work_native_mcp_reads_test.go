@@ -26,9 +26,9 @@ type privateMCPReadFixture struct {
 	sequence    uint64
 }
 
-func newPrivateMCPReadFixture(t *testing.T) *privateMCPReadFixture {
+func newPrivateMCPReadFixture(t *testing.T, appIDs ...string) *privateMCPReadFixture {
 	t.Helper()
-	a, source := teamPickerFixture(t)
+	a, source := teamPickerFixture(t, appIDs...)
 	f := &privateMCPReadFixture{a: a, source: source, relay: &steerOuterRelay{}}
 	var front work.WorkContext
 	pickerTx(t, a, func(tx *workstore.Tx) error {

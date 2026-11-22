@@ -312,6 +312,11 @@ func (a *App) handleTeamSettingsView(ctx context.Context, source teamHumanSource
 	}
 	if action == "settings.page" {
 		page, _ := interaction.Envelope.Values["setting"].(string)
+		if page == frozen.Kind && (page == "model" || page == "reasoning") {
+			if err = a.refreshTeamModelCatalog(ctx, source, view.Binding, frozen); err != nil {
+				return a.queueTeamSettings(ctx, source, page, "暂时无法刷新模型列表："+err.Error())
+			}
+		}
 		return a.queueTeamSettings(ctx, source, page, "")
 	}
 	if action != "settings.apply" && action != "settings.model-manual" {

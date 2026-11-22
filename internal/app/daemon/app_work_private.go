@@ -127,6 +127,14 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 	if kind == "contexts" {
 		return a.queueTeamContexts(ctx, source, 0)
 	}
+	var status teamPrivateStatus
+	if kind == "status" {
+		var err error
+		status, err = a.readTeamPrivateStatus(ctx, source)
+		if err != nil {
+			return "", err
+		}
+	}
 	a.mu.Lock()
 	backend := a.workBotSettingsLocked(source.Gateway.GatewayRef).Backend
 	a.mu.Unlock()
@@ -155,6 +163,7 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 		switch kind {
 		case "workers":
 			panel.Title = "当前工作的助手"
+			panel.Breadcrumb = "菜单首页 › 基本命令 › 当前工作的助手"
 			workers, e := tx.ListWorkers(source.ScopeID)
 			if e != nil {
 				return e
@@ -169,23 +178,17 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 				}
 			}
 		case "status":
-			panel.Title = "当前工作状态"
-			inputs, e := tx.ListInbox(source.ScopeID)
-			if e != nil {
-				return e
+			if nav != status.Navigation {
+				return workstore.ErrConflict
 			}
-			pending, running := 0, 0
-			for _, input := range inputs {
-				if input.RecipientContextID == nav.FrontContextID {
-					if input.State == work.InboxPending {
-						pending++
-					}
-					if input.State == work.InboxClaimed {
-						running++
-					}
-				}
+			panel.Title = "当前工作状态 · /status"
+			panel.Breadcrumb = "菜单首页 › 基本命令 › 当前状态"
+			panel.Paragraphs = append(panel.Paragraphs, status.Lines...)
+			if status.SettingsProblem != "" {
+				panel.Paragraphs = append(panel.Paragraphs, status.SettingsProblem)
+			} else {
+				panel.Paragraphs = append(panel.Paragraphs, "下次执行设置", strings.Join(teamSettingsSummary(status.Settings, status.Preferences), "\n"))
 			}
-			panel.Paragraphs = append(panel.Paragraphs, fmt.Sprintf("还有 %d 条待处理输入，%d 条正在处理。", pending, running))
 			diagnostics, e := teamPrivateDiagnostics(tx, source.ScopeID, nav.FrontContextID)
 			if e != nil {
 				return e

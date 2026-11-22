@@ -94,21 +94,7 @@ func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession,
 	view.SurfaceKey = "runtime:" + worker.ID
 	view.TargetID = worker.ID
 	view.TargetRevision = worker.Revision
-	text := "这项工作正在核对执行状态。未处理的输入和已有成果会保留，确认后才能重新执行。"
-	switch gate.Reason {
-	case "native_resume_rejected":
-		text = "原生会话无法恢复，原输入和检查点已保留。自动重建的证据不足，请核查后恢复工作。"
-	case "missing_processing_report":
-		text = "上次执行没有留下完整的处理记录。原输入已保留；恢复时会先核查已经做过的操作，避免重复执行。"
-	case "carrier_disconnected", "runtime_disconnected":
-		text = "与执行进程失去联系，目前还不能确认它是否停止。系统正在核对，不会同时启动另一份执行。"
-	case "native_goal_budget_exhausted":
-		text = "这轮连续工作的预算已用完，任务还没有完成。已有成果和待办会保留；可以核查后恢复，再告诉负责人是否继续以及新的预算。"
-	case "native_goal_budget_required":
-		text = "正在为这轮连续工作确认预算；确认前不会另开一轮执行。若等待较久，可以重新核对状态。"
-	case "control_requested":
-		text = "正在核对旧执行的控制状态和后台任务。核查完成前保持暂停，不会重新开启已取消的原生接管流程。"
-	}
+	text := teamRuntimeGateDescription(gate)
 	panel := workui.Panel{Title: role.Name + "的工作需要核对", Paragraphs: []string{text}}
 	if gate.AttemptID != "" {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "重新核对", Action: "runtime.observe"})
@@ -306,4 +292,26 @@ func (a *App) refreshTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSessio
 	}
 	_, err = a.queueTeamRecoveryView(tx, worker, gate)
 	return err
+}
+
+func teamRuntimeGateDescription(gate workstore.RuntimeGate) string {
+	if gate.RecoveryReason != "" {
+		gate.Reason = gate.RecoveryReason
+	}
+	text := "这项工作正在核对执行状态。未处理的输入和已有成果会保留，确认后才能重新执行。"
+	switch gate.Reason {
+	case "native_resume_rejected":
+		text = "原生会话无法恢复，原输入和检查点已保留。自动重建的证据不足，请核查后恢复工作。"
+	case "missing_processing_report":
+		text = "上次执行没有留下完整的处理记录。原输入已保留；恢复时会先核查已经做过的操作，避免重复执行。"
+	case "carrier_disconnected", "runtime_disconnected", "carrier_disconnected_reconcile":
+		text = "与执行进程失去联系，目前还不能确认它是否停止。系统正在核对，不会同时启动另一份执行。"
+	case "native_goal_budget_exhausted":
+		text = "这轮连续工作的预算已用完，任务还没有完成。已有成果和待办会保留；可以核查后恢复，再告诉负责人是否继续以及新的预算。"
+	case "native_goal_budget_required":
+		text = "正在为这轮连续工作确认预算；确认前不会另开一轮执行。若等待较久，可以重新核对状态。"
+	case "control_requested":
+		text = "正在核对旧执行的控制状态和后台任务。核查完成前保持暂停，不会重新开启已取消的原生接管流程。"
+	}
+	return text
 }

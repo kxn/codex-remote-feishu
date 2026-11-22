@@ -57,6 +57,9 @@ func (a *App) handleTeamPrivateOperation(ctx context.Context, source teamHumanSo
 }
 
 func (a *App) handleTeamPrivateViewOperation(ctx context.Context, source teamHumanSource, view workstore.UIView, action string, form map[string]any) (string, error) {
+	if strings.HasPrefix(action, "system.") {
+		return a.handleTeamSystemViewOperation(ctx, source, action, form)
+	}
 	if strings.HasPrefix(action, "private.goal-") && action != "private.goal-help" {
 		return a.handleTeamGoalViewOperation(ctx, source, action, form)
 	}
@@ -106,7 +109,7 @@ func (a *App) handleTeamPrivateViewOperation(ctx context.Context, source teamHum
 		"private.review-uncommitted": "/review uncommitted", "private.goal": "/goal",
 		"private.mcp-status": "/mcp status", "private.mcp-auth-status": "/mcp oauth-status",
 		"private.admin-web": "/admin web", "private.admin-network": "/admin network",
-		"private.admin-autostart": "/admin autostart status", "private.upgrade": "/upgrade",
+		"private.admin-autostart": "/admin autostart", "private.upgrade": "/upgrade",
 	}
 	if command, ok := control.ParseFeishuTextActionWithoutCatalog(commands[action]); ok {
 		return a.handleTeamNativeCommand(ctx, source, command)

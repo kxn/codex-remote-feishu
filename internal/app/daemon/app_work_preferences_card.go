@@ -96,12 +96,21 @@ func (a *App) queueTeamSettingsCursor(ctx context.Context, source teamHumanSourc
 		if e != nil {
 			return e
 		}
+		if kind == "overview" {
+			card, e = teamSettingsAutomationSummary(tx, wc.ID, card)
+			if e != nil {
+				return e
+			}
+		}
 		view := workstore.UIView{ID: id, ScopeID: source.ScopeID, ContextID: wc.ID, Kind: "bot.settings", TargetID: source.RoleID, TargetRevision: navRevision, Binding: binding, Tenant: source.Tenant, ChatID: source.ChatID, PrincipalID: source.PrincipalID, ReplyToMessageID: source.MessageID}
 		if e = workui.PrivateNavigationFromInteraction(tx, &view, source.Authority.InteractionID); e != nil {
 			return e
 		}
-		_, e = workui.Queue(tx, view, card)
-		return e
+		saved, e := workui.Queue(tx, view, card)
+		if e != nil {
+			return e
+		}
+		return a.registerTeamCatalogView(tx, saved, frozen, snapshot)
 	})
 	return id, err
 }
@@ -121,7 +130,7 @@ func teamSettingsButton(id, label, action string, extra map[string]any) map[stri
 	}
 	value["team_view"] = id
 	value["action"] = action
-	return map[string]any{"tag": "button", "text": cardkit.PlainText(label), "behaviors": []map[string]any{{"type": "callback", "value": value}}}
+	return map[string]any{"tag": "button", "width": "fill", "text": cardkit.PlainText(label), "behaviors": []map[string]any{{"type": "callback", "value": value}}}
 }
 func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.ContextPreferences, kind, note string, trail ...string) (json.RawMessage, error) {
 	elements := []map[string]any{}
@@ -134,32 +143,7 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 
 	currentModel := snapshot.Settings.PromptOverride.Model
 	currentEffort := snapshot.Settings.PromptOverride.ReasoningEffort
-	effectiveModel := currentModel
-	effectiveEffort := currentEffort
-	for _, profile := range snapshot.Profiles {
-		if profile.Backend == snapshot.Settings.Backend && profile.ID == teamSettingsProfile(snapshot.Settings) && profile.FixedModel != "" {
-			effectiveModel = profile.FixedModel
-			effectiveEffort = profile.FixedReasoning
-			break
-		}
-	}
-	if effectiveModel == "" && snapshot.Catalog != nil {
-		for _, entry := range snapshot.Catalog.Entries {
-			if entry.IsDefault && !entry.Hidden {
-				effectiveModel = entry.Model
-				if effectiveModel == "" {
-					effectiveModel = entry.ID
-				}
-				break
-			}
-		}
-	}
-	if effectiveModel == "" {
-		effectiveModel = "跟随当前配置"
-	}
-	if effectiveEffort == "" {
-		effectiveEffort = "自动"
-	}
+	effectiveModel, effectiveEffort := teamSettingsModelSelection(snapshot)
 	local := func(value *string) string {
 		if value == nil {
 			return "跟随后端默认"
@@ -169,7 +153,12 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 	titles := map[string]string{"overview": "参数设置", "model": "模型", "reasoning": "推理强度", "backend": "执行后端", "codex-profile": "Codex 配置", "claude-profile": "Claude 配置", "opencode-profile": "OpenCode 配置", "access": "执行权限", "plan": "计划模式", "verbose": "消息详细程度"}
 	initial := ""
 	switch kind {
-	case "overview", "backend", "codex-profile", "claude-profile", "opencode-profile":
+	case "overview":
+		text("选择设置项查看选项或修改当前值。权限、计划模式和详细程度只作用于当前会话。")
+		if snapshot.Settings.Backend == agentproto.BackendOpenCode {
+			text(teamSettingsSummary(snapshot, pref)[2])
+		}
+	case "backend", "codex-profile", "claude-profile", "opencode-profile":
 		text(fmt.Sprintf("当前执行后端：%s\n当前配置：%s", snapshot.Settings.Backend, teamSettingsProfile(snapshot.Settings)))
 		if kind == "backend" {
 			initial = string(snapshot.Settings.Backend)
@@ -216,7 +205,7 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 		}
 		pages = append(pages, "reasoning", "access", "plan", "verbose")
 		for _, page := range pages {
-			elements = append(elements, teamSettingsButton(id, titles[page], "settings.page", map[string]any{"setting": page}))
+			elements = append(elements, teamSettingsButton(id, teamSettingsPageLabel(snapshot, pref, page), "settings.page", map[string]any{"setting": page}))
 		}
 		elements = append(elements, teamSettingsButton(id, "断线后自动继续", "automation.autocontinue.status", nil))
 		elements = append(elements, teamSettingsButton(id, "返回菜单首页", "private.menu", nil))
@@ -358,7 +347,41 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 		}
 		elements = append(elements, teamSettingsButton(id, "刷新列表", "settings.page", map[string]any{"setting": kind}), teamSettingsButton(id, "返回参数设置", "settings.page", map[string]any{"setting": "overview"}))
 	}
-	raw, err := json.Marshal(map[string]any{"schema": "2.0", "config": map[string]any{"update_multi": true}, "header": map[string]any{"title": cardkit.PlainText(titles[kind])}, "body": map[string]any{"elements": elements}})
+	// Preserve the old hierarchy: breadcrumb/back first, refresh and common
+	// actions last. All menu buttons fill the same available width.
+	navigation := []map[string]any{}
+	footer := []map[string]any{}
+	content := []map[string]any{}
+	for _, element := range elements {
+		label := ""
+		if value, ok := element["text"].(map[string]any); ok {
+			label, _ = value["content"].(string)
+		}
+		switch {
+		case strings.HasPrefix(label, "返回"):
+			navigation = append(navigation, element)
+		case label == "刷新列表" || strings.HasPrefix(label, "上一页") || strings.HasPrefix(label, "下一页"):
+			footer = append(footer, element)
+		default:
+			content = append(content, element)
+		}
+	}
+	slash := teamSettingsSlash(kind)
+	breadcrumb := "菜单首页 › 参数设置"
+	if kind != "overview" {
+		breadcrumb += " › " + titles[kind]
+	}
+	elements = []map[string]any{cardkit.PlainTextBlockElement(breadcrumb)}
+	if kind != "overview" {
+		navigation = append(navigation, teamSettingsButton(id, "返回菜单首页", "private.menu", nil))
+	}
+	elements = append(elements, navigation...)
+	elements = append(elements, content...)
+	if len(footer) > 0 {
+		elements = append(elements, map[string]any{"tag": "hr"})
+		elements = append(elements, footer...)
+	}
+	raw, err := json.Marshal(map[string]any{"schema": "2.0", "config": map[string]any{"update_multi": true}, "header": map[string]any{"title": cardkit.PlainText(titles[kind] + " · " + slash)}, "body": map[string]any{"elements": elements}})
 	if err != nil {
 		return nil, err
 	}

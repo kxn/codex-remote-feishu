@@ -10,7 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-func TestPrivateMenuRetainsReviewMCPAndCompactAcrossBackends(t *testing.T) {
+func TestPrivateMenuRetainsReviewCompactAndExplicitMCPAcrossBackends(t *testing.T) {
 	for _, backend := range []agentproto.Backend{agentproto.BackendCodex, agentproto.BackendClaude, agentproto.BackendOpenCode} {
 		t.Run(string(backend), func(t *testing.T) {
 			a, source := teamPickerFixture(t)
@@ -22,7 +22,7 @@ func TestPrivateMenuRetainsReviewMCPAndCompactAcrossBackends(t *testing.T) {
 				if err = tx.PutWorker(work.WorkerSession{ID: "ready-worker", ContextID: nav.FrontContextID, ScopeID: source.ScopeID, RoleID: source.RoleID, Backend: work.Backend(backend), State: work.WorkerReady, Controller: work.ControllerAutomatic, Generation: 1, ControllerGeneration: 1, NativeSessionID: "existing-session", NativeNamespace: "fixture", Revision: 1}, 0); err != nil {
 					return err
 				}
-				for _, kind := range []string{"tools", "basic", "mcp"} {
+				for _, kind := range []string{"tools", "basic", "mcp", "admin"} {
 					panel, err := teamPrivateMenuPanel(tx, source, nav, backend, kind, "")
 					if err != nil {
 						return err
@@ -31,7 +31,10 @@ func TestPrivateMenuRetainsReviewMCPAndCompactAcrossBackends(t *testing.T) {
 					for _, button := range panel.Buttons {
 						actions[button.Action] = true
 					}
-					if kind == "tools" && (!actions["private.review"] || !actions["private.mcp"]) {
+					if kind == "admin" && !actions["private.admin-autostart"] {
+						t.Fatal("autostart entry hidden before actual host capability detection")
+					}
+					if kind == "tools" && (!actions["private.review"] || actions["private.mcp"]) {
 						t.Fatal("retained native tools vanished for backend", backend)
 					}
 					if kind == "tools" && actions["private.goal-help"] != (backend == agentproto.BackendCodex) {

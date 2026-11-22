@@ -125,7 +125,7 @@ func (a *App) teamUpgradeAction(ctx context.Context, source teamHumanSource, par
 		return "", err
 	}
 	panel := workui.Panel{Title: "确认主机升级", Paragraphs: []string{"目标：" + candidate.TargetVersion, "确认后会准备并执行真实升级，daemon 会短暂重启；当前工作与尚未处理的输入会按持久状态恢复。"}, Buttons: []workui.Button{{Label: "确认升级", Action: "host.upgrade.confirm", Values: map[string]any{"candidate_ref": contentID}}, {Label: "取消", Action: "host.upgrade.cancel"}}}
-	return a.queueTeamPicker(ctx, source, "host.upgrade-confirm", contentID, 1, panel)
+	return a.queueTeamSystemPanelKind(ctx, source, panel, "host.upgrade-confirm", contentID)
 }
 func (a *App) handleTeamHostViewAction(ctx context.Context, interaction workstore.HumanInteraction, view workstore.UIView, action string) (string, error) {
 	if view.Kind != "host.upgrade-confirm" {
@@ -154,7 +154,14 @@ func (a *App) handleTeamHostViewAction(ctx context.Context, interaction workstor
 	}
 	source := teamHumanSource{Key: interaction.ID, ScopeID: view.ScopeID, PrincipalID: interaction.PrincipalID, RoleID: interaction.Gateway.RoleID, Tenant: view.Tenant, ChatID: view.ChatID, MessageID: interaction.Envelope.MessageID, Gateway: interaction.Gateway, SenderIDs: interaction.Envelope.SenderIDs, Authority: workstore.PrivateActionSource{PersonalScopeID: view.ScopeID, InteractionID: interaction.ID}}
 	if action == "host.upgrade.cancel" {
-		return a.queueTeamPicker(ctx, source, "host.result", "installation", 1, workui.Panel{Title: "升级已取消", Paragraphs: []string{"没有启动升级，原有工作继续保留。"}})
+		started, err := a.teamUpgradeAlreadyStarted(ctx, view)
+		if err != nil {
+			return "", err
+		}
+		if started {
+			return a.queueTeamSystemPanel(ctx, source, workui.Panel{Title: "系统升级", Paragraphs: []string{"升级操作已有持久执行记录，或系统已有升级事务；本次返回没有撤销已登记的升级。请查看当前状态。"}, Buttons: []workui.Button{systemCommandButton("查看实际升级状态", "/upgrade")}})
+		}
+		return a.queueTeamSystemPanel(ctx, source, workui.Panel{Title: "已退出升级确认", Paragraphs: []string{"已退出本次确认，没有提交新的升级请求。已存在的升级事务不会被撤销，请查看当前状态。"}, Buttons: []workui.Button{systemCommandButton("查看升级状态", "/upgrade")}})
 	}
 	if action != "host.upgrade.confirm" {
 		return "", workstore.ErrScopeDenied
@@ -202,4 +209,50 @@ func (a *App) handleTeamHostViewAction(ctx context.Context, interaction workstor
 		go a.runPendingUpgradeStart(upgradeStartRequest{State: fresh, GatewayID: source.Gateway.GatewayRef, SourceMessageID: source.MessageID})
 		return "升级事务已实际登记，正在准备目标版本。是否完成请查看 /upgrade 的持久升级状态。", nil
 	})
+}
+
+func (a *App) teamUpgradeAlreadyStarted(ctx context.Context, view workstore.UIView) (bool, error) {
+	a.mu.Lock()
+	state, _, err := a.loadUpgradeStateLocked(false)
+	inFlight := a.upgradeRuntime.StartInFlight
+	a.mu.Unlock()
+	if err != nil {
+		return false, err
+	}
+	if inFlight || pendingUpgradeBusy(state.PendingUpgrade) {
+		return true, nil
+	}
+	started := false
+	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+		operations, err := tx.ListOperations(view.ScopeID)
+		if err != nil {
+			return err
+		}
+		for _, op := range operations {
+			if op.Kind != "host.upgrade.execute" {
+				continue
+			}
+			body, err := tx.GetContent(op.ScopeID, op.RequestRef)
+			if err != nil {
+				return err
+			}
+			var request struct{ Source workstore.PrivateActionSource }
+			if err = json.Unmarshal(body.Data, &request); err != nil {
+				return err
+			}
+			if request.Source.InteractionID == "" {
+				continue
+			}
+			interaction, err := tx.GetHumanInteraction(request.Source.InteractionID)
+			if err != nil {
+				return err
+			}
+			if interaction.Envelope.Values["team_view"] == view.ID {
+				started = true
+				break
+			}
+		}
+		return nil
+	})
+	return started, err
 }

@@ -84,6 +84,7 @@ func (a *App) queueTeamGoalPanelTx(tx *workstore.Tx, source teamHumanSource, mod
 	if err = workui.PrivateNavigationFromInteraction(tx, &view, source.Authority.InteractionID); err != nil {
 		return err
 	}
+	panel = teamPrivateMenuLayout(panel, "goal-help")
 	card, err := workui.Card(id, panel)
 	if err != nil {
 		return err

@@ -43,6 +43,12 @@ Bot 全局的 backend／Profile／模型选择由既有持久配置和 Bot setti
 
 Codex 原生 Profile 没有显式 provider 时，只有已解析的原生连接与线程策略才可使用 `InheritNativeProvider`；start/resume 不发送 `modelProvider`，仍发送冻结的上下文窗口、自动压缩值与指令。服务端观察到的 provider 才是实际值，缺少回执仍是不完整证据。API/OAuth Profile 仍要求明确 provider；旧协议 JSON 未提供新字段时保持原有校验语义。
 
+模型目录通过原生 `model.list` 读取。有效 Hello 后预取目录，模型页没有可用目录时可准备只用于读取能力的执行器；不得创建业务输入或启动 prompt。Codex 已验证的目录可在同一 Role、Bot 身份代次、Profile 和解析后的 `ConnectionContractID` 下短期复用，保留原始命令与启动证据；线程模型、推理参数变化不使同一登录身份的目录失效，认证、端点或能力变化不能沿用旧目录。显式刷新在保留已知选项的同时请求新目录，不要求反复打开页面。
+
+模型页的等待状态持久保存；目录到达和初始卡片发送先后任意，均只更新已确认的原卡片。更新前再次核对导航、Bot 身份、配置指纹、上下文偏好和当前视图；用户已返回或切换页面时，迟到结果不抢回菜单。等待视图分批轮转，尚未就绪的页面不能饿死其他已就绪页面。
+
+系统管理复用真实安装、网络和升级适配器。查看失败保留具体原因和重新查看入口；有副作用的操作结果未知时不得自动重放。外网管理页链接生成独立于私人命令通道运行，先保存等待卡与 `host.admin.weblink` 操作，再进入 `sending`；重启遗留的 `sending` 转为 `unknown` 并提示核对，不能猜测链接未生成而重发。结果只更新仍有效的原页面；离开页面不会被迟到结果导航回来。升级确认后的旧取消按钮必须核对已登记执行及真实升级状态，不能宣称撤销已开始的升级。
+
 `/v1/status` 和 `/api/admin/runtime-status` 使用同一状态投影。团队模式 `authority=persistent_teams`，`work` 从单一 SQLite 事务读取计数和有界详情；旧 instances／surfaces／pendingRemoteTurns／activeRemoteTurns 返回空数组。库不可用时明确返回 `work.available=false`，不能伪装成无任务或回退旧引擎。网关连通状态仍由真实网关读取。
 
 生产启动在装载旧文件之前设置 history-only 边界。旧 room/surface 文件即使需要格式规范化也不保存；配置目录迁移和 Bot 身份替换不得改写它们，也不得因这些历史文件损坏而阻止现行配置变更。原始迁移快照仍在装载前保存。旧 instance/surface MCP 服务不再发布；过渡环境保留的旧处理器明确返回停用，不能使用旧 token 绕过团队 CLI。旧 VS Code 安装/重装入口停用，只保留已有集成的明确清理操作。

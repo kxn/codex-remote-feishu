@@ -32,6 +32,7 @@ type teamRuntime struct {
 	humanActionsPending map[string]bool
 	catalogMu           sync.Mutex
 	catalogPending      map[string]bool
+	catalogViewCursor   string
 	runContext          context.Context
 	active              atomic.Bool
 	legacyFenced        atomic.Bool
@@ -93,6 +94,7 @@ func (r *teamRuntime) run(ctx context.Context) {
 	})
 	r.every(ctx, "human-actions", time.Second, r.app.processTeamInteractions)
 	r.every(ctx, "menus", time.Second, r.app.runTeamMenus)
+	r.every(ctx, "system-host", time.Second, r.app.runTeamSystemHostJobs)
 	r.every(ctx, "native-maintenance", time.Second, r.app.runTeamNativeCommands)
 	r.every(ctx, "codex-program-maintenance", time.Second, func(ctx context.Context) error {
 		if r.codexUpgrader == nil {
@@ -109,6 +111,7 @@ func (r *teamRuntime) run(ctx context.Context) {
 	r.every(ctx, "publication-recovery", 15*time.Second, r.app.runTeamPublicationRecoveryViews)
 	r.every(ctx, "project-membership", 2*time.Minute, r.app.runTeamProjectMembershipHealth)
 	r.every(ctx, "project-views", 5*time.Second, r.app.runTeamProjectViews)
+	r.every(ctx, "model-catalog-views", time.Second, r.app.advanceTeamModelCatalogViews)
 	r.every(ctx, "settings", 5*time.Second, func(ctx context.Context) error { return r.app.syncWorkRoles(ctx, r.store) })
 	r.every(ctx, "scheduler", time.Second, r.tickScheduler)
 	r.every(ctx, "idle-carrier-recovery", 2*time.Second, func(ctx context.Context) error { return r.coordinator.ReconcileIdleCarriers(ctx, 8) })
@@ -271,6 +274,8 @@ func (a *App) handleWorkHello(ctx context.Context, hello agentproto.Hello) bool 
 	}
 	if err := r.coordinator.HandleHello(ctx, hello); err != nil {
 		log.Printf("team hello rejected: instance=%s error=%v", hello.Instance.InstanceID, err)
+	} else {
+		a.prefetchTeamModelCatalog(ctx, hello)
 	}
 	return true
 }

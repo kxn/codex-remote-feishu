@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workengine"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worksettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 )
 
@@ -18,14 +19,14 @@ func (a *App) prepareTeamModelCatalog(ctx context.Context, source teamHumanSourc
 		if err != nil {
 			return err
 		}
-		nav, err := tx.GetPrivateNavigation(scope.ID)
+		frozen, revision, err := worksettings.FrozenContext(tx, source.Authority)
 		if err != nil {
 			return err
 		}
-		if nav.Revision != source.NavigationRevision || scope.PrincipalID != source.PrincipalID || scope.RoleID != source.RoleID {
+		if revision != source.NavigationRevision || scope.PrincipalID != source.PrincipalID || scope.RoleID != source.RoleID {
 			return fmt.Errorf("工作位置已经变化，请重新打开模型选择。")
 		}
-		need = workengine.WorkerNeed{ScopeID: scope.ID, RoleID: scope.RoleID, ContextID: nav.FrontContextID}
+		need = workengine.WorkerNeed{ScopeID: scope.ID, RoleID: scope.RoleID, ContextID: frozen.ID}
 		return nil
 	})
 	if err != nil {

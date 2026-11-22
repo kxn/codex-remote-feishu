@@ -202,7 +202,9 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 		if e := a.processTeamInteractions(ctx); e != nil {
 			t.Fatalf("%s (%s): %v", id, action, e)
 		}
-		return publish()
+		next := publish()
+		assertPrivateMenuSDKLayout(t, next)
+		return next
 	}
 
 	openMenu("menu")
@@ -226,6 +228,7 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 	}
 	original := readFront()
 	home := publish()
+	assertPrivateMenuSDKLayout(t, home)
 	for _, group := range []string{"基本命令", "参数设置", "工作区与会话", "常用工具", "系统管理"} {
 		if !strings.Contains(home, group) {
 			t.Fatalf("menu missing %s", group)
@@ -375,4 +378,50 @@ func menuSDKAction(t *testing.T, card, action, setting string) map[string]any {
 		t.Fatalf("action %s/%s missing in %s", action, setting, card)
 	}
 	return value
+}
+
+// Inspect the actual SDK HTTP payload, not only text fragments. The surrounding
+// journey already requires every navigation publication to PATCH messageID.
+func assertPrivateMenuSDKLayout(t *testing.T, raw string) {
+	t.Helper()
+	var card struct {
+		Header struct {
+			Title struct {
+				Content string `json:"content"`
+			} `json:"title"`
+		} `json:"header"`
+		Body struct {
+			Elements []map[string]any `json:"elements"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(raw), &card); err != nil {
+		t.Fatal(err)
+	}
+	if len(card.Body.Elements) == 0 {
+		t.Fatal("empty navigation card")
+	}
+	first, _ := json.Marshal(card.Body.Elements[0])
+	if !strings.Contains(string(first), "菜单首页") {
+		return
+	} // separate business result carriers
+	if card.Header.Title.Content != "当前工作的助手" && card.Header.Title.Content != "项目相关讨论" && !strings.Contains(card.Header.Title.Content, "/") {
+		t.Fatalf("menu heading lacks slash: %s", card.Header.Title.Content)
+	}
+	contentSeen := false
+	for i, element := range card.Body.Elements {
+		if i == 0 {
+			continue
+		}
+		if element["tag"] != "button" {
+			contentSeen = true
+			continue
+		}
+		if element["width"] != "fill" {
+			t.Fatalf("SDK menu button has intrinsic width: %v", element)
+		}
+		label, _ := element["text"].(map[string]any)["content"].(string)
+		if strings.HasPrefix(label, "返回") && contentSeen {
+			t.Fatal("SDK return button appears after page content")
+		}
+	}
 }

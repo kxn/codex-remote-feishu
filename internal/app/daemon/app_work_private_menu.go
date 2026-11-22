@@ -2,7 +2,7 @@ package daemon
 
 import (
 	"fmt"
-	"runtime"
+	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
@@ -113,7 +113,7 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 		add("查看会话历史", "private.contexts")
 		add("发送工作目录里的文件", "private.file-help")
 		add("审阅代码变更", "private.review")
-		add("MCP 服务与登录", "private.mcp")
+		// MCP OAuth was explicitly hidden from the old menu; slash access remains.
 		if backend == "" || backend == agentproto.BackendCodex {
 			add("会话目标", "private.goal-help")
 		}
@@ -121,10 +121,8 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 	case "admin":
 		panel.Title = "系统管理"
 		add("打开管理页", "private.admin-web")
-		add("查看网络模式", "private.admin-network")
-		if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-			add("查看自动启动状态", "private.admin-autostart")
-		}
+		add("网络设置", "private.admin-network")
+		add("自动启动设置", "private.admin-autostart")
 		add("查看系统升级", "private.upgrade")
 		add("命令帮助", "private.help")
 	case "review":
@@ -159,7 +157,7 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 		panel.Title = "命令帮助"
 		panel.Paragraphs = append(panel.Paragraphs,
 			"/menu 打开工作菜单 · /status 查看当前执行",
-			"/new 新建私人会话 · /history 回看或切换既有会话 · /workspace 选择目录",
+			"/new 新建私人会话 · /history 查看当前会话历史 · /use 切换已有会话 · /workspace 选择目录",
 			"/stop 停止当前私人执行并取消已排队的私人输入，随后可直接发送新消息",
 			"/mode 切换执行后端 · /model 查看模型 · /reasoning 调整推理强度 · /access 设置权限 · /plan 设置计划模式 · /verbose 设置详细程度",
 			"/sendfile <文件路径> 从已选目录发送文件 · /admin 查看管理入口 · /upgrade 查看升级")
@@ -200,5 +198,38 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 	if kind != "menu" {
 		add("返回菜单首页", "private.menu")
 	}
+	panel = teamPrivateMenuLayout(panel, kind)
 	return panel, nil
+}
+
+func teamPrivateMenuLayout(panel workui.Panel, kind string) workui.Panel {
+	panel.PrivateMenu = true
+	slash := map[string]string{"menu": "/menu", "basic": "/menu basic", "workspace": "/workspace", "workspace-tools": "/workspace new", "tools": "/menu tools", "admin": "/admin", "review": "/review", "mcp": "/mcpoauth", "file-help": "/sendfile", "goal-help": "/goal", "help": "/help", "command-error": "/help", "status": "/status", "history": "/history", "contexts": "/use", "locations": "/workspace", "autowhip": "/autowhip", "autocontinue": "/autocontinue"}[kind]
+	pageTitle := panel.Title
+	if slash != "" {
+		panel.Title += " · " + slash
+	}
+	panel.Breadcrumb = "菜单首页"
+	parent := map[string]string{"workspace-tools": "工作区与会话", "contexts": "工作区与会话", "locations": "工作区与会话", "projects": "工作区与会话", "history": "工作区与会话", "review": "常用工具", "mcp": "常用工具", "file-help": "常用工具", "goal-help": "常用工具", "autowhip": "常用工具", "autocontinue": "参数设置", "status": "基本命令", "workers": "基本命令"}[kind]
+	if parent != "" {
+		panel.Breadcrumb += " › " + parent
+	}
+	if kind != "menu" && pageTitle != "" {
+		panel.Breadcrumb += " › " + pageTitle
+	}
+	buttons := panel.Buttons
+	panel.Buttons = nil
+	for _, button := range buttons {
+		if strings.HasPrefix(button.Label, "刷新") || button.Label == "上一页" || button.Label == "下一页" {
+			panel.Footer = append(panel.Footer, button)
+		} else if strings.HasPrefix(button.Label, "返回") {
+			panel.Navigation = append(panel.Navigation, button)
+		} else {
+			panel.Buttons = append(panel.Buttons, button)
+		}
+	}
+	if kind == "workspace" || kind == "tools" {
+		panel.Footer = append(panel.Footer, workui.Button{Label: "当前状态 · /status", Action: "private.status"}, workui.Button{Label: "新建会话 · /new", Action: "private.new"})
+	}
+	return panel
 }

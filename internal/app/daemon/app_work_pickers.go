@@ -178,6 +178,13 @@ func (a *App) queueTeamPicker(ctx context.Context, source teamHumanSource, kind,
 				}
 			}
 		}
+		if privatePicker && !panel.PrivateMenu {
+			page := map[string]string{"private.project-picker": "projects", "execution.location-picker": "locations", "private.context-picker": "contexts", "context.history": "history"}[kind]
+			if strings.Contains(panel.Title, "历史") {
+				page = "history"
+			}
+			panel = teamPrivateMenuLayout(panel, page)
+		}
 		card, e := workui.Card(id, panel)
 		if e != nil {
 			return e

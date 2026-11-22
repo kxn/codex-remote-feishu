@@ -27,10 +27,16 @@ type InputForm struct {
 }
 
 type Panel struct {
-	Title      string
-	Paragraphs []string
-	Forms      []InputForm
-	Buttons    []Button
+	// PrivateMenu opts navigation pages into the menu layout. Business cards
+	// retain their existing arrangement and intrinsic button widths.
+	PrivateMenu bool
+	Breadcrumb  string
+	Navigation  []Button
+	Footer      []Button
+	Title       string
+	Paragraphs  []string
+	Forms       []InputForm
+	Buttons     []Button
 }
 
 func ID(parts ...string) string {
@@ -44,6 +50,26 @@ func Card(viewID string, panel Panel) (json.RawMessage, error) {
 		return nil, fmt.Errorf("view title required")
 	}
 	elements := []any{}
+	buttonElement := func(button Button) map[string]any {
+		var element map[string]any
+		if button.URL != "" {
+			element = map[string]any{"tag": "button", "text": cardkit.PlainText(button.Label), "behaviors": []any{map[string]any{"type": "open_url", "default_url": button.URL}}}
+		} else {
+			element = callbackButton(viewID, button)
+		}
+		if panel.PrivateMenu {
+			element["width"] = "fill"
+		}
+		return element
+	}
+	if panel.PrivateMenu {
+		if panel.Breadcrumb != "" {
+			elements = append(elements, cardkit.PlainTextBlockElement(panel.Breadcrumb))
+		}
+		for _, button := range panel.Navigation {
+			elements = append(elements, buttonElement(button))
+		}
+	}
 	for _, text := range panel.Paragraphs {
 		if block := cardkit.PlainTextBlockElement(text); block != nil {
 			elements = append(elements, block)
@@ -52,16 +78,21 @@ func Card(viewID string, panel Panel) (json.RawMessage, error) {
 	for _, form := range panel.Forms {
 		field := map[string]any{"tag": "input", "name": form.Name, "placeholder": cardkit.PlainText(form.Placeholder), "width": "fill"}
 		submit := callbackButton(viewID, form.Submit)
+		if panel.PrivateMenu {
+			submit["width"] = "fill"
+		}
 		submit["name"] = form.Name + "_submit"
 		submit["form_action_type"] = "submit"
 		elements = append(elements, map[string]any{"tag": "form", "name": form.Name + "_form", "elements": []any{field, submit}})
 	}
 	for _, button := range panel.Buttons {
-		if button.URL != "" {
-			elements = append(elements, map[string]any{"tag": "button", "text": cardkit.PlainText(button.Label), "behaviors": []any{map[string]any{"type": "open_url", "default_url": button.URL}}})
-			continue
+		elements = append(elements, buttonElement(button))
+	}
+	if panel.PrivateMenu && len(panel.Footer) > 0 {
+		elements = append(elements, map[string]any{"tag": "hr"})
+		for _, button := range panel.Footer {
+			elements = append(elements, buttonElement(button))
 		}
-		elements = append(elements, callbackButton(viewID, button))
 	}
 	if len(elements) > 150 {
 		return nil, fmt.Errorf("view needs pagination")
