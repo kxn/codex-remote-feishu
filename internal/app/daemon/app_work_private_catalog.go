@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -34,6 +35,33 @@ func teamWorkerStateLabel(state work.WorkerState) string {
 	}
 	return "状态待核对"
 }
+
+// The recovering state also covers safe preparation deferred until new input.
+func teamWorkerStatusLabel(tx *workstore.Tx, worker work.WorkerSession) (string, error) {
+	label := teamWorkerStateLabel(worker.State)
+	if worker.State != work.WorkerRecovering {
+		return label, nil
+	}
+	gate, err := tx.GetRuntimeGate(worker.ID)
+	if errors.Is(err, workstore.ErrNotFound) {
+		return label, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if gate.Reason != "snapshot_rebuild_required" || gate.RecoveryReason != "" {
+		return label, nil
+	}
+	occupied, err := tx.WorkerHasOccupancy(worker.ID)
+	if err != nil {
+		return "", err
+	}
+	if !occupied {
+		return "可继续，执行前自动准备", nil
+	}
+	return label, nil
+}
+
 func teamPrivateDiagnostics(tx *workstore.Tx, scopeID, contextID string) ([]string, error) {
 	problems, err := tx.ListDispatchProblems(scopeID)
 	if err != nil {

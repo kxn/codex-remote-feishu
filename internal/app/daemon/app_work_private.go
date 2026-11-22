@@ -161,7 +161,11 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 			}
 			for _, worker := range workers {
 				if worker.ContextID == nav.FrontContextID {
-					panel.Paragraphs = append(panel.Paragraphs, fmt.Sprintf("执行状态：%s；使用 %s。", teamWorkerStateLabel(worker.State), worker.Backend))
+					label, err := teamWorkerStatusLabel(tx, worker)
+					if err != nil {
+						return err
+					}
+					panel.Paragraphs = append(panel.Paragraphs, fmt.Sprintf("执行状态：%s；使用 %s。", label, worker.Backend))
 				}
 			}
 		case "status":
