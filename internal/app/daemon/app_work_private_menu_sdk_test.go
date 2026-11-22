@@ -109,9 +109,10 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 		var body struct {
 			Kind          string `json:"msg_type"`
 			Content       string `json:"content"`
-			ReplyInThread bool   `json:"reply_in_thread"`
+			ReplyInThread *bool  `json:"reply_in_thread"`
+			ReceiveID     string `json:"receive_id"`
 		}
-		if err := json.NewDecoder(req.Body).Decode(&body); err != nil || req.Header.Get("Authorization") != "Bearer token-"+appID || body.ReplyInThread {
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil || req.Header.Get("Authorization") != "Bearer token-"+appID || body.ReplyInThread != nil {
 			t.Errorf("invalid platform request %s %s: %+v %v", req.Method, req.URL, body, err)
 		}
 		var id string
@@ -119,11 +120,14 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 		case req.Method == http.MethodPost && req.URL.Path == "/open-apis/im/v1/messages" && body.Kind == "text":
 			entrySends.Add(1)
 			id = "om_entry"
-		case req.Method == http.MethodPost && (req.URL.Path == "/open-apis/im/v1/messages/om_entry/reply" || req.URL.Path == "/open-apis/im/v1/messages") && body.Kind == "interactive":
+		case req.Method == http.MethodPost && req.URL.Path == "/open-apis/im/v1/messages" && body.Kind == "interactive":
+			if body.ReceiveID != chat || req.URL.Query().Get("receive_id_type") != "chat_id" {
+				t.Errorf("menu card must create a top-level private message: %s %+v", req.URL, body)
+			}
 			if creates.Add(1) == 1 {
 				id = messageID
 			} else {
-				id = "om_new_menu"
+				id = fmt.Sprintf("om_new_menu_%d", creates.Load())
 			}
 			cards <- body.Content
 		case req.Method == http.MethodPatch && req.URL.Path == "/open-apis/im/v1/messages/"+messageID:
@@ -309,6 +313,23 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 	openMenu("refresh-menu")
 	if fresh := publish(); !strings.Contains(fresh, "工作菜单") || creates.Load() != 2 {
 		t.Fatalf("fresh platform menu didn't recover: %s", fresh)
+	}
+
+	// The platform menu has persisted its historical destination message. Real
+	// Feishu observations show old destinations can become topic anchors; both
+	// menu refreshes and literal slash commands must create new top-level cards.
+	event("literal-menu", "im.message.receive_v1", map[string]any{
+		"sender":  map[string]any{"sender_id": map[string]string{"open_id": "ou_human"}, "sender_type": "user", "tenant_key": "tenant"},
+		"message": map[string]string{"chat_id": chat, "chat_type": "p2p", "message_id": "om_literal_menu", "message_type": "text", "content": `{"text":"/menu"}`},
+	})
+	if result, e := runtime.ingress.ProcessPending(ctx, 16); e != nil || result.Commands != 1 {
+		t.Fatalf("literal /menu ingress: %+v %v", result, e)
+	}
+	if n, e := runtime.ingress.DispatchPrivateCommands(ctx, 16); e != nil || n != 1 {
+		t.Fatalf("literal /menu dispatch: %d %v", n, e)
+	}
+	if literal := publish(); !strings.Contains(literal, "工作菜单") || creates.Load() != 3 || entrySends.Load() != 1 {
+		t.Fatalf("literal /menu reused an old topic or destination entry: creates=%d entries=%d card=%s", creates.Load(), entrySends.Load(), literal)
 	}
 }
 

@@ -58,7 +58,7 @@ func (h teamPrivateCommands) Handle(ctx context.Context, command work.TypedComma
 	} else {
 		switch action.Kind {
 		case control.ActionShowCommandMenu:
-			receipt, err = a.queuePrivatePanel(ctx, source, "menu", "")
+			receipt, err = a.queueTeamPrivateCommandMenu(ctx, source, action.Text)
 		case control.ActionShowCommandHelp:
 			receipt, err = a.queuePrivatePanel(ctx, source, "help", "")
 		case control.ActionStatus:

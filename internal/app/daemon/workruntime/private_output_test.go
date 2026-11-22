@@ -168,6 +168,7 @@ func startPrivateSDK(t *testing.T, failEdit bool) *privateSDK {
 			Kind          string `json:"msg_type"`
 			Content       string `json:"content"`
 			ReplyInThread *bool  `json:"reply_in_thread"`
+			ReceiveID     string `json:"receive_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
@@ -182,8 +183,8 @@ func startPrivateSDK(t *testing.T, failEdit bool) *privateSDK {
 			fmt.Fprint(w, `{"code":0}`)
 			return
 		}
-		if r.URL.Path != "/open-apis/im/v1/messages/om_user/reply" || body.ReplyInThread == nil || *body.ReplyInThread {
-			t.Errorf("private execution did not stay in the direct chat: %+v", req)
+		if r.Method != http.MethodPost || r.URL.Path != "/open-apis/im/v1/messages" || r.URL.Query().Get("receive_id_type") != "chat_id" || body.ReceiveID != "private-chat" || body.ReplyInThread != nil {
+			t.Errorf("private execution did not create a top-level message in the direct chat: %+v", req)
 		}
 		req.messageID = fmt.Sprintf("om_private_%d", len(sdk.request)+1)
 		sdk.request = append(sdk.request, req)

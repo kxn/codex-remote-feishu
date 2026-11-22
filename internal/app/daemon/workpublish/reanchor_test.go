@@ -32,7 +32,23 @@ func TestHumanReanchorPreservesUnknownAndUnblocksOnlyLaterPublications(t *testin
 		if e != nil {
 			return e
 		}
-		return tx.PutScope(work.WorkScope{ID: "scope", Kind: work.ScopePersonal, RoleID: "role", PrincipalID: interaction.PrincipalID, Revision: 1}, 0)
+		if err := putFixtureTeam(tx); err != nil {
+			return err
+		}
+		scope := work.WorkScope{ID: "scope", Kind: work.ScopeProject, TeamID: "team", ProjectID: "project", Revision: 1}
+		if err := tx.PutScope(scope, 0); err != nil {
+			return err
+		}
+		if err := putFixtureProject(tx, scope); err != nil {
+			return err
+		}
+		gateway := work.IngressGateway{GatewayRef: "gateway", AppID: "app", RoleID: "role", BotGeneration: 1}
+		raw := work.RawIngressEnvelope{GatewayRef: "gateway", AppID: "app", EventID: "grant-source", Tenant: "tenant", ChatID: "oc_chat", ChatType: "group", MessageID: "grant-source", SenderType: "user", SenderIDs: work.SenderIDs{OpenID: "person"}, MessageType: "text", RawContent: `{"text":"participate"}`, MessageCreatedAt: time.Now(), ReceivedAt: time.Now()}
+		record, _, err := tx.AcceptRawIngress(raw, gateway)
+		if err != nil {
+			return err
+		}
+		return tx.GrantProjectAccessFromIngress(scope.ID, interaction.PrincipalID, record.ID, time.Now().Add(time.Hour))
 	})
 	if err != nil {
 		t.Fatal(err)

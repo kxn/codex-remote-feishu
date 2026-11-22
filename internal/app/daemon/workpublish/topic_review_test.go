@@ -51,7 +51,7 @@ func queueTaskReviewPublication(t *testing.T, store *workstore.Store, id string)
 }
 
 func TestReviewConcurrentFirstTaskPublicationsReserveSingleRoot(t *testing.T) {
-	store, _, p, _ := publisherFixture(t)
+	store, _, p, _ := publisherFixtureWithScope(t, work.ScopeProject)
 	queueTaskReviewPublication(t, store, "a")
 	queueTaskReviewPublication(t, store, "b")
 	type result struct {
@@ -93,7 +93,7 @@ func TestReviewConcurrentFirstTaskPublicationsReserveSingleRoot(t *testing.T) {
 }
 
 func TestReviewUnknownFirstTaskPublicationRetainsReservationAndFrozenPayload(t *testing.T) {
-	store, _, p, _ := publisherFixture(t)
+	store, _, p, _ := publisherFixtureWithScope(t, work.ScopeProject)
 	queueTaskReviewPublication(t, store, "first")
 	queueTaskReviewPublication(t, store, "second")
 	first, err := p.claim(t.Context(), "first", false)
@@ -141,7 +141,7 @@ func (s *reviewCancelSender) PublishText(_ context.Context, req feishu.ProjectPu
 	return feishu.ProjectPublishReceipt{MessageID: "actual-root", ChatID: req.ChatID}, nil
 }
 func TestReviewExternalSuccessWithLocalReceiptFailureCanRecoverSameSend(t *testing.T) {
-	store, _, p, _ := publisherFixture(t)
+	store, _, p, _ := publisherFixtureWithScope(t, work.ScopeProject)
 	queueTaskReviewPublication(t, store, "first")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

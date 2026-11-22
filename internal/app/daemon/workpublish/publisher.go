@@ -226,7 +226,11 @@ func (p *Publisher) finish(ctx context.Context, job publication, receipt feishu.
 		if err = tx.PutPlatformMessageMapping(mapping); err != nil {
 			return err
 		}
-		if mapping.TaskID != "" {
+		scope, err := tx.GetScope(item.ScopeID)
+		if err != nil {
+			return err
+		}
+		if mapping.TaskID != "" && scope.Kind != work.ScopePersonal {
 			conversation, e := tx.GetTaskConversation(item.ScopeID, mapping.TaskID)
 			if errors.Is(e, workstore.ErrNotFound) {
 				return tx.PutTaskConversation(work.TaskConversation{ScopeID: item.ScopeID, TaskID: mapping.TaskID, Tenant: mapping.Tenant, ChatID: mapping.ChatID, RootMessageID: root, ChannelGeneration: mapping.ChannelGeneration, Revision: 1}, 0)

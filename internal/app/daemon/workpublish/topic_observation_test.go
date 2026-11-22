@@ -25,7 +25,7 @@ func (s *topicReadSender) ReadPublishedMessage(_ context.Context, id string) (fe
 	return s.result, s.readErr
 }
 func TestTopicLossRequiresExactReadNotPermissionErrorAndNeverSendsAgain(t *testing.T) {
-	store, _, _, clock := publisherFixture(t)
+	store, _, _, clock := publisherFixtureWithScope(t, work.ScopeProject)
 	sender := &topicReadSender{readErr: errors.New("permission denied")}
 	p, err := New(store, sender, func() time.Time { return *clock })
 	if err != nil {

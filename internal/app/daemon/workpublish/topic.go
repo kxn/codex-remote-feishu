@@ -33,7 +33,16 @@ func (p *Publisher) resolveTopic(tx *workstore.Tx, op *work.Operation, job *publ
 		job.Projection = frozen
 		return nil
 	}
-	if job.Projection.TaskID != "" {
+	scope, err := tx.GetScope(op.ScopeID)
+	if err != nil {
+		return err
+	}
+	if scope.Kind == work.ScopePersonal {
+		// Private source messages prove authority and destination, but must not
+		// turn a fresh output into a reply inside a historical Feishu topic.
+		job.Projection.ReplyToMessageID = ""
+		job.Projection.RootMessageID = ""
+	} else if job.Projection.TaskID != "" {
 		if err := tx.TryReserveTaskTopic(op.ScopeID, job.Projection.TaskID, op.ID); err != nil {
 			return err
 		}

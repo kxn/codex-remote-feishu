@@ -340,7 +340,7 @@ func TestPublicationAuthorityThroughCLIIngressAndSDK(t *testing.T) {
 	}
 	for range 2 {
 		sent := <-messages
-		if sent.ChatID == "private-chat" && (sent.Thread || sent.Path != "/open-apis/im/v1/messages/private-input/reply") {
+		if sent.ChatID != "private-chat" || sent.Thread || sent.Path != "/open-apis/im/v1/messages" {
 			t.Fatalf("private output escaped normal chat: %+v", sent)
 		}
 	}

@@ -177,7 +177,9 @@ func (a *App) handleTeamSendFile(ctx context.Context, source teamHumanSource, ac
 		return "", fmt.Errorf("文件在读取时已超过30 MB")
 	}
 	content := work.NewContent(id+":file", source.ScopeID, http.DetectContentType(bytes), bytes, time.Now().UTC())
-	intent = teamFileIntent{Source: source.Authority, Binding: work.RoleBotBinding{RoleID: source.RoleID, GatewayRef: source.Gateway.GatewayRef, AppID: source.Gateway.AppID, IdentityGeneration: source.Gateway.BotGeneration}, ChatID: source.ChatID, ReplyToMessageID: source.MessageID, Path: path, Name: filepath.Base(path), ContentID: content.ID, NavigationRevision: source.NavigationRevision, PreferenceScopeID: target, PreferenceRevision: preferenceRevision}
+	// Source retains command/callback authority; a private file is a new chat
+	// message, not a reply to that source (which may belong to an old topic).
+	intent = teamFileIntent{Source: source.Authority, Binding: work.RoleBotBinding{RoleID: source.RoleID, GatewayRef: source.Gateway.GatewayRef, AppID: source.Gateway.AppID, IdentityGeneration: source.Gateway.BotGeneration}, ChatID: source.ChatID, Path: path, Name: filepath.Base(path), ContentID: content.ID, NavigationRevision: source.NavigationRevision, PreferenceScopeID: target, PreferenceRevision: preferenceRevision}
 	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		current, e := a.teamPickerTarget(tx, source)
 		if e != nil {

@@ -39,6 +39,7 @@ func newPipelinePrivatePlatform(t *testing.T, chat, source string) *pipelinePriv
 			Kind          string `json:"msg_type"`
 			Content       string `json:"content"`
 			ReplyInThread *bool  `json:"reply_in_thread"`
+			ReceiveID     string `json:"receive_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
@@ -49,11 +50,11 @@ func newPipelinePrivatePlatform(t *testing.T, chat, source string) *pipelinePriv
 		case r.Method == http.MethodPatch && r.URL.Path == "/open-apis/im/v1/messages/pipeline-private-1":
 			platform.commands = append(platform.commands, "PATCH "+body.Content)
 			fmt.Fprint(w, `{"code":0}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/open-apis/im/v1/messages/"+source+"/reply":
-			if body.ReplyInThread == nil || *body.ReplyInThread || body.Kind != "interactive" {
-				t.Errorf("native card did not remain an ordinary private reply: %+v", body)
+		case r.Method == http.MethodPost && r.URL.Path == "/open-apis/im/v1/messages":
+			if body.ReplyInThread != nil || body.Kind != "interactive" || body.ReceiveID != chat || r.URL.Query().Get("receive_id_type") != "chat_id" {
+				t.Errorf("native card did not create a top-level private message: %+v", body)
 			}
-			platform.commands = append(platform.commands, "REPLY "+body.Content)
+			platform.commands = append(platform.commands, "CREATE "+body.Content)
 			fmt.Fprintf(w, `{"code":0,"data":{"message_id":"pipeline-private-%d","chat_id":%q}}`, len(platform.commands), chat)
 		default:
 			t.Errorf("unexpected private SDK request %s %s", r.Method, r.URL.Path)
@@ -88,12 +89,12 @@ func (p *pipelinePrivatePlatform) verify(t *testing.T, ctx context.Context, publ
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	writes := p.commands
-	if len(writes) != want || !strings.HasPrefix(writes[0], "REPLY ") || !strings.Contains(writes[0], "正在处理请求") ||
+	if len(writes) != want || !strings.HasPrefix(writes[0], "CREATE ") || !strings.Contains(writes[0], "正在处理请求") ||
 		!strings.HasPrefix(writes[want-2], "PATCH ") || !strings.Contains(writes[want-2], "执行完成") ||
-		!strings.HasPrefix(writes[want-1], "REPLY ") || !strings.Contains(writes[want-1], "pipeline native final") {
+		!strings.HasPrefix(writes[want-1], "CREATE ") || !strings.Contains(writes[want-1], "pipeline native final") {
 		t.Fatalf("private native subprocess did not reach the same-card progress and final sequence: %s", writes)
 	}
-	if backend == work.BackendClaude && (!strings.HasPrefix(writes[1], "REPLY ") || !strings.Contains(writes[1], "Starting the explicitly admitted work.")) {
+	if backend == work.BackendClaude && (!strings.HasPrefix(writes[1], "CREATE ") || !strings.Contains(writes[1], "Starting the explicitly admitted work.")) {
 		t.Fatalf("intermediate Claude text was lost or reordered: %s", writes[1])
 	}
 }

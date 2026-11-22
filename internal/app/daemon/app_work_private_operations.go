@@ -12,6 +12,11 @@ import (
 
 func (a *App) handleTeamPrivateOperation(ctx context.Context, source teamHumanSource, action control.Action) (string, error) {
 	switch action.Kind {
+	case control.ActionSendFile:
+		if len(strings.Fields(action.Text)) == 1 {
+			return a.queuePrivatePanel(ctx, source, "file-help", "")
+		}
+		return a.handleTeamNativeCommand(ctx, source, action)
 	case control.ActionStop:
 		return a.applyTeamPrivateStop(ctx, source, 0, false)
 	case control.ActionModelCommand, control.ActionReasoningCommand, control.ActionModeCommand, control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand, control.ActionAccessCommand, control.ActionPlanCommand, control.ActionVerboseCommand:
@@ -135,8 +140,12 @@ func teamMenuToolCommand(action string, form map[string]any) (control.Action, bo
 }
 
 func parseTeamPrivateCommand(text string) (control.Action, bool) {
+	text = strings.TrimSpace(text)
 	if command, known := control.ParseFeishuTextActionWithoutCatalog(text); known {
 		return command, true
+	}
+	if fields := strings.Fields(text); len(fields) > 1 && fields[0] == "/sendfile" {
+		return control.Action{Kind: control.ActionSendFile, Text: text}, true
 	}
 	for _, command := range []struct {
 		prefix string

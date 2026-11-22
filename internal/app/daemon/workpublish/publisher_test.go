@@ -38,6 +38,11 @@ func (f *fakePublisher) PublishText(_ context.Context, req feishu.ProjectPublish
 
 func publisherFixture(t *testing.T) (*workstore.Store, *fakePublisher, *Publisher, *time.Time) {
 	t.Helper()
+	return publisherFixtureWithScope(t, work.ScopePersonal)
+}
+
+func publisherFixtureWithScope(t *testing.T, kind work.ScopeKind) (*workstore.Store, *fakePublisher, *Publisher, *time.Time) {
+	t.Helper()
 	ctx := context.Background()
 	now := time.Date(2026, 11, 21, 1, 0, 0, 0, time.UTC)
 	store, err := workstore.Open(ctx, filepath.Join(t.TempDir(), "work.db"))
@@ -55,7 +60,21 @@ func publisherFixture(t *testing.T) (*workstore.Store, *fakePublisher, *Publishe
 		if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "role", GatewayRef: "gateway", AppID: "app", IdentityGeneration: 1}, 0); err != nil {
 			return err
 		}
-		return tx.PutScope(work.WorkScope{ID: "scope", Kind: work.ScopePersonal, RoleID: "role", PrincipalID: "human", Revision: 1}, 0)
+		scope := work.WorkScope{ID: "scope", Kind: kind, RoleID: "role", PrincipalID: "human", Revision: 1}
+		if kind == work.ScopeProject {
+			scope.TeamID, scope.ProjectID = "team", "project"
+			scope.PrincipalID, scope.RoleID = "", ""
+			if err := putFixtureTeam(tx); err != nil {
+				return err
+			}
+		}
+		if err := tx.PutScope(scope, 0); err != nil {
+			return err
+		}
+		if kind == work.ScopeProject {
+			return putFixtureProject(tx, scope)
+		}
+		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -174,4 +193,21 @@ func TestStaleIdentityStopsItsPublicationWithoutBlockingAnother(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func putFixtureTeam(tx *workstore.Tx) error {
+	if err := tx.PutTeam(work.Team{ID: "team", Name: "Team", LeaderRoleID: "role", Revision: 1}, 0); err != nil {
+		return err
+	}
+	return tx.PutTeamMember(work.TeamMember{TeamID: "team", RoleID: "role", Active: true, Revision: 1}, 0)
+}
+
+func putFixtureProject(tx *workstore.Tx, scope work.WorkScope) error {
+	if err := tx.PutProject(work.Project{ID: "project", ScopeID: scope.ID, TeamID: "team", Name: "Project", LeaderRoleID: "role", State: work.ProjectActive, Revision: 1}, 0); err != nil {
+		return err
+	}
+	if err := tx.PutProjectChannelBinding(work.ProjectChannelBinding{ProjectID: "project", Tenant: "tenant", ChatID: "oc_chat", Purpose: "main", BindingGeneration: 1, Active: true}, 0); err != nil {
+		return err
+	}
+	return tx.PutProjectMember(work.ProjectMember{ProjectID: "project", RoleID: "role", State: work.ProjectMemberReady, BotGeneration: 1, Revision: 1}, 0)
 }

@@ -23,6 +23,7 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 	r := a.teamRuntime
 	var asset workservice.SavedDocumentAsset
 	var operation work.Operation
+	var replyToMessageID string
 	perform := false
 	err := r.store.Within(ctx, func(tx *workstore.Tx) error {
 		if err := tx.ValidateViewInteraction(view, interaction); err != nil {
@@ -31,6 +32,9 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 		scope, err := tx.GetScope(view.ScopeID)
 		if err != nil {
 			return err
+		}
+		if scope.Kind != work.ScopePersonal {
+			replyToMessageID = interaction.Envelope.MessageID
 		}
 		if scope.Kind == work.ScopeProject {
 			if err = tx.RequireProjectPrincipalAccess(scope.ID, interaction.PrincipalID, time.Now()); err != nil {
@@ -85,7 +89,7 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 		} else if e != workstore.ErrNotFound {
 			return e
 		}
-		raw, _ := json.Marshal(map[string]any{"version_id": version.ID, "asset": index, "asset_sha256": asset.SHA256, "view_id": view.ID, "interaction_id": interaction.ID, "binding": view.Binding, "chat_id": view.ChatID, "reply_to_message_id": interaction.Envelope.MessageID})
+		raw, _ := json.Marshal(map[string]any{"version_id": version.ID, "asset": index, "asset_sha256": asset.SHA256, "view_id": view.ID, "interaction_id": interaction.ID, "binding": view.Binding, "chat_id": view.ChatID, "reply_to_message_id": replyToMessageID})
 		intent := work.NewContent(id+":request", view.ScopeID, "application/json", raw, time.Now().UTC())
 		if err = tx.PutContent(intent); err != nil {
 			return err
@@ -187,7 +191,7 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 	if err != nil {
 		return a.recordArtifactFileFailure(ctx, operation.ID, err)
 	}
-	receipt, err := gateway.ProjectChatAPI().PublishResultFile(ctx, feishu.PublishResultFileRequest{ChatID: view.ChatID, ReplyToMessageID: interaction.Envelope.MessageID, ReplyInThread: replyInThread, FileKey: key, UUID: operation.ID})
+	receipt, err := gateway.ProjectChatAPI().PublishResultFile(ctx, feishu.PublishResultFileRequest{ChatID: view.ChatID, ReplyToMessageID: replyToMessageID, ReplyInThread: replyInThread, FileKey: key, UUID: operation.ID})
 	if err != nil {
 		return a.recordArtifactFileFailure(ctx, operation.ID, err)
 	}
