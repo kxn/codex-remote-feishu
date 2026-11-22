@@ -165,6 +165,7 @@ func canonicalizeInstallStatePaths(state *InstallState) {
 	state.StatePath = canonicalInstallStatePath(state.StatePath)
 	state.ServiceUnitPath = canonicalInstallStatePath(state.ServiceUnitPath)
 	state.CurrentBinaryPath = canonicalInstallStatePath(state.CurrentBinaryPath)
+	state.CodexHome = canonicalInstallStatePath(state.CodexHome)
 	state.VersionsRoot = canonicalInstallStatePath(state.VersionsRoot)
 	state.VSCodeSettingsPath = canonicalInstallStatePath(state.VSCodeSettingsPath)
 	state.BundleEntrypoint = canonicalInstallStatePath(state.BundleEntrypoint)
