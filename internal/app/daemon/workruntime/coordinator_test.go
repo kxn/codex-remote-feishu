@@ -74,6 +74,7 @@ func newFixture(t *testing.T, backend work.Backend, review ...bool) *fixture {
 		return nil
 	}})
 	var reviewIngress string
+	authenticatedPrivate := len(review) > 1 && review[1]
 	f.tx(func(tx *workstore.Tx) error {
 		if err := tx.PutPrincipal(work.Principal{ID: "principal", DisplayName: "Person", Revision: 1}, 0); err != nil {
 			return err
@@ -82,11 +83,14 @@ func newFixture(t *testing.T, backend work.Backend, review ...bool) *fixture {
 			return err
 		}
 		principalID := "principal"
-		if len(review) > 0 && review[0] {
+		if len(review) > 0 && review[0] || authenticatedPrivate {
 			if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "role", GatewayRef: "gateway", AppID: "app", IdentityGeneration: 1}, 0); err != nil {
 				return err
 			}
 			raw := work.RawIngressEnvelope{GatewayRef: "gateway", AppID: "app", EventID: "review-event", Tenant: "tenant", ChatID: "private-chat", ChatType: "p2p", MessageID: "review-human-message", SenderType: "user", SenderIDs: work.SenderIDs{OpenID: "review-human"}, MessageType: "text", RawContent: `{"text":"/review"}`, ReceivedAt: f.now}
+			if authenticatedPrivate && !review[0] {
+				raw.EventID, raw.MessageID, raw.RawContent = "private-human-event", "om_user", `{"text":"work input"}`
+			}
 			ingress, _, err := tx.AcceptRawIngress(raw, work.IngressGateway{GatewayRef: "gateway", AppID: "app", RoleID: "role", BotGeneration: 1})
 			if err != nil {
 				return err
@@ -122,16 +126,26 @@ func newFixture(t *testing.T, backend work.Backend, review ...bool) *fixture {
 			wc.Purpose = work.PurposeReview
 			wc.Review = &work.ReviewSpec{SourceContextID: "review-source", ResourceScopeID: "scope", LocationID: "location", LocationGeneration: 1, Target: agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges}, Source: reviewSource}
 		}
+		if len(review) > 2 && review[2] {
+			if err := tx.PutContext(work.WorkContext{ID: "control-source", ScopeID: "scope", RoleID: "role", Workstream: "control-source", Revision: 1}, 0); err != nil {
+				return err
+			}
+			wc.Purpose, wc.ControlTargetContextID = work.PurposeControl, "control-source"
+		}
 		if err := tx.PutContext(wc, 0); err != nil {
 			return err
 		}
-		if len(review) == 0 || !review[0] {
+		if (len(review) == 0 || !review[0]) && !authenticatedPrivate {
 			if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "role", GatewayRef: "gateway", AppID: "app", IdentityGeneration: 1}, 0); err != nil {
 				return err
 			}
 		}
 		if len(review) == 0 || !review[0] {
-			if err := tx.PutLocation(work.ExecutionLocation{ID: "location", HostID: "host", Cwd: t.TempDir(), Generation: 1, Revision: 1}, 0); err != nil {
+			location := work.ExecutionLocation{ID: "location", HostID: "host", Cwd: t.TempDir(), Generation: 1, Revision: 1}
+			if len(review) > 2 && review[2] {
+				location.IsolatedContextID = wc.ID
+			}
+			if err := tx.PutLocation(location, 0); err != nil {
 				return err
 			}
 		}
@@ -148,7 +162,15 @@ func newFixture(t *testing.T, backend work.Backend, review ...bool) *fixture {
 				PlatformKey:  &work.MessageKey{Tenant: "tenant", ChatID: "private-chat", MessageID: "om_user"},
 				Observations: []work.Observation{{AppID: "app", IdentityGeneration: 1, ReceivedAt: f.now}}, BodyRef: "source-body", Revision: 1, CreatedAt: f.now,
 			}
-			if _, _, err := tx.AcceptMessage(message, []work.Inbox{input}); err != nil {
+			inputs := []work.Inbox{input}
+			if len(review) > 2 && review[2] {
+				original := input
+				original.ID, original.RecipientContextID = "original-control-input", "control-source"
+				original.EventID = "original-control-event"
+				input.ControlOfInputID = original.ID
+				inputs = []work.Inbox{original, input}
+			}
+			if _, _, err := tx.AcceptMessage(message, inputs); err != nil {
 				return err
 			}
 		} else if err := tx.PutInbox(input, 0); err != nil {
@@ -166,6 +188,11 @@ func newFixture(t *testing.T, backend work.Backend, review ...bool) *fixture {
 	binding.AttemptID = "attempt"
 	binding.RunRef = "run"
 	f.command = agentproto.Command{CommandID: "command", Kind: agentproto.CommandPromptSend, Execution: &binding, InstructionRevision: "v1", Target: agentproto.Target{ThreadID: "session", CWD: "/workspace"}, Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "work input"}}}}
+	// A fourth optional fixture flag selects a genuine new-session prompt.
+	if len(review) > 3 && review[3] {
+		f.command.Target.ThreadID = ""
+		f.command.Target.ExecutionMode = agentproto.PromptExecutionModeStartNew
+	}
 	f.tx(func(tx *workstore.Tx) error {
 		operation, err := f.operation(tx, f.command)
 		if err != nil {

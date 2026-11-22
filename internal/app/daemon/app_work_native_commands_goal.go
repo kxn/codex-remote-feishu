@@ -10,12 +10,12 @@ import (
 func parseTeamGoal(text string) (agentproto.CommandKind, agentproto.GoalCommand, error) {
 	fields := strings.Fields(text)
 	goal := agentproto.GoalCommand{Purpose: "user_control"}
-	if len(fields) <= 1 || fields[1] == "status" {
+	if len(fields) <= 1 || len(fields) == 2 && strings.EqualFold(fields[1], "status") {
 		return agentproto.CommandThreadGoalGet, goal, nil
 	}
-	switch fields[1] {
+	switch strings.ToLower(fields[1]) {
 	case "clear", "stop":
-		if len(fields) != 2 {
+		if len(fields) != 2 && !(len(fields) == 3 && fields[2] == "--confirm") {
 			return "", goal, fmt.Errorf("用法：/goal clear")
 		}
 		return agentproto.CommandThreadGoalClear, goal, nil
@@ -24,7 +24,7 @@ func parseTeamGoal(text string) (agentproto.CommandKind, agentproto.GoalCommand,
 			return "", goal, fmt.Errorf("用法：/goal pause 或 /goal resume")
 		}
 		goal.Status = "paused"
-		if fields[1] == "resume" {
+		if strings.EqualFold(fields[1], "resume") {
 			goal.Status = "active"
 		}
 		return agentproto.CommandThreadGoalSet, goal, nil
@@ -41,6 +41,9 @@ func parseTeamGoal(text string) (agentproto.CommandKind, agentproto.GoalCommand,
 				budget = fields[index]
 			} else if strings.HasPrefix(word, "--budget=") {
 				budget = strings.TrimPrefix(word, "--budget=")
+				if budget == "" {
+					return "", goal, fmt.Errorf("--budget 后需要正整数")
+				}
 			}
 			if budget != "" {
 				if goal.TokenBudget != nil {

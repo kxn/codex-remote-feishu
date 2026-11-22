@@ -94,6 +94,15 @@ func TestCodexProtocolNotificationBeforeResponseAndTwoTurnContinuation(t *testin
 	clear := goal
 	clear.CommandID = "goal-clear"
 	clear.Kind = agentproto.CommandThreadGoalClear
+	f.tx(func(tx *workstore.Tx) error {
+		worker, err := tx.GetWorker("worker")
+		if err != nil {
+			return err
+		}
+		snapshot, err := tx.CaptureGoalControlSnapshot(worker, f.carrier)
+		clear.Goal = agentproto.GoalCommand{Expected: snapshot}
+		return err
+	})
 	f.registerExtra(clear)
 	frames, err = translator.TranslateCommand(clear)
 	if err != nil {

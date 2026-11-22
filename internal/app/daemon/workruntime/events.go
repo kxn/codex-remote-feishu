@@ -123,8 +123,19 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 	if workdisplay.IsOutput(event) {
 		return "", c.applyNativeOutput(tx, carrier, event)
 	}
-	if event.Kind == agentproto.EventThreadGoalCommandResult && event.Execution != nil && event.Execution.AttemptID == "" && event.Execution.RunRef == "" {
-		return "", c.applyOwnerGoalReceipt(tx, carrier, event)
+	if event.Kind == agentproto.EventThreadGoalUpdated {
+		if handled, err := c.applyIdleGoalObservation(tx, carrier, event); handled || err != nil {
+			return "", err
+		}
+	}
+	if event.Kind == agentproto.EventThreadGoalCommandResult && event.CommandID != "" {
+		command, e := tx.ResolveNativeCommand(carrier.Incarnation, event.CommandID)
+		if e != nil {
+			return "", e
+		}
+		if command.Kind == agentproto.CommandThreadGoalGet || command.Kind == agentproto.CommandThreadGoalClear || command.Binding.AttemptID == "" && command.Binding.RunRef == "" {
+			return "", c.applyOwnerGoalReceipt(tx, carrier, event)
+		}
 	}
 	if event.Kind == agentproto.EventNativeMaintenanceStarted || event.Kind == agentproto.EventNativeMaintenanceTerminal {
 		return "", c.applyMaintenanceEvent(tx, carrier, event)
@@ -257,7 +268,11 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 				return "", c.gate(tx, carrier, binding.AttemptID, "continuation_authorization_incomplete")
 			}
 		}
-		if err := tx.PutContinuationGrant(workstore.ContinuationGrant{AuthorizationKind: source.Kind, SourceTurnID: source.TurnID, BudgetSource: source.BudgetSource, Source: source.Source, Incarnation: carrier.Incarnation, SessionID: event.ThreadID, Binding: binding, CommandID: commandID, GoalVersion: version, Active: active, ConfirmedSequence: event.Journal.Sequence, Reconciled: true, TokenBudget: budget, Objective: objective}); err != nil {
+		status := ""
+		if event.ThreadGoal != nil {
+			status = event.ThreadGoal.Status
+		}
+		if err := tx.PutContinuationGrant(workstore.ContinuationGrant{Status: status, AuthorizationKind: source.Kind, SourceTurnID: source.TurnID, BudgetSource: source.BudgetSource, Source: source.Source, Incarnation: carrier.Incarnation, SessionID: event.ThreadID, Binding: binding, CommandID: commandID, GoalVersion: version, Active: active, ConfirmedSequence: event.Journal.Sequence, Reconciled: true, TokenBudget: budget, Objective: objective}); err != nil {
 			return "", err
 		}
 		if current && event.ThreadGoal != nil && event.ThreadGoal.Status == "budget_exhausted" {

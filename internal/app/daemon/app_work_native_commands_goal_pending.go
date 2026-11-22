@@ -8,23 +8,31 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worksettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workui"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
 func (a *App) queueTeamIdleGoal(ctx context.Context, source teamHumanSource, goal agentproto.GoalCommand) (string, error) {
+	viewID := workui.ID(source.Key, "session-goal", "overview")
 	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		front, _, e := worksettings.FrozenContext(tx, source.Authority)
 		if e != nil {
 			return e
 		}
+		if e = a.validateTeamGoalSourceSnapshot(tx, source); e != nil {
+			return e
+		}
 		_, _, e = tx.QueueSessionGoalIntent(teamID("user-goal-intent", source.Key), front.ID, goal, source.Authority, time.Now().UTC())
-		return e
+		if e != nil {
+			return e
+		}
+		return a.queueTeamGoalIntentPendingTx(tx, source, teamID("user-goal-intent", source.Key), viewID)
 	})
 	if err != nil {
 		return "", err
 	}
-	return a.queuePrivatePanel(ctx, source, "status", "会话目标已排队，开始实际执行后生效；暂停中的工作会继续等待。")
+	return viewID, nil
 }
 func (a *App) dispatchTeamPendingGoals(ctx context.Context) error {
 	var list []work.Operation

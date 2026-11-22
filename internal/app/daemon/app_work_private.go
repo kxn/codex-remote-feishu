@@ -63,10 +63,12 @@ func (h teamPrivateCommands) Handle(ctx context.Context, command work.TypedComma
 			receipt, err = a.queuePrivatePanel(ctx, source, "help", "")
 		case control.ActionStatus:
 			receipt, err = a.queuePrivatePanel(ctx, source, "status", "")
-		case control.ActionShowHistory, control.ActionShowThreads, control.ActionShowAllThreads:
+		case control.ActionShowHistory:
+			receipt, err = a.queueTeamCurrentHistory(ctx, source)
+		case control.ActionShowThreads, control.ActionShowAllThreads:
 			receipt, err = a.queuePrivatePanel(ctx, source, "contexts", "")
 		case control.ActionListInstances:
-			receipt, err = a.queuePrivatePanel(ctx, source, "workers", "")
+			receipt, err = a.queuePrivatePanel(ctx, source, "workspace", "")
 		case control.ActionNewThread:
 			err = a.navigateFromSource(ctx, source, "new", "", "", 0)
 			if err == nil {

@@ -19,6 +19,8 @@ func (c Command) IsOwnerOnlyRuntimeCommand() bool {
 	switch c.Kind {
 	case CommandRuntimeInspect, CommandProcessExit, CommandModelList, CommandThreadGoalGet, CommandThreadGoalClear, CommandRuntimeMCPRead, CommandMCPOAuthLogin:
 		return true
+	case CommandThreadGoalSet:
+		return c.Goal.Status == "paused" && c.Goal.Expected != nil && c.Goal.Expected.GoalVersion > 0 && c.Goal.Objective == c.Goal.Expected.Objective && c.Goal.TokenBudget != nil && *c.Goal.TokenBudget == c.Goal.Expected.TokenBudget
 	case CommandThreadCompactStart:
 		return c.Maintenance != nil && c.Maintenance.Version == NativeMaintenanceProtocolVersion && c.Maintenance.PreflightInspectionCommandID != "" && c.Maintenance.NativeWriteWatermark > 0
 	}

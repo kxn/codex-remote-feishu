@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -96,25 +97,47 @@ func nextSettings(snapshot Snapshot, request UpdateRequest) (state.BotCapability
 		next.PromptOverride.Model = ""
 		next.PromptOverride.ReasoningEffort = ""
 	} else if request.Model != nil && model != "" || request.Reasoning != nil && effort != "" {
-		if changedProfile || snapshot.CatalogBackend != backend || snapshot.CatalogProfileID != profile.ID {
-			return next, fmt.Errorf("the selected profile has no current matching model catalog; choose the profile first, then refresh its model list")
-		}
-		if model == "" && snapshot.Catalog != nil {
+		if model == "" && snapshot.Catalog != nil && snapshot.CatalogBackend == backend && snapshot.CatalogProfileID == profile.ID {
 			for _, entry := range snapshot.Catalog.Entries {
 				if entry.IsDefault && !entry.Hidden {
 					model = entry.Model
+					if model == "" {
+						model = entry.ID
+					}
 					break
 				}
 			}
 		}
-		canonicalModel, canonicalEffort, err := orchestrator.ValidateCatalogSelection(backend, snapshot.Catalog, model, effort)
-		if err != nil {
-			return next, err
+		if request.ManualSelection && backend != agentproto.BackendOpenCode {
+			model, effort, err := manualModelSelection(snapshot, backend, profile.ID, model, effort)
+			if err != nil {
+				return next, err
+			}
+			if next.PromptOverride.Model != "" {
+				next.PromptOverride.Model = model
+			}
+			next.PromptOverride.ReasoningEffort = effort
+		} else {
+			if changedProfile || snapshot.CatalogBackend != backend || snapshot.CatalogProfileID != profile.ID {
+				return next, fmt.Errorf("the selected profile has no current matching model catalog; choose the profile first, then refresh its model list")
+			}
+			if model == "" && snapshot.Catalog != nil {
+				for _, entry := range snapshot.Catalog.Entries {
+					if entry.IsDefault && !entry.Hidden {
+						model = entry.Model
+						break
+					}
+				}
+			}
+			canonicalModel, canonicalEffort, err := orchestrator.ValidateCatalogSelection(backend, snapshot.Catalog, model, effort)
+			if err != nil {
+				return next, err
+			}
+			if next.PromptOverride.Model != "" {
+				next.PromptOverride.Model = canonicalModel
+			}
+			next.PromptOverride.ReasoningEffort = canonicalEffort
 		}
-		if next.PromptOverride.Model != "" {
-			next.PromptOverride.Model = canonicalModel
-		}
-		next.PromptOverride.ReasoningEffort = canonicalEffort
 	}
 	if backend == agentproto.BackendOpenCode && request.Model != nil && *request.Model != "" {
 		return next, fmt.Errorf("OpenCode model selection belongs to its explicit profile/session configuration")
@@ -129,4 +152,32 @@ func nextSettings(snapshot Snapshot, request UpdateRequest) (state.BotCapability
 		return next, fmt.Errorf("invalid Bot settings selection")
 	}
 	return normalized, nil
+}
+
+// Explicit typed values remain usable when discovery is incomplete. A known
+// model's advertised limits still apply; acceptance does not prove backend support.
+func manualModelSelection(snapshot Snapshot, backend agentproto.Backend, profileID, model, effort string) (string, string, error) {
+	if len(model) > 256 || strings.ContainsAny(model, " \t\r\n\x00") {
+		return "", "", fmt.Errorf("请输入有效的模型名称")
+	}
+	matching := snapshot.CatalogBackend == backend && snapshot.CatalogProfileID == profileID
+	if matching && snapshot.Catalog != nil && !snapshot.Catalog.Unsupported && snapshot.Catalog.ErrorMessage == "" {
+		entry, found := orchestrator.ModelCatalogEntryForModel(snapshot.Catalog, model)
+		if found {
+			if entry.Hidden {
+				return "", "", fmt.Errorf("所选模型当前不可用")
+			}
+			if effort == "" || len(entry.SupportedReasoningEfforts) > 0 {
+				return orchestrator.ValidateCatalogSelection(backend, snapshot.Catalog, model, effort)
+			}
+		}
+	}
+	if effort != "" {
+		normalized, ok := control.NormalizeReasoningEffortForBackend(backend, effort)
+		if !ok {
+			return "", "", fmt.Errorf("推理强度无效：%s", control.ReasoningEffortHintForBackend(backend))
+		}
+		effort = normalized
+	}
+	return model, effort, nil
 }

@@ -40,7 +40,7 @@ func Apply(tx *workstore.Tx, carrier workstore.CarrierRegistration, binding agen
 		return err
 	}
 	context, err := tx.GetContext(binding.ContextID)
-	if err != nil || context.Purpose == work.PurposeReview || context.Purpose == work.PurposeControl {
+	if err != nil || context.Purpose == work.PurposeReview || context.Purpose == work.PurposeControl && (event.Kind != agentproto.EventTurnCompleted || event.Status != "failed") {
 		return err
 	}
 	if event.TurnID == "" {
@@ -161,6 +161,9 @@ func (p *projection) apply() error {
 			return nil
 		}
 		p.display.StartedAt = p.now
+		if p.display.Progress.Verbosity == state.SurfaceVerbosityQuiet {
+			return nil
+		}
 		return p.progressStatus("已开始", "正在处理请求", "running")
 	case agentproto.EventTurnCompleted:
 		return p.finish()
@@ -283,6 +286,9 @@ func (p *projection) finish() error {
 	}
 	if text == "" {
 		if p.display.HadOutput {
+			if len(p.display.SeenMessages) != 0 {
+				return p.notice("执行已结束", "本轮没有返回最终答复。已返回的阶段内容仍然保留。")
+			}
 			return nil
 		}
 		return p.notice("执行已结束", "本轮没有返回可显示的答复。")
@@ -291,11 +297,12 @@ func (p *projection) finish() error {
 }
 
 func failureMessage(event agentproto.Event, next string) string {
-	if problem := event.Problem; problem != nil && problem.Code != "" {
-		message := strings.TrimSpace(problem.Message)
-		if message, _, _ := strings.Cut(message, "\n"); message != "" {
-			return xutil.TruncateRunes(message, 700, xutil.TruncateOptions{}) + "\n" + next
-		}
+	message := strings.TrimSpace(event.ErrorMessage)
+	if problem := event.Problem; problem != nil && strings.TrimSpace(problem.Message) != "" {
+		message = strings.TrimSpace(problem.Message)
+	}
+	if message, _, _ := strings.Cut(message, "\n"); message != "" {
+		return xutil.TruncateRunes(message, 700, xutil.TruncateOptions{}) + "\n" + next
 	}
 	return "本轮未完成。" + next
 }

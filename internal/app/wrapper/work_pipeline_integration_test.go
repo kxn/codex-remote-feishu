@@ -461,7 +461,16 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 			return e
 		}
 		if input.State != work.InboxProcessed {
-			return fmt.Errorf("explicit reported SDK input not processed")
+			return fmt.Errorf("SDK input not processed after native settlement")
+		}
+		if !group {
+			report, e := tx.GetProcessingReport(saved.ID)
+			if e != nil {
+				return e
+			}
+			if report.WorkDisposition != "unknown" || report.OutcomeRef == "" {
+				return fmt.Errorf("ordinary native answer lacks bounded private receipt: %+v", report)
+			}
 		}
 		worker, e := tx.GetWorker(saved.RunRef.WorkerID)
 		if e != nil {

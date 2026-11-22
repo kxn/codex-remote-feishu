@@ -69,7 +69,7 @@ func FrozenContext(tx *workstore.Tx, source workstore.PrivateActionSource) (work
 		if err != nil {
 			return context, navigation, err
 		}
-		if current.Revision != navigation || current.FrontContextID != context.ID {
+		if current.Revision != navigation {
 			return context, navigation, fmt.Errorf("private context changed; use the current settings view")
 		}
 	}

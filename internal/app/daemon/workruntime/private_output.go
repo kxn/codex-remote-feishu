@@ -10,7 +10,7 @@ import (
 )
 
 func (c *Coordinator) applyNativeOutput(tx *workstore.Tx, carrier workstore.CarrierRegistration, event agentproto.Event) error {
-	if event.TrafficClass == agentproto.TrafficClassInternalHelper || event.ThreadID == "" || event.TurnID == "" {
+	if event.TrafficClass == agentproto.TrafficClassInternalHelper || event.Initiator.Kind == agentproto.InitiatorInternalHelper || event.ThreadID == "" || event.TurnID == "" {
 		return nil
 	}
 	scope, err := tx.GetScope(carrier.Owner.ScopeID)
@@ -42,7 +42,7 @@ func (c *Coordinator) applyNativeOutput(tx *workstore.Tx, carrier workstore.Carr
 }
 
 func (c *Coordinator) applyPrivateDisplay(tx *workstore.Tx, carrier workstore.CarrierRegistration, binding agentproto.ExecutionBinding, event agentproto.Event) error {
-	if event.TrafficClass == agentproto.TrafficClassInternalHelper || binding.AttemptID == "" {
+	if event.TrafficClass == agentproto.TrafficClassInternalHelper || event.Initiator.Kind == agentproto.InitiatorInternalHelper || binding.AttemptID == "" {
 		return nil
 	}
 	return workdisplay.Apply(tx, carrier, binding, event, c.options.Clock())

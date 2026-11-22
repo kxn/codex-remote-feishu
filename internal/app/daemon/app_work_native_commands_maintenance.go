@@ -55,6 +55,12 @@ func (a *App) runTeamNativeCommands(ctx context.Context) error {
 		return err
 	}
 	var failures []error
+	if err := a.advanceTeamGoalUI(ctx, time.Now().UTC()); err != nil {
+		failures = append(failures, err)
+	}
+	if err := a.advanceTeamMCPReads(ctx, time.Now().UTC()); err != nil {
+		failures = append(failures, err)
+	}
 	if a.teamRuntime.host != nil {
 		if err := a.teamRuntime.host.RunCompactions(ctx, 16); err != nil {
 			failures = append(failures, err)

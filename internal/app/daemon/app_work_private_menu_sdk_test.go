@@ -196,11 +196,11 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 	follow := func(card, id, action, argument string, form map[string]any) string {
 		t.Helper()
 		value := menuSDKAction(t, card, action, argument)
-		if ack := click(id, messageID, value, form); !strings.Contains(ack, "已收到") {
-			t.Fatalf("%s callback ack %s", id, ack)
+		if ack := click(id, messageID, value, form); !strings.Contains(ack, "已收到") || strings.Contains(ack, `"card"`) {
+			t.Fatalf("%s callback must only ACK receipt: %s", id, ack)
 		}
 		if e := a.processTeamInteractions(ctx); e != nil {
-			t.Fatal(e)
+			t.Fatalf("%s (%s): %v", id, action, e)
 		}
 		return publish()
 	}
@@ -231,6 +231,14 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 			t.Fatalf("menu missing %s", group)
 		}
 	}
+	home, extraPatches := exercisePrivateMenuSDKPages(t, home, profile.ID, follow)
+	pickerTx(t, a, func(tx *workstore.Tx) error {
+		inputs, err := tx.ListInbox(original.PersonalScopeID)
+		if err == nil && len(inputs) != 0 {
+			t.Fatalf("menu navigation/settings created business input: %+v", inputs)
+		}
+		return err
+	})
 	settings := follow(home, "settings", "private.settings", "", nil)
 	selection := follow(settings, "model", "settings.page", "model", nil)
 	if !strings.Contains(selection, model) || !strings.Contains(selection, `"initial_option":"clear"`) {
@@ -289,8 +297,8 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 	}
 	workspace = follow(history, "history-workspace-back", "private.workspace", "", nil)
 	final := follow(workspace, "final-home", "private.menu", "", nil)
-	if creates.Load() != 1 || updates.Load() != 21 || entrySends.Load() != 1 {
-		t.Fatalf("one menu card and twenty-one SDK patches required, got %d creates + %d patches + %d entries", creates.Load(), updates.Load(), entrySends.Load())
+	if creates.Load() != 1 || updates.Load() != 21+extraPatches || entrySends.Load() != 1 {
+		t.Fatalf("one menu card and all navigation SDK patches required, got %d creates + %d patches + %d entries", creates.Load(), updates.Load(), entrySends.Load())
 	}
 	if ack := click("stale", messageID, menuSDKAction(t, home, "private.workspace", ""), nil); !strings.Contains(ack, "已过期") {
 		t.Fatalf("earlier view could act again: %s", ack)
@@ -307,7 +315,7 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 	}
 	_, _ = runtime.publisher.RunOnce(ctx, 16)
 	_, _ = runtime.publisher.RunOnce(ctx, 16)
-	if updates.Load() != 22 || creates.Load() != 1 {
+	if updates.Load() != 22+extraPatches || creates.Load() != 1 {
 		t.Fatalf("unknown PATCH retried or appended: %d/%d", updates.Load(), creates.Load())
 	}
 	openMenu("refresh-menu")
@@ -331,6 +339,7 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 	if literal := publish(); !strings.Contains(literal, "工作菜单") || creates.Load() != 3 || entrySends.Load() != 1 {
 		t.Fatalf("literal /menu reused an old topic or destination entry: creates=%d entries=%d card=%s", creates.Load(), entrySends.Load(), literal)
 	}
+	exercisePrivateMenuSDKShortcuts(t, event, func() error { return a.runTeamMenus(ctx) }, publish)
 }
 
 func menuSDKAction(t *testing.T, card, action, setting string) map[string]any {

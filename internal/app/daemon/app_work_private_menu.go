@@ -63,16 +63,16 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 		if err != nil {
 			return panel, err
 		}
-		readyCodex, runningCodex := false, false
+		readyNative, runningCodex := false, false
 		for _, worker := range workers {
 			if worker.ContextID != nav.FrontContextID {
 				continue
 			}
 			running = running || worker.State == work.WorkerBusy
+			readyNative = readyNative || worker.State == work.WorkerReady && worker.NativeSessionID != ""
 			if worker.Backend != work.BackendCodex || worker.NativeSessionID == "" {
 				continue
 			}
-			readyCodex = readyCodex || worker.State == work.WorkerReady
 			runningCodex = runningCodex || worker.State == work.WorkerBusy
 		}
 		if pending || running {
@@ -88,7 +88,7 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 		if runningCodex && pending {
 			add("将待办追加到当前执行", "private.steer")
 		}
-		if readyCodex {
+		if readyNative {
 			add("压缩当前会话上下文", "private.compact")
 		}
 	case "workspace":
@@ -112,9 +112,9 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 		panel.Title = "常用工具"
 		add("查看会话历史", "private.contexts")
 		add("发送工作目录里的文件", "private.file-help")
+		add("审阅代码变更", "private.review")
+		add("MCP 服务与登录", "private.mcp")
 		if backend == "" || backend == agentproto.BackendCodex {
-			add("审阅代码变更", "private.review")
-			add("MCP 服务与登录", "private.mcp")
 			add("会话目标", "private.goal-help")
 		}
 		add("自动检查未完成工作", "automation.autowhip.status")
@@ -137,7 +137,11 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 	case "mcp":
 		panel.Title = "MCP 服务与登录"
 		panel.Paragraphs = append(panel.Paragraphs, "会话启动后可以查看加载的服务，并为需要授权的服务发起登录。")
-		input("mcp_server", "服务名", "发起登录", "private.mcp-login")
+		if backend == "" || backend == agentproto.BackendCodex {
+			input("mcp_server", "服务名", "发起登录", "private.mcp-login")
+		} else {
+			panel.Paragraphs = append(panel.Paragraphs, "当前后端未提供原生 OAuth 登录入口；需要认证时请按该服务的登录方式操作。")
+		}
 		add("查看已加载的服务", "private.mcp-status")
 		add("查看登录进度", "private.mcp-auth-status")
 		add("返回常用工具", "private.tools")
@@ -159,8 +163,9 @@ func teamPrivateMenuPanel(tx *workstore.Tx, source teamHumanSource, nav work.Pri
 			"/stop 停止当前私人执行并取消已排队的私人输入，随后可直接发送新消息",
 			"/mode 切换执行后端 · /model 查看模型 · /reasoning 调整推理强度 · /access 设置权限 · /plan 设置计划模式 · /verbose 设置详细程度",
 			"/sendfile <文件路径> 从已选目录发送文件 · /admin 查看管理入口 · /upgrade 查看升级")
+		panel.Paragraphs = append(panel.Paragraphs, "/compact 整理空闲会话上下文 · /review 审查代码 · /mcp status 查看服务")
 		if backend == "" || backend == agentproto.BackendCodex {
-			panel.Paragraphs = append(panel.Paragraphs, "/compact 压缩空闲会话 · /steerall 将待办追加到运行中的执行 · /review 审查代码 · /mcp status 查看服务 · /goal 查看会话目标")
+			panel.Paragraphs = append(panel.Paragraphs, "/steerall 将待办追加到运行中的执行 · /goal 查看会话目标")
 		}
 	case string(work.AutomationWhip), string(work.AutomationContinue):
 		automation := work.AutomationKind(kind)

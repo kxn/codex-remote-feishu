@@ -55,6 +55,9 @@ func (a *App) runTeamRuntimeViews(ctx context.Context) error {
 			if gate.Reason == "snapshot_rebuild_required" {
 				return a.retireTeamRecoveryView(tx, current, true)
 			}
+			if runtimeGateStillReconciling(gate, time.Now()) {
+				return nil
+			}
 			_, e = a.queueTeamRecoveryView(tx, current, gate)
 			return e
 		})
@@ -106,7 +109,10 @@ func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession,
 	case "control_requested":
 		text = "正在核对旧执行的控制状态和后台任务。核查完成前保持暂停，不会重新开启已取消的原生接管流程。"
 	}
-	panel := workui.Panel{Title: role.Name + "的工作需要核对", Paragraphs: []string{text}, Buttons: []workui.Button{{Label: "重新核对", Action: "runtime.observe"}}}
+	panel := workui.Panel{Title: role.Name + "的工作需要核对", Paragraphs: []string{text}}
+	if gate.AttemptID != "" {
+		panel.Buttons = append(panel.Buttons, workui.Button{Label: "重新核对", Action: "runtime.observe"})
+	}
 	if canRecover {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "核查后恢复工作", Action: "runtime.recover"})
 	}
@@ -119,6 +125,9 @@ func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession,
 	}
 	card, err := workui.Card(view.ID, panel)
 	if err != nil {
+		return "", err
+	}
+	if err = reuseTeamRecoveryView(tx, &view); err != nil {
 		return "", err
 	}
 	_, err = workui.Queue(tx, view, card)
@@ -195,24 +204,11 @@ func (a *App) handleTeamRecoveryAction(ctx context.Context, interaction workstor
 		return fmt.Errorf("这个执行操作已不可用。")
 	}
 	return a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
-		notice := view
-		notice.ReplacesViewID = ""
-		notice.ID = workui.ID(interaction.ID, "runtime-result")
-		if action == "runtime.observe" {
-			notice.SurfaceKey = notice.ID
-		}
-		notice.Kind = "runtime.notice"
-		notice.ExternalMessageID = ""
-		notice.Invalidated = false
-		text := "本次执行状态核对已完成。仍未满足恢复条件的部分会继续保留，不会直接解除占用。"
-		if action == "runtime.recover" {
-			text = "恢复已登记。助手会重新准备执行环境，并先核查已有操作；原输入和已有成果都会保留。"
-		}
-		card, e := workui.Card(notice.ID, workui.Panel{Title: "执行操作已处理", Paragraphs: []string{text}})
+		worker, e := tx.GetWorker(state.Worker.ID)
 		if e != nil {
 			return e
 		}
-		if _, e = workui.Queue(tx, notice, card); e != nil {
+		if e = a.refreshTeamRecoveryView(tx, worker); e != nil {
 			return e
 		}
 		return tx.FinishHumanInteraction(interaction.ID, interaction.Revision, result)
@@ -265,4 +261,49 @@ func (a *App) retireTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession
 		}
 	}
 	return nil
+}
+
+// Reconciliation starts on every terminal turn, before asynchronous observation.
+// An unchanged gate retains CreatedAt in PutRuntimeGate, so repeated probes
+// cannot postpone a persistent problem indefinitely.
+func runtimeGateStillReconciling(gate workstore.RuntimeGate, now time.Time) bool {
+	return gate.Reason == "native_reconciliation" && gate.RecoveryReason == "" && now.Sub(gate.CreatedAt) < 30*time.Second
+}
+
+func reuseTeamRecoveryView(tx *workstore.Tx, next *workstore.UIView) error {
+	views, err := tx.ListUIViews(next.ScopeID)
+	if err != nil {
+		return err
+	}
+	for _, old := range views {
+		if old.Invalidated || old.SurfaceKey != next.SurfaceKey || old.Binding != next.Binding || old.Tenant != next.Tenant || old.ChatID != next.ChatID || old.PrincipalID != next.PrincipalID || old.ExternalMessageID == "" {
+			continue
+		}
+		operation, e := tx.GetOperation(old.OperationID)
+		if e != nil {
+			return e
+		}
+		if operation.State == work.OperationConfirmed {
+			next.ReplacesViewID = old.ID
+			return nil
+		}
+	}
+	return nil
+}
+
+// A successful control request only refreshes observed state; it never implies
+// that a remaining gate was cleared or that original work has finished.
+func (a *App) refreshTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession) error {
+	gate, err := tx.GetRuntimeGate(worker.ID)
+	if errors.Is(err, workstore.ErrNotFound) {
+		return a.retireTeamRecoveryView(tx, worker, false)
+	}
+	if err != nil {
+		return err
+	}
+	if gate.Reason == "snapshot_rebuild_required" {
+		return a.retireTeamRecoveryView(tx, worker, true)
+	}
+	_, err = a.queueTeamRecoveryView(tx, worker, gate)
+	return err
 }

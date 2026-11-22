@@ -40,7 +40,7 @@ func (t *Tx) ValidateSessionGoalInputConsumption(input work.Inbox) error {
 	if err = json.Unmarshal(body.Data, &event); err != nil {
 		return err
 	}
-	if event.Kind != agentproto.EventThreadGoalCommandResult || event.CommandID != intent.CommandID || event.Journal == nil || event.Journal.CarrierIncarnation != native.Incarnation || event.Execution == nil || *event.Execution != native.Binding || native.Binding.AttemptID != intent.AttemptID || event.ErrorMessage != "" || event.ThreadGoal == nil || event.ThreadGoal.Objective != intent.Goal.Objective || event.ThreadGoal.TokenBudget == nil || intent.Goal.TokenBudget == nil || *event.ThreadGoal.TokenBudget != *intent.Goal.TokenBudget {
+	if event.Kind != agentproto.EventThreadGoalCommandResult || event.CommandID != intent.CommandID || event.Journal == nil || event.Journal.CarrierIncarnation != native.Incarnation || event.Execution == nil || *event.Execution != native.Binding || native.Binding.AttemptID != intent.AttemptID || event.ErrorMessage != "" || event.ThreadGoal == nil || event.ThreadGoal.Objective != intent.Goal.Objective || (intent.Goal.Status != "" && event.ThreadGoal.Status != intent.Goal.Status) || event.ThreadGoal.TokenBudget == nil || intent.Goal.TokenBudget == nil || *event.ThreadGoal.TokenBudget != *intent.Goal.TokenBudget {
 		return ErrScopeDenied
 	}
 	persisted, err := t.GetRuntimeEvent(native.Incarnation, event.Journal.Sequence)

@@ -45,12 +45,14 @@ func ObserveProtocol(request InspectionRequest, input ProtocolInspection) (Nativ
 				Status struct {
 					Type string `json:"type"`
 				} `json:"status"`
+				Turns []codexInspectionTurn `json:"turns"`
 			} `json:"thread"`
 		}
 		if err := json.Unmarshal(result, &native); err != nil {
 			return observation, err
 		}
-		observation.NativeStopped = native.Thread.ID == request.SessionID && native.Thread.Status.Type == "idle" && background.NativeInputsComplete && background.PendingNativeInputs == 0 && len(background.ActiveNativeTurnIDs) == 0
+		stopped := native.Thread.Status.Type == "idle" || native.Thread.Status.Type == "systemError" && codexFailedTurnStopped(request.TurnID, native.Thread.Turns)
+		observation.NativeStopped = native.Thread.ID == request.SessionID && stopped && background.NativeInputsComplete && background.PendingNativeInputs == 0 && len(background.ActiveNativeTurnIDs) == 0
 		observation.NativeEvidence, _ = json.Marshal(input.Native)
 		result, err = matchRPC(input.Continuation, "thread/goal/get", request.SessionID)
 		if err != nil {

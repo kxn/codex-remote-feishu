@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,6 +16,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
+
+var errTeamNoNativeSession = errors.New("当前工作还没有原生会话；发送工作内容后会准备执行环境")
 
 func (a *App) handleTeamNativeCommand(ctx context.Context, source teamHumanSource, action control.Action) (string, error) {
 	switch action.Kind {
@@ -82,7 +85,7 @@ func (a *App) teamNativeTarget(tx *workstore.Tx, source teamHumanSource) (work.W
 		selected = worker
 	}
 	if selected.ID == "" {
-		return selected, workstore.CarrierRegistration{}, fmt.Errorf("当前工作还没有原生会话；发送工作内容后会准备执行环境")
+		return selected, workstore.CarrierRegistration{}, errTeamNoNativeSession
 	}
 	carrier, err := tx.GetCarrier(selected.CarrierIncarnation)
 	if err != nil {
@@ -124,9 +127,40 @@ func (a *App) inspectTeamNativeWorker(ctx context.Context, source teamHumanSourc
 	return a.queuePrivatePanel(ctx, source, "status", note)
 }
 func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action control.Action) (string, error) {
+	a.mu.Lock()
+	backend := a.workBotSettingsLocked(source.Gateway.GatewayRef).Backend
+	a.mu.Unlock()
+	if backend != agentproto.BackendCodex {
+		return "", fmt.Errorf("会话目标仅适用于 Codex；请先切换执行后端")
+	}
+	fields := strings.Fields(action.Text)
+	if len(fields) == 2 {
+		switch strings.ToLower(fields[1]) {
+		case "new", "set", "edit":
+			return a.queueTeamGoalPanel(ctx, source, strings.ToLower(fields[1]), "")
+		case "clear", "stop":
+			return a.queueTeamGoalPanel(ctx, source, "clear", "")
+		}
+	}
 	parsedKind, parsedGoal, parseErr := parseTeamGoal(action.Text)
 	if parseErr != nil {
 		return "", parseErr
+	}
+	if parsedKind == agentproto.CommandThreadGoalGet {
+		missing := false
+		if err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+			_, _, err := a.teamNativeTarget(tx, source)
+			if errors.Is(err, errTeamNoNativeSession) {
+				missing = true
+				return nil
+			}
+			return err
+		}); err != nil {
+			return "", err
+		}
+		if missing {
+			return a.queueTeamGoalPanel(ctx, source, "overview", "当前工作还没有原生会话。可以先设置目标和预算，再开始工作。")
+		}
 	}
 	if parsedKind == agentproto.CommandThreadGoalSet && parsedGoal.Status == "" {
 		a.mu.Lock()
@@ -158,10 +192,54 @@ func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action
 		}
 	}
 
+	if parsedKind == agentproto.CommandThreadGoalSet && parsedGoal.Status == "active" {
+		idle := false
+		err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+			if e := a.validateTeamGoalSourceSnapshot(tx, source); e != nil {
+				return e
+			}
+			worker, carrier, e := a.teamNativeTarget(tx, source)
+			if e != nil {
+				return e
+			}
+			if _, e = tx.GetOccupiedAttemptForWorker(worker.ID); e == nil {
+				return nil
+			} else if e != workstore.ErrNotFound {
+				return e
+			}
+			grant, e := tx.GetContinuationGrant(carrier.Incarnation, worker.NativeSessionID)
+			if e != nil {
+				return e
+			}
+			if grant.Status != "paused" || !grant.Reconciled || grant.GoalVersion <= 0 || grant.TokenBudget <= 0 || grant.Objective == "" {
+				return fmt.Errorf("请先查询并确认当前已暂停的会话目标")
+			}
+			budget := grant.TokenBudget
+			parsedGoal.Objective = grant.Objective
+			parsedGoal.TokenBudget = &budget
+			parsedGoal.Expected = teamGoalPrecondition(worker, carrier, grant)
+			idle = true
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+		if idle {
+			return a.queueTeamIdleGoal(ctx, source, parsedGoal)
+		}
+	}
+
+	pendingViewID := workui.ID(source.Key, "session-goal", "overview")
+	noClearTarget := false
 	var command agentproto.Command
 	var instance string
 	send := false
 	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+		if parsedKind != agentproto.CommandThreadGoalGet {
+			if e := a.validateTeamGoalSourceSnapshot(tx, source); e != nil {
+				return e
+			}
+		}
 		worker, carrier, e := a.teamNativeTarget(tx, source)
 		if e != nil {
 			return e
@@ -170,7 +248,7 @@ func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action
 			return fmt.Errorf("会话目标只适用于已准备好的 Codex 自动执行会话")
 		}
 		attempt, e := tx.GetOccupiedAttemptForWorker(worker.ID)
-		ownerOnly := e == workstore.ErrNotFound && parsedKind != agentproto.CommandThreadGoalSet
+		ownerOnly := e == workstore.ErrNotFound && (parsedKind != agentproto.CommandThreadGoalSet || parsedGoal.Status == "paused")
 		if e != nil && !ownerOnly {
 			return e
 		}
@@ -187,12 +265,23 @@ func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action
 		if e != nil {
 			return e
 		}
+		if command.Kind == agentproto.CommandThreadGoalGet || command.Kind == agentproto.CommandThreadGoalClear {
+			command.Goal.Expected, e = tx.CaptureGoalControlSnapshot(worker, carrier)
+			if e != nil {
+				return e
+			}
+			if command.Kind == agentproto.CommandThreadGoalClear && command.Goal.Expected.NoGrant && command.Goal.Expected.ObservationID == "" {
+				noClearTarget = true
+				return nil
+			}
+		}
 		if command.Kind == agentproto.CommandThreadGoalSet {
 			grant, lookup := tx.GetContinuationGrant(worker.CarrierIncarnation, worker.NativeSessionID)
 			if command.Goal.Status != "" {
-				if lookup != nil || grant.Binding != binding || grant.GoalVersion < 1 {
+				if lookup != nil || (!ownerOnly && grant.Binding != binding) || (ownerOnly && !carrier.Owner.SameOwner(grant.Binding)) || grant.GoalVersion < 1 {
 					return fmt.Errorf("当前尚无已确认的会话目标，请先用 /goal 查询")
 				}
+				command.Goal.Expected = teamGoalPrecondition(worker, carrier, grant)
 				command.Goal.Objective = grant.Objective
 				budget := grant.TokenBudget
 				command.Goal.TokenBudget = &budget
@@ -206,7 +295,7 @@ func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action
 			}
 		}
 
-		if command.Kind == agentproto.CommandThreadGoalSet {
+		if command.Kind == agentproto.CommandThreadGoalSet && !ownerOnly {
 			if carrier.Owner.BotGeneration != source.Gateway.BotGeneration {
 				return fmt.Errorf("身份配置已更新，请先核对并重建当前执行环境")
 			}
@@ -231,7 +320,10 @@ func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action
 			if existing.Kind != "native.user.goal" || existing.TargetID != worker.ID {
 				return workstore.ErrIdempotencyConflict
 			}
-			return nil
+			if e = a.queueTeamGoalPanelTx(tx, source, "overview", "会话目标操作已记录，正在等待原生反馈。", pendingViewID); e != nil {
+				return e
+			}
+			return attachTeamGoalPending(tx, command.CommandID, pendingViewID, time.Now().UTC())
 		} else if e != workstore.ErrNotFound {
 			return e
 		}
@@ -252,12 +344,24 @@ func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action
 			actor = work.Actor{Kind: work.ActorSystem, ID: "user-session-goal"}
 		}
 		_, _, e = tx.PutOperation(work.Operation{ID: command.CommandID, ScopeID: worker.ScopeID, ContextID: worker.ContextID, Actor: actor, Kind: "native.user.goal", Steps: []work.OperationStep{{ID: "human_source", State: work.OperationConfirmed, Receipt: stringMustJSON(humanSource)}}, TargetID: worker.ID, TargetGeneration: worker.Generation, RequestHash: body.SHA256, RequestRef: body.ID, IdempotencyKey: command.CommandID, State: work.OperationSending, Revision: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}, 0)
+		if e != nil {
+			return e
+		}
+		if e = a.queueTeamGoalPanelTx(tx, source, "overview", "会话目标操作已记录，正在等待原生反馈。", pendingViewID); e != nil {
+			return e
+		}
+		if e = attachTeamGoalPending(tx, command.CommandID, pendingViewID, time.Now().UTC()); e != nil {
+			return e
+		}
 		instance = worker.InstanceID
-		send = e == nil
-		return e
+		send = true
+		return nil
 	})
 	if err != nil {
 		return "", err
+	}
+	if noClearTarget {
+		return a.queueTeamGoalPanel(ctx, source, "overview", "尚未核对当前原生目标，请点击「刷新会话目标」查询后再确认清除。")
 	}
 	if send {
 		if err = a.teamRuntime.driver.SendCommand(ctx, instance, command); err != nil {
@@ -276,5 +380,5 @@ func (a *App) teamNativeGoal(ctx context.Context, source teamHumanSource, action
 			return "", err
 		}
 	}
-	return a.queuePrivatePanel(ctx, source, "status", "会话目标操作已记录。等待会话反馈后，可用 /goal 查看结果；项目的业务目标不会改变。")
+	return pendingViewID, nil
 }

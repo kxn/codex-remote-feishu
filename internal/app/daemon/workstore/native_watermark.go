@@ -9,9 +9,13 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
-func (t *Tx) CarrierHasCommands(incarnation string) (bool, error) {
+// A model catalog request can be queued before a wrapper completes bootstrap.
+// It never starts a session or work. Such a request must not permanently pin a
+// carrier whose pre-Hello failure and exact process exit have been proved.
+// All other commands retain the conservative startup recovery boundary.
+func (t *Tx) CarrierHasStartupBlockingCommands(incarnation string) (bool, error) {
 	var exists bool
-	err := t.tx.QueryRowContext(t.ctx, "SELECT EXISTS(SELECT 1 FROM native_commands WHERE incarnation=?)", incarnation).Scan(&exists)
+	err := t.tx.QueryRowContext(t.ctx, `SELECT EXISTS(SELECT 1 FROM native_commands WHERE incarnation=? AND COALESCE(json_extract(payload,'$.kind'),'')<>?)`, incarnation, agentproto.CommandModelList).Scan(&exists)
 	return exists, err
 }
 

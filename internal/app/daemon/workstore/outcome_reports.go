@@ -11,7 +11,9 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-// ProcessingReport is an agent's durable account of work it handled. It does
+// ProcessingReport records handled inputs. Usually agent-reported, it may also
+// be a strictly verified private native-conversation receipt (unknown business
+// disposition); this never substitutes for project task acceptance. It does
 // not assert that a native process stopped, release occupancy, or accept work
 // on behalf of a human. Runtime reconciliation commits the final Outcome.
 type ProcessingReport struct {

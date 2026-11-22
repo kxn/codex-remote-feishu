@@ -15,15 +15,18 @@ import (
 const SchemaSessionGoalIntentsV1 = `CREATE TABLE session_goal_intents(id TEXT PRIMARY KEY,scope_id TEXT NOT NULL REFERENCES scopes(id),context_id TEXT NOT NULL REFERENCES contexts(id),payload TEXT NOT NULL CHECK(json_valid(payload)));`
 
 type SessionGoalIntent struct {
-	ID        string                 `json:"id"`
-	ScopeID   string                 `json:"scope_id"`
-	ContextID string                 `json:"context_id"`
-	Goal      agentproto.GoalCommand `json:"goal"`
-	Source    work.SourceRef         `json:"source"`
-	InputID   string                 `json:"input_id"`
-	CommandID string                 `json:"command_id,omitempty"`
-	AttemptID string                 `json:"attempt_id,omitempty"`
-	CreatedAt time.Time              `json:"created_at"`
+	LastCheckedAt   time.Time              `json:"last_checked_at,omitempty"`
+	RejectedAt      time.Time              `json:"rejected_at,omitempty"`
+	RejectionReason string                 `json:"rejection_reason,omitempty"`
+	ID              string                 `json:"id"`
+	ScopeID         string                 `json:"scope_id"`
+	ContextID       string                 `json:"context_id"`
+	Goal            agentproto.GoalCommand `json:"goal"`
+	Source          work.SourceRef         `json:"source"`
+	InputID         string                 `json:"input_id"`
+	CommandID       string                 `json:"command_id,omitempty"`
+	AttemptID       string                 `json:"attempt_id,omitempty"`
+	CreatedAt       time.Time              `json:"created_at"`
 }
 
 func (t *Tx) GetSessionGoalIntent(id string) (SessionGoalIntent, error) {
@@ -74,6 +77,22 @@ func (t *Tx) QueueSessionGoalIntent(id, contextID string, goal agentproto.GoalCo
 		}
 		if !errors.Is(e, ErrNotFound) {
 			return e
+		}
+		if goal.Expected != nil {
+			carrier, e := t.GetCarrier(goal.Expected.Incarnation)
+			if e != nil {
+				return e
+			}
+			worker, e := t.GetWorker(carrier.Owner.WorkerSessionID)
+			if e != nil {
+				return e
+			}
+			if worker.ContextID != wc.ID || goal.Status != "active" || goal.Expected.Status != "paused" || goal.Objective != goal.Expected.Objective || *goal.TokenBudget != goal.Expected.TokenBudget {
+				return ErrScopeDenied
+			}
+			if e = t.ValidateGoalPrecondition(goal.Expected, worker, carrier, worker.NativeSessionID); e != nil {
+				return e
+			}
 		}
 		v = SessionGoalIntent{ID: id, ScopeID: scope.ID, ContextID: contextID, Goal: goal, Source: proof, InputID: id + ":input", CreatedAt: now}
 		body := work.NewContent(id+":body", scope.ID, "text/plain", []byte("用户设定了有界会话目标，请围绕该目标执行已授权工作，不改变项目需求或验收规则。目标："+goal.Objective), now)
@@ -171,6 +190,11 @@ func (t *Tx) PrepareSessionGoalsForAttempt(attemptID, sessionID string, now time
 					return ErrConflict
 				}
 				continue
+			}
+			if v.Goal.Expected != nil {
+				if e = t.ValidateGoalPrecondition(v.Goal.Expected, worker, carrier, sessionID); e != nil {
+					return e
+				}
 			}
 			binding := carrier.Owner
 			binding.AttemptID = attempt.ID

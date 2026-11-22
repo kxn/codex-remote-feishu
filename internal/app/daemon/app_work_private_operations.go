@@ -23,8 +23,27 @@ func (a *App) handleTeamPrivateOperation(ctx context.Context, source teamHumanSo
 		return a.handleTeamSettingsCommand(ctx, source, action)
 	case control.ActionAdminRoot:
 		return a.queuePrivatePanel(ctx, source, "admin", "")
+	case control.ActionDebugCommand:
+		if _, err := parseDebugCommandText(action.Text); err != nil {
+			return "", err
+		}
+		return a.queuePrivatePanel(ctx, source, "admin", "管理页相关入口位于系统管理。")
+	case control.ActionReviewCommand:
+		parts := strings.Fields(action.Text)
+		if len(parts) == 1 || len(parts) == 2 && strings.EqualFold(parts[1], "commit") {
+			return a.queuePrivatePanel(ctx, source, "review", "")
+		}
+		if len(parts) == 2 && strings.EqualFold(parts[1], "cancel") {
+			return a.queuePrivatePanel(ctx, source, "tools", "已退出审查选择。")
+		}
+		return a.handleTeamNativeCommand(ctx, source, action)
 	case control.ActionWorkspaceNew:
 		return a.queuePrivatePanel(ctx, source, "workspace-tools", "")
+	case control.ActionWorkspaceNewWorktree:
+		if strings.TrimSpace(action.Text) == "/workspace new worktree" {
+			return a.queuePrivatePanel(ctx, source, "workspace-tools", "工作树由助手根据实际任务管理。请先选择工作目录，再说明需要处理的工作。")
+		}
+		return a.handleTeamNativeCommand(ctx, source, action)
 	case control.ActionWorkspaceNewDir, control.ActionWorkspaceNewGit:
 		if strings.TrimSpace(action.Text) == "/workspace new dir" || strings.TrimSpace(action.Text) == "/workspace new git" {
 			return a.queuePrivatePanel(ctx, source, "workspace-tools", "")
@@ -38,6 +57,9 @@ func (a *App) handleTeamPrivateOperation(ctx context.Context, source teamHumanSo
 }
 
 func (a *App) handleTeamPrivateViewOperation(ctx context.Context, source teamHumanSource, view workstore.UIView, action string, form map[string]any) (string, error) {
+	if strings.HasPrefix(action, "private.goal-") && action != "private.goal-help" {
+		return a.handleTeamGoalViewOperation(ctx, source, action, form)
+	}
 	switch action {
 	case "private.stop":
 		return a.applyTeamPrivateStop(ctx, source, view.TargetRevision, false)
@@ -60,7 +82,9 @@ func (a *App) handleTeamPrivateViewOperation(ctx context.Context, source teamHum
 		return a.queueTeamResourcePicker(ctx, source)
 	case "private.settings":
 		return a.queueTeamSettings(ctx, source, "overview", "")
-	case "private.status", "private.workspace-tools", "private.review", "private.file-help", "private.mcp", "private.goal-help", "private.help":
+	case "private.goal-help":
+		return a.teamNativeGoal(ctx, source, control.Action{Kind: control.ActionGoalCommand, Text: "/goal"})
+	case "private.status", "private.workspace-tools", "private.review", "private.file-help", "private.mcp", "private.help":
 		return a.queuePrivatePanel(ctx, source, strings.TrimPrefix(action, "private."), "")
 	}
 	if _, automation, ok := strings.Cut(action, "automation."); ok {

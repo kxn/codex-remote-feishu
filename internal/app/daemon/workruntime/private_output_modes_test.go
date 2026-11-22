@@ -92,11 +92,11 @@ func setPrivateDisplayMode(f *fixture, mode string) {
 			return err
 		}
 		action := workstore.PrivateActionSource{PersonalScopeID: "scope", RunRef: attempt.RunRef, MessageID: "private-human-input"}
-		_, source, err := tx.ValidatePrivateAction(action)
+		scope, source, err := tx.ValidatePrivateAction(action)
 		if err != nil {
 			return err
 		}
-		return tx.PutContextPreferences(work.ContextPreferences{ContextID: "context", ScopeID: "scope", Verbose: &mode, Source: source, UpdatedBy: work.Actor{Kind: work.ActorPrincipal, ID: "principal"}, Revision: old.Revision + 1, UpdatedAt: f.now}, old.Revision, action)
+		return tx.PutContextPreferences(work.ContextPreferences{ContextID: "context", ScopeID: "scope", Verbose: &mode, Source: source, UpdatedBy: work.Actor{Kind: work.ActorPrincipal, ID: scope.PrincipalID}, Revision: old.Revision + 1, UpdatedAt: f.now}, old.Revision, action)
 	})
 }
 

@@ -18,12 +18,15 @@ import (
 
 func (a *App) handleTeamMCP(ctx context.Context, source teamHumanSource, action control.Action) (string, error) {
 	args := strings.Fields(action.Text)
+	if len(args) > 0 {
+		args[0] = strings.ToLower(args[0])
+	}
 	verb := "status"
 	if len(args) > 1 {
-		verb = args[1]
+		verb = strings.ToLower(args[1])
 	}
 	if len(args) > 0 && (args[0] == "/mcpoauth" || args[0] == "/mcp-oauth") {
-		if len(args) == 2 && args[1] != "status" {
+		if len(args) == 2 && !strings.EqualFold(args[1], "status") {
 			args = []string{"/mcp", "login", args[1]}
 			verb = "login"
 		}
@@ -35,6 +38,9 @@ func (a *App) handleTeamMCP(ctx context.Context, source teamHumanSource, action 
 		return a.startTeamMCPOAuth(ctx, source, args[2])
 	}
 	if verb == "oauth-status" {
+		if len(args) != 2 {
+			return "", fmt.Errorf("用法：/mcp oauth-status")
+		}
 		return a.queueTeamMCPOAuthStatus(ctx, source)
 	}
 	if verb != "status" && verb != "config" && verb != "configuration" {
@@ -51,46 +57,7 @@ func (a *App) handleTeamMCP(ctx context.Context, source teamHumanSource, action 
 	if verb != "status" {
 		mode = "configuration"
 	}
-	return a.teamHostAction(ctx, source, "mcp."+mode, action.Text, func() (string, error) {
-		var worker work.WorkerSession
-		if err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error { var e error; worker, _, e = a.teamNativeTarget(tx, source); return e }); err != nil {
-			return "", err
-		}
-		result, err := a.teamRuntime.driver.ReadMCP(ctx, worker.ID, agentproto.RuntimeMCPQuery{Version: agentproto.RuntimeMCPProtocolVersion, Mode: mode, Cursor: cursor, Limit: 100})
-		if err != nil {
-			return "", err
-		}
-		if !result.Supported {
-			return "当前后端没有提供这项 MCP 查询能力。", nil
-		}
-		lines := []string{"当前会话的 MCP 服务："}
-		for _, server := range result.Servers {
-			line := server.Name
-			if server.Status != "" {
-				line += " · " + server.Status
-			}
-			if server.Authentication != "" {
-				line += " · 认证：" + server.Authentication
-			}
-			if mode == "configuration" {
-				line += " · " + server.Transport
-				if server.Origin != "" {
-					line += " · " + server.Origin
-				}
-			}
-			lines = append(lines, line)
-		}
-		if len(result.Servers) == 0 {
-			lines = append(lines, "没有已加载的 MCP 服务。")
-		}
-		if result.Problem != nil {
-			lines = append(lines, "部分服务暂时无法核对："+result.Problem.Message)
-		}
-		if result.NextCursor != "" {
-			lines = append(lines, "还有更多服务；可用 /mcp status --cursor "+result.NextCursor+" 查看后续页。")
-		}
-		return strings.Join(lines, "\n"), nil
-	})
+	return a.queueTeamMCPRead(ctx, source, agentproto.RuntimeMCPQuery{Version: agentproto.RuntimeMCPProtocolVersion, Mode: mode, Cursor: cursor, Limit: 100})
 }
 func (a *App) startTeamMCPOAuth(ctx context.Context, source teamHumanSource, server string) (string, error) {
 	if server == "" || len(server) > 256 {

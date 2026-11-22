@@ -22,21 +22,6 @@ type goalSource struct {
 func (c *Coordinator) resolveGoalSource(tx *workstore.Tx, carrier workstore.CarrierRegistration, binding agentproto.ExecutionBinding, event agentproto.Event, active bool, version, budget int64, objective string) (goalSource, error) {
 	source := goalSource{CommandID: event.CommandID, Kind: "canonical_goal_rpc", BudgetSource: "explicit_command", Budget: budget, Version: version, Objective: objective}
 	if event.CommandID != "" {
-		nativeCommand, e := tx.GetNativeCommand(event.CommandID)
-		if e != nil {
-			return source, e
-		}
-		if nativeCommand.Kind == agentproto.CommandThreadGoalGet && active {
-			previous, e := tx.GetContinuationGrant(carrier.Incarnation, event.ThreadID)
-			if e != nil {
-				return source, e
-			}
-			if !previous.Active || previous.Binding != binding || previous.Objective != objective || previous.TokenBudget != budget || previous.GoalVersion != version {
-				return source, workstore.ErrScopeDenied
-			}
-			source.CommandID, source.Kind, source.TurnID, source.BudgetSource, source.Source = previous.CommandID, previous.AuthorizationKind, previous.SourceTurnID, previous.BudgetSource, previous.Source
-			return source, nil
-		}
 		op, err := tx.GetOperation(event.CommandID)
 		if err != nil {
 			return source, err

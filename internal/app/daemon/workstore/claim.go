@@ -51,6 +51,9 @@ func (t *Tx) claimAttempt(request ClaimRequest) error {
 	if err != nil {
 		return err
 	}
+	if err = t.ValidateSessionGoalInputs(attempt, worker); err != nil {
+		return err
+	}
 	if err = t.AssertHostCompactionAvailable(worker.ID, worker.Generation); err != nil {
 		return err
 	}

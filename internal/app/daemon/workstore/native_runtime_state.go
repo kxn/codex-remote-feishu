@@ -123,6 +123,7 @@ func (t *Tx) ResolveQuarantine(incarnation string, sequence uint64) error {
 }
 
 type ContinuationGrant struct {
+	Status            string                      `json:"status,omitempty"`
 	AuthorizationKind string                      `json:"authorization_kind,omitempty"`
 	SourceTurnID      string                      `json:"source_turn_id,omitempty"`
 	BudgetSource      string                      `json:"budget_source,omitempty"`

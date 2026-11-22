@@ -279,6 +279,15 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		if e := c.resolveStoppedInputAdmissions(tx, request, observation); e != nil {
 			return e
 		}
+		if e := c.preparePrivateSuccessReport(tx, attempt, request, observation); e != nil {
+			return e
+		}
+		if e := c.preparePrivateRejectedTurnReport(tx, attempt, request, observation); e != nil {
+			return e
+		}
+		if e := c.preparePrivateStartRejectionReport(tx, &attempt, request, observation); e != nil {
+			return e
+		}
 		if e := c.prepareAutomaticFailureReport(tx, attempt, request, observation); e != nil {
 			return e
 		}

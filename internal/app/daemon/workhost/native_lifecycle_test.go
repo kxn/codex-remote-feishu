@@ -307,6 +307,8 @@ func TestHostStartupRecoveryRequiresExactExitAndReleasesPoolAfterRestart(t *test
 		t.Fatal(err)
 	}
 	before := hostWorker(t, store)
+	// A menu can request the model catalog while bootstrap is still pending.
+	seedStartupNativeCommand(t, store, before, agentproto.CommandModelList)
 	t.Cleanup(func() { _ = child.Process.Kill() })
 	var record LaunchRecord
 	if err := store.Within(t.Context(), func(tx *workstore.Tx) error {

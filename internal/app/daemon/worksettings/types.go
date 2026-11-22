@@ -71,6 +71,7 @@ func New(store *workstore.Store, port Port, authorize Authorizer, now func() tim
 }
 
 type UpdateRequest struct {
+	ManualSelection     bool                `json:"manual_selection,omitempty"`
 	CatalogCursor       string              `json:"catalog_cursor,omitempty"`
 	Key                 string              `json:"key"`
 	RoleID              string              `json:"role_id"`

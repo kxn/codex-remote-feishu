@@ -353,6 +353,9 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 		} else {
 			text("当前没有可选配置，请先在管理页面维护已有 Profile。")
 		}
+		if kind == "model" && teamFixedModel(snapshot) == "" && snapshot.Settings.Backend != agentproto.BackendOpenCode {
+			elements = append(elements, teamManualModelForm(id, currentModel, currentEffort))
+		}
 		elements = append(elements, teamSettingsButton(id, "刷新列表", "settings.page", map[string]any{"setting": kind}), teamSettingsButton(id, "返回参数设置", "settings.page", map[string]any{"setting": "overview"}))
 	}
 	raw, err := json.Marshal(map[string]any{"schema": "2.0", "config": map[string]any{"update_multi": true}, "header": map[string]any{"title": cardkit.PlainText(titles[kind])}, "body": map[string]any{"elements": elements}})

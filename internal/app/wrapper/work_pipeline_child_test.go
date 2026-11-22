@@ -237,6 +237,11 @@ func pipelineChildBusiness(frame map[string]any) error {
 			return err
 		}
 	}
+	// Ordinary private replies must settle without a model-side team report.
+	// Group work still exercises the explicit task/report contract below.
+	if os.Getenv("FSC_NATIVE_PIPELINE_AUTO_PRIVATE") == "true" {
+		return nil
+	}
 	ids := []string{}
 	for _, input := range envelope.Inputs {
 		ids = append(ids, input.ID)

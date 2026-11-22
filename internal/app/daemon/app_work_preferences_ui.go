@@ -115,6 +115,9 @@ func (a *App) handleTeamSettingsCommand(ctx context.Context, source teamHumanSou
 	if err != nil {
 		return "", err
 	}
+	if intent.Bot != nil {
+		intent.Bot.ManualSelection = action.Kind == control.ActionModelCommand || action.Kind == control.ActionReasoningCommand
+	}
 	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		if _, _, e := tx.ValidatePrivateAction(source.Authority); e != nil {
 			return e
@@ -311,12 +314,12 @@ func (a *App) handleTeamSettingsView(ctx context.Context, source teamHumanSource
 		page, _ := interaction.Envelope.Values["setting"].(string)
 		return a.queueTeamSettings(ctx, source, page, "")
 	}
-	if action != "settings.apply" {
+	if action != "settings.apply" && action != "settings.model-manual" {
 		return "", fmt.Errorf("unknown settings action")
 	}
-	value, ok := interaction.Envelope.Form["selection"].(string)
-	if !ok || !teamSettingsOptionShown(elements, value) {
-		return "", fmt.Errorf("请从这张卡片的下拉菜单选择一个值")
+	parts, err := teamSettingsSubmission(elements, interaction.Envelope.Form, action, frozen.Kind)
+	if err != nil {
+		return "", err
 	}
 	actionKind := map[string]control.ActionKind{"model": control.ActionModelCommand, "reasoning": control.ActionReasoningCommand, "backend": control.ActionModeCommand, "access": control.ActionAccessCommand, "plan": control.ActionPlanCommand, "verbose": control.ActionVerboseCommand, "codex-profile": control.ActionCodexProfileCommand, "claude-profile": control.ActionClaudeProfileCommand, "opencode-profile": control.ActionOpenCodeProfileCommand}[frozen.Kind]
 	if actionKind == "" {
@@ -337,12 +340,13 @@ func (a *App) handleTeamSettingsView(ctx context.Context, source teamHumanSource
 	snapshot.Fingerprint = frozen.Fingerprint
 	wc := work.WorkContext{ID: frozen.ContextID, ScopeID: source.ScopeID}
 	pref := work.ContextPreferences{Revision: frozen.ContextRevision}
-	intent, err := parseTeamSettingsIntent(source, control.Action{Kind: actionKind}, []string{"settings", value}, snapshot, wc, pref)
+	intent, err := parseTeamSettingsIntent(source, control.Action{Kind: actionKind}, parts, snapshot, wc, pref)
 	if err != nil {
 		return "", err
 	}
 	if intent.Bot != nil {
 		intent.Bot.CatalogCursor = cursor
+		intent.Bot.ManualSelection = action == "settings.model-manual"
 	}
 	return a.applyTeamSettingsPage(ctx, source, intent, frozen.Kind, frozen.CursorTrail)
 }

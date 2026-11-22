@@ -85,19 +85,28 @@ func (i *Ingress) process(ctx context.Context, record work.IngressRecord, expand
 			return e
 		}
 		text := expanded.Text
-		if !expanded.Complete && !strings.Contains(text, "部分内容未获取") {
-			text += "\n\n[部分内容未获取] " + strings.Join(expanded.Issues, "；")
+		commandText := text
+		if record.Envelope.MessageType == "text" {
+			var literal struct {
+				Text string `json:"text"`
+			}
+			if json.Unmarshal([]byte(record.Envelope.RawContent), &literal) == nil {
+				commandText = literal.Text
+			}
 		}
 		partial = !expanded.Complete
-		if record.Envelope.ChatType == "p2p" && strings.HasPrefix(strings.TrimSpace(text), "/") {
+		if record.Envelope.ChatType == "p2p" && strings.HasPrefix(strings.TrimSpace(commandText), "/") {
 			raw, _ := json.Marshal(record.Envelope)
-			command := work.TypedCommandEnvelope{ContextID: record.Route.ContextID, NavigationRevision: record.Route.NavigationRevision, ProjectViewScopeID: record.Route.ProjectViewScopeID, ProjectContextID: record.Route.ProjectContextID, ID: opaque("private-command", record.ID), IngressID: record.ID, ScopeID: scope.ID, PrincipalID: principal.ID, RoleID: record.Gateway.RoleID, GatewayRef: record.Gateway.GatewayRef, Text: text, Raw: raw, State: "pending", Revision: 1}
+			command := work.TypedCommandEnvelope{ContextID: record.Route.ContextID, NavigationRevision: record.Route.NavigationRevision, ProjectViewScopeID: record.Route.ProjectViewScopeID, ProjectContextID: record.Route.ProjectContextID, ID: opaque("private-command", record.ID), IngressID: record.ID, ScopeID: scope.ID, PrincipalID: principal.ID, RoleID: record.Gateway.RoleID, GatewayRef: record.Gateway.GatewayRef, Text: commandText, Raw: raw, State: "pending", Revision: 1}
 			if e = tx.PutPrivateCommand(command, 0); e != nil {
 				return e
 			}
 			next.State = work.IngressCommand
 			state = next.State
 			return tx.PutIngress(next, current.Revision)
+		}
+		if !expanded.Complete && !strings.Contains(text, "部分内容未获取") {
+			text += "\n\n[部分内容未获取] " + strings.Join(expanded.Issues, "；")
 		}
 		recipient, e := i.recipient(tx, scope, record.Envelope, mentions)
 		if e != nil {

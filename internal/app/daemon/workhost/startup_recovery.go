@@ -101,7 +101,7 @@ func (h *Host) reconcileStartupFailure(ctx context.Context, worker work.WorkerSe
 		if err == nil && (gate.RecoveryReason != "" || gate.AttemptID != "" || (gate.Reason != "snapshot_rebuild_required" && gate.Reason != "carrier_disconnected_reconcile")) {
 			return workstore.ErrConflict
 		}
-		hasCommands, err := tx.CarrierHasCommands(carrier.Incarnation)
+		hasCommands, err := tx.CarrierHasStartupBlockingCommands(carrier.Incarnation)
 		if err != nil {
 			return err
 		}

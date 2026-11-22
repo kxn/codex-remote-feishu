@@ -5,8 +5,22 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worksettings"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
+
+func (a *App) queueTeamCurrentHistory(ctx context.Context, source teamHumanSource) (string, error) {
+	contextID := ""
+	if err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+		front, _, err := worksettings.FrozenContext(tx, source.Authority)
+		contextID = front.ID
+		return err
+	}); err != nil {
+		return "", err
+	}
+	return a.queueTeamContextHistory(ctx, source, contextID, 0)
+}
 
 // Keep the existing slash page names routed to the same sections as menu buttons.
 func teamPrivateCommandMenuPage(text string) (string, error) {

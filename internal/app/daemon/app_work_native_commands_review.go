@@ -19,14 +19,14 @@ var errTeamReviewLocation = errors.New("review needs a selected location")
 
 func parseTeamReviewTarget(text string) (agentproto.ReviewTarget, error) {
 	args := strings.Fields(text)
-	if len(args) > 0 && strings.TrimPrefix(args[0], "/") == "review" {
+	if len(args) > 0 && strings.EqualFold(strings.TrimPrefix(args[0], "/"), "review") {
 		args = args[1:]
 	}
 	target := agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges}
 	if len(args) == 0 {
 		return target, nil
 	}
-	switch args[0] {
+	switch strings.ToLower(args[0]) {
 	case "uncommitted", "changes":
 		if len(args) != 1 {
 			return target, fmt.Errorf("用法：/review uncommitted")
@@ -43,6 +43,8 @@ func parseTeamReviewTarget(text string) (agentproto.ReviewTarget, error) {
 		}
 		target.Kind = agentproto.ReviewTargetKindBaseBranch
 		target.Branch = args[1]
+	case "cancel":
+		return target, fmt.Errorf("用法：/review cancel 退出审查选择")
 	default:
 		target.Kind = agentproto.ReviewTargetKindCustom
 		target.Instructions = strings.Join(args, " ")

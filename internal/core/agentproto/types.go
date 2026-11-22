@@ -269,11 +269,26 @@ type ShellCommand struct {
 	Command string `json:"command,omitempty"`
 }
 
+type GoalPrecondition struct {
+	NoGrant              bool   `json:"noGrant,omitempty"`
+	ObservationID        string `json:"observationId,omitempty"`
+	Incarnation          string `json:"incarnation"`
+	SessionID            string `json:"sessionId"`
+	WorkerGeneration     int64  `json:"workerGeneration"`
+	ControllerGeneration int64  `json:"controllerGeneration"`
+	GoalVersion          int64  `json:"goalVersion"`
+	CommandID            string `json:"commandId"`
+	Objective            string `json:"objective"`
+	TokenBudget          int64  `json:"tokenBudget"`
+	Status               string `json:"status"`
+}
+
 type GoalCommand struct {
-	Status      string `json:"status,omitempty"`
-	Objective   string `json:"objective,omitempty"`
-	TokenBudget *int64 `json:"tokenBudget,omitempty"`
-	Purpose     string `json:"purpose,omitempty"`
+	Expected    *GoalPrecondition `json:"expected,omitempty"`
+	Status      string            `json:"status,omitempty"`
+	Objective   string            `json:"objective,omitempty"`
+	TokenBudget *int64            `json:"tokenBudget,omitempty"`
+	Purpose     string            `json:"purpose,omitempty"`
 }
 
 type ModelListCommand struct {

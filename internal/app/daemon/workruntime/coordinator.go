@@ -222,6 +222,16 @@ func (c *Coordinator) RegisterCommand(ctx context.Context, incarnation string, c
 				return fmt.Errorf("MCP login target must match the bound native session")
 			}
 		}
+		if command.Kind == agentproto.CommandThreadGoalGet || command.Kind == agentproto.CommandThreadGoalClear {
+			if command.Goal.Expected != nil {
+				if e := tx.ValidateGoalControlSnapshot(command.Goal.Expected, worker, carrier, command.Target.ThreadID); e != nil {
+					return e
+				}
+			}
+			if command.Kind == agentproto.CommandThreadGoalClear && command.Goal.Expected != nil && command.Goal.Expected.NoGrant && command.Goal.Expected.ObservationID == "" {
+				return fmt.Errorf("请先查询当前会话目标再确认清除")
+			}
+		}
 		if command.IsOwnerOnlyRuntimeCommand() && (command.Kind == agentproto.CommandThreadGoalGet || command.Kind == agentproto.CommandThreadGoalClear) && (worker.NativeSessionID == "" || command.Target.ThreadID != worker.NativeSessionID) {
 			return fmt.Errorf("idle Goal command requires the exact current native session")
 		}
@@ -234,6 +244,13 @@ func (c *Coordinator) RegisterCommand(ctx context.Context, incarnation string, c
 			return err
 		}
 		if command.Kind == agentproto.CommandPromptSend {
+			attempt, e := tx.GetAttempt(command.Execution.AttemptID)
+			if e != nil {
+				return e
+			}
+			if e = tx.ValidateSessionGoalInputs(attempt, worker); e != nil {
+				return e
+			}
 			occupied, e := tx.HasCarrierOccupancy(carrier, command.Execution.AttemptID)
 			if e != nil {
 				return e
@@ -255,30 +272,49 @@ func (c *Coordinator) RegisterCommand(ctx context.Context, incarnation string, c
 				}
 			}
 		}
+		idleGoalPause := command.Kind == agentproto.CommandThreadGoalSet && command.IsOwnerOnlyRuntimeCommand()
 		if command.Kind == agentproto.CommandThreadGoalSet {
-			allowed, e := nativeGoalAdmission(tx, worker)
-			if e != nil {
-				return e
+			if command.Goal.Expected != nil {
+				if e := tx.ValidateGoalPrecondition(command.Goal.Expected, worker, carrier, command.Target.ThreadID); e != nil {
+					return e
+				}
 			}
-			if !allowed {
-				return fmt.Errorf("native Goal is paused or management-only")
-			}
-			context, e := tx.GetContext(worker.ContextID)
-			if e != nil {
-				return e
-			}
-			occupied, e := tx.HasCarrierOccupancy(carrier, command.Execution.AttemptID)
-			if e != nil {
-				return e
-			}
-			if !occupied {
-				return fmt.Errorf("Goal requires the exact currently occupied business attempt")
-			}
-			if context.Purpose == work.PurposeControl {
-				return fmt.Errorf("management context cannot authorize native Goal continuation")
+			if idleGoalPause {
+				if command.Goal.Expected.Status != "active" && command.Goal.Expected.Status != "paused" {
+					return fmt.Errorf("idle pause requires a confirmed current goal")
+				}
+				occupied, e := tx.HasAnyCarrierOccupancy(carrier)
+				if e != nil {
+					return e
+				}
+				if occupied {
+					return fmt.Errorf("idle pause cannot cross an occupied attempt")
+				}
+			} else {
+				allowed, e := nativeGoalAdmission(tx, worker)
+				if e != nil {
+					return e
+				}
+				if !allowed {
+					return fmt.Errorf("native Goal is paused or management-only")
+				}
+				context, e := tx.GetContext(worker.ContextID)
+				if e != nil {
+					return e
+				}
+				occupied, e := tx.HasCarrierOccupancy(carrier, command.Execution.AttemptID)
+				if e != nil {
+					return e
+				}
+				if !occupied {
+					return fmt.Errorf("Goal requires the exact currently occupied business attempt")
+				}
+				if context.Purpose == work.PurposeControl {
+					return fmt.Errorf("management context cannot authorize native Goal continuation")
+				}
 			}
 		}
-		if gate, err := tx.GetRuntimeGate(worker.ID); err == nil && !allowedWhileRuntimeGated(command.Kind) && !((gate.Reason == "native_goal_budget_required" || gate.Reason == "native_ownership_unproven") && gate.RecoveryReason == "" && c.authorizedGoalPolicy(tx, command)) {
+		if gate, err := tx.GetRuntimeGate(worker.ID); err == nil && !idleGoalPause && !allowedWhileRuntimeGated(command.Kind) && !((gate.Reason == "native_goal_budget_required" || gate.Reason == "native_ownership_unproven") && gate.RecoveryReason == "" && c.authorizedGoalPolicy(tx, command)) {
 			return fmt.Errorf("worker dispatch gate is closed")
 		} else if err != nil && !errors.Is(err, workstore.ErrNotFound) {
 			return err

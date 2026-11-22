@@ -32,6 +32,9 @@ func (c *Coordinator) confirmGoalReceipt(tx *workstore.Tx, event agentproto.Even
 	}
 	switch command.Kind {
 	case agentproto.CommandThreadGoalSet:
+		if command.Goal.Status != "" && (event.ThreadGoal == nil || event.ThreadGoal.Status != command.Goal.Status) {
+			return fmt.Errorf("native Goal response differs from requested status")
+		}
 		if event.ThreadGoal == nil || command.Goal.TokenBudget == nil || event.ThreadGoal.TokenBudget == nil || *command.Goal.TokenBudget != *event.ThreadGoal.TokenBudget || command.Goal.Objective != event.ThreadGoal.Objective {
 			return fmt.Errorf("native Goal response differs from the canonical requested policy")
 		}
