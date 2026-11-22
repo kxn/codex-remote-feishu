@@ -250,7 +250,7 @@ func (a *App) retireTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession
 		}
 		text := "上次的执行限制已经解除，原工作和待处理输入仍保留。后续进展会在这里更新。"
 		if rebuilding {
-			text = "已开始恢复执行，正在接回原工作和待处理输入。"
+			text = "核对已完成，可以继续发送消息。"
 		}
 		card, err := workui.Card(view.ID, workui.Panel{Title: "执行状态已更新", Paragraphs: []string{text}})
 		if err != nil {
