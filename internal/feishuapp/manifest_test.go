@@ -136,8 +136,8 @@ func TestDefaultManifestRequirementsMetadata(t *testing.T) {
 		if strings.TrimSpace(item.Feature) == "" {
 			t.Fatalf("scope %q missing feature metadata", item.Scope)
 		}
-		if !item.Required {
-			t.Fatalf("scope %q should be required in the default manifest", item.Scope)
+		if !item.Required && strings.TrimSpace(item.DegradeMessage) == "" {
+			t.Fatalf("optional scope %q must explain its impact", item.Scope)
 		}
 	}
 }

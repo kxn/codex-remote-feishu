@@ -20,7 +20,7 @@
    - 选择“长连接”，点击保存
    - 配置 `card.action.trigger`
    - 当前版本不需要额外填写 HTTP 回调地址
-5. 打开“权限管理”，补齐模板里列出的消息、P2P 和 reaction 相关权限。
+5. 打开“权限管理”，补齐模板里的应用身份权限。
    - 点击“批量导入/导出权限”
    - 粘贴模板中的 `scopes_import`
    - 点击“保存并申请开通”
@@ -37,44 +37,25 @@
 
 `card.action.trigger` 用来接收工作导航、设置和业务卡片上的按钮操作。
 
-## 当前实现必需能力
+## 权限导入
 
-## 权限导入 JSON
+已接入的机器人可以在 Codex Remote 管理页打开「权限检查」，点「重新检查配置」，再用「复制导入 JSON」拿到该应用缺少的权限。新应用可复制 `app-template.json` 中整个 `scopes_import` 对象。两种方式都在飞书开放平台的「权限管理 → 批量导入/导出权限」中粘贴并申请开通。
 
-`app-template.json` 里的 `scopes_import` 字段就是当前后端 manifest 使用的导入样例。
+| 能力 | 应用身份权限 | 配置说明 |
+| --- | --- | --- |
+| 项目群消息、身份核对和群解散 | `im:message.group_msg`、`im:chat:readonly`、`im:chat:read` | 负责人可接收群里未 @ 机器人的后续消息，并核对项目群和成员。 |
+| 机器人进退群 | `im:chat.members:bot_access` | 开通后订阅两个机器人进退群事件。 |
+| 自动邀请队员 | `im:chat.members:write_only` | 可稍后开通，期间可以在群里手动添加队员机器人。 |
+| 群标签页 | `im:chat.tabs:read`、`im:chat.tabs:write_only` | 可稍后开通，群里的项目导航卡仍可作为入口。 |
+| 消息、卡片、Pin 和附件 | `im:message:send_as_bot`、`im:message:readonly`、`im:resource:upload` | 已有收发权限覆盖消息编辑、卡片更新、读取消息附件及 Pin 的创建和核对。 |
+| 云空间 | `drive:drive` | 用于目录、资料元信息、协作者、评论读取、预览和现有电子表格读写。 |
+| Docx、知识库、多维表格 | `docx:document`、`wiki:wiki`、`bitable:app` | 按需开通，用于项目首页及 Docx 成果、Wiki 节点或多维表格。 |
 
-飞书后台这里的入口名是“批量导入/导出权限”。
+每个执行角色使用对应 Bot 的应用身份。开通 API 权限后，还要在飞书为需要读写现有资料的 Bot 授予相应的目录、文档或知识库访问权限。配置并发布应用版本后，回到 Codex Remote 重新检查。
 
-如果你的飞书控制台支持权限 JSON 导入，优先在这个入口里粘贴这段内容，再补手工确认：
+参考 [飞书消息 API](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1)、[群组权限列表](https://open.feishu.cn/document/develop-robots/add-bot-to-external-group)、[飞书 Wiki API](https://open.feishu.cn/document/server-docs/docs/wiki-v2/wiki-overview)、[电子表格 API](https://open.larkenterprise.com/document/server-docs/docs/sheets-v3/overview) 和 [云文档授权](https://open.feishu.cn/document/server-docs/docs/docs-overview)。
 
-- `application:application:self_manage`
-- `drive:drive`
-- `bitable:app`
-- `im:message:readonly`
-- `im:message.group_at_msg:readonly`
-- `im:message.group_at_msg.include_bot:readonly`
-- `im:message.group_msg`
-- `im:message.p2p_msg:readonly`
-- `im:message.reactions:read`
-- `im:message.reactions:write_only`
-- `im:message:send_as_bot`
-- `im:resource:upload`
-
-### 1. 基础机器人收发
-
-至少要确保机器人具备：
-
-- 接收文本消息
-- 接收图片消息
-- 发送文本消息
-- 发送卡片消息
-- 读取群信息
-- 接收群聊普通消息和 @ 消息
-- 添加和移除消息 reaction
-
-读取项目群普通消息是基础安装的一部分，负责人通过该权限接收群里的需求和跟进。飞书多维表格用作项目资料时，需要对应的 API 权限和资料访问权限。
-
-### 2. 事件订阅
+## 事件订阅
 
 为飞书团队启用以下事件：
 
@@ -96,7 +77,7 @@
 - `im.chat.member.bot.deleted_v1` 和 `im.chat.disbanded_v1` 记录机器人被移出或群解散，封存受影响的群接入。
 - `application.bot.menu_v6` 接收上方配置的静态机器人菜单操作。
 
-### 3. 回调配置
+## 回调配置
 
 在同一个“事件与回调”页面里继续完成：
 
@@ -106,13 +87,7 @@
 - 配置 `card.action.trigger`
 - 不需要填写 HTTP 回调 URL
 
-其中：
-
-- `card.action.trigger` 负责 selection prompt、`/menu` 导航、参数卡和 approval request 四类卡片交互
-
-### 4. 单聊额外权限
-
-如果你主要通过单聊与机器人交互，还需要额外开通 P2P 消息接收权限。
+`card.action.trigger` 处理负责人选择、项目导航、资料选择、执行设置和待处理事项等交互。
 
 ## 文件发送与团队资料
 

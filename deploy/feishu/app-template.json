@@ -43,19 +43,28 @@
   },
   "message_types": [
     "text",
-    "image"
+    "image",
+    "file",
+    "post"
   ],
   "scopes_import": {
     "scopes": {
       "tenant": [
         "application:application:self_manage",
         "drive:drive",
+        "docx:document",
+        "wiki:wiki",
         "bitable:app",
         "im:message:readonly",
         "im:message.group_at_msg:readonly",
         "im:message.group_at_msg.include_bot:readonly",
         "im:message.group_msg",
         "im:chat:readonly",
+        "im:chat:read",
+        "im:chat.members:bot_access",
+        "im:chat.members:write_only",
+        "im:chat.tabs:read",
+        "im:chat.tabs:write_only",
         "im:message.p2p_msg:readonly",
         "im:message.reactions:read",
         "im:message.reactions:write_only",
@@ -68,7 +77,7 @@
   "event_subscriptions": [
     {
       "event": "im.message.receive_v1",
-      "purpose": "接收飞书中的文本和图片消息。"
+      "purpose": "接收私聊和项目群的消息，包括回复与附件。"
     },
     {
       "event": "im.message.recalled_v1",
@@ -116,7 +125,7 @@
       "area": "事件订阅",
       "items": [
         "点击“订阅方式”，默认就是“长连接”，点击保存。",
-        "开启 P2P 消息接收事件",
+        "开启私聊和项目群消息接收事件",
         "开启消息撤回事件",
         "开启消息 reaction 创建事件",
         "开启机器人进群、退群和群解散事件",
@@ -135,6 +144,14 @@
       "area": "单聊权限",
       "items": [
         "开通 P2P 消息只读权限。"
+      ]
+    },
+    {
+      "area": "项目群与资料权限",
+      "items": [
+        "开通群信息读取和机器人进退群事件权限。",
+        "按需开通自动邀请、群标签页、Docx、知识库和多维表格权限。",
+        "给对应机器人授予目标目录或资料的访问权限。"
       ]
     },
     {

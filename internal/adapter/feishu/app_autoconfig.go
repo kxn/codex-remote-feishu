@@ -152,9 +152,8 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		diff.CallbackTypeMismatch = strings.TrimSpace(xutil.StringValue(callbackField(snapshot.app, "type"))) != s.policy.CallbackType
 		diff.CallbackRequestURLMismatch = strings.TrimSpace(xutil.StringValue(callbackField(snapshot.app, "url"))) != s.policy.CallbackRequestURL
 	}
-	diff.ConfigPatchRequired = len(diff.MissingScopes) > 0 ||
-		len(diff.MissingEvents) > 0 ||
-		len(diff.MissingCallbacks) > 0 ||
+	blocking, degradable := s.buildRequirementStatus(targetScopes, configuredEvents, configuredCallbacks, configuredScopes, eventsVerifiable, callbacksVerifiable)
+	diff.ConfigPatchRequired = len(blocking) > 0 ||
 		diff.CallbackTypeMismatch ||
 		diff.CallbackRequestURLMismatch
 	diff.AbilityPatchRequired = observedBotEnabled(snapshot.activeVersion) != s.policy.BotEnabled
@@ -192,10 +191,11 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 			Callbacks:         append([]feishuapp.CallbackRequirement(nil), s.manifest.Callbacks...),
 			Policy:            s.policy,
 		},
-		Diff:    diff,
-		Publish: publishState,
+		Diff:                   diff,
+		Publish:                publishState,
+		BlockingRequirements:   blocking,
+		DegradableRequirements: degradable,
 	}
-	plan.BlockingRequirements, plan.DegradableRequirements = s.buildRequirementStatus(targetScopes, configuredEvents, configuredCallbacks, configuredScopes, eventsVerifiable, callbacksVerifiable)
 	plan.Status, plan.Summary = derivePlanState(plan)
 	return plan
 }

@@ -131,14 +131,13 @@ func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	}
 }
 
-func TestPlanAppAutoConfigDefaultManifestReportsProjectMembershipRequirements(t *testing.T) {
+func TestPlanAppAutoConfigDefaultManifestReportsTeamRequirements(t *testing.T) {
 	restoreAutoConfigHooks(t)
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
 		return &larkapplication.Application{
 			Scopes: []*larkapplication.AppScope{
 				{Scope: strp("application:application:self_manage"), TokenTypes: []string{"tenant"}},
 				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
-				{Scope: strp("bitable:app"), TokenTypes: []string{"tenant"}},
 				{Scope: strp("im:message:readonly"), TokenTypes: []string{"tenant"}},
 				{Scope: strp("im:message.group_at_msg:readonly"), TokenTypes: []string{"tenant"}},
 				{Scope: strp("im:message.group_at_msg.include_bot:readonly"), TokenTypes: []string{"tenant"}},
@@ -191,13 +190,53 @@ func TestPlanAppAutoConfigDefaultManifestReportsProjectMembershipRequirements(t 
 	if !reflect.DeepEqual(plan.Diff.MissingEvents, membershipEvents) {
 		t.Fatalf("missing events = %#v, want %#v", plan.Diff.MissingEvents, membershipEvents)
 	}
-	if !hasRequirement(plan.BlockingRequirements, AutoConfigRequirementKindScope, "im:chat:readonly") {
-		t.Fatalf("blocking requirements = %#v, want im:chat:readonly", plan.BlockingRequirements)
+	for _, scope := range []string{"im:chat:readonly", "im:chat:read", "im:chat.members:bot_access"} {
+		if !hasRequirement(plan.BlockingRequirements, AutoConfigRequirementKindScope, scope) {
+			t.Errorf("blocking requirements = %#v, want %q", plan.BlockingRequirements, scope)
+		}
+	}
+	for _, scope := range []string{"im:chat.members:write_only", "im:chat.tabs:read", "im:chat.tabs:write_only", "docx:document", "wiki:wiki", "bitable:app"} {
+		if !hasRequirement(plan.DegradableRequirements, AutoConfigRequirementKindScope, scope) ||
+			!containsScopeRef(plan.Diff.MissingScopes, scope, "tenant") {
+			t.Errorf("expected %q as a degradable tenant scope in the import diff", scope)
+		}
+	}
+	if !hasRequirement(plan.BlockingRequirements, AutoConfigRequirementKindCallback, "card.action.trigger") {
+		t.Error("missing card.action.trigger should block configuration")
 	}
 	for _, event := range membershipEvents {
 		if !hasRequirement(plan.BlockingRequirements, AutoConfigRequirementKindEvent, event) {
 			t.Fatalf("blocking requirements = %#v, want %q", plan.BlockingRequirements, event)
 		}
+	}
+}
+
+func TestPlanAppAutoConfigDefaultManifestAllowsMissingOptionalScopes(t *testing.T) {
+	manifest := feishuapp.DefaultManifest()
+	service := autoConfigService{manifest: manifest, policy: feishuapp.DefaultFixedPolicy()}
+	app := &larkapplication.Application{CallbackInfo: &larkapplication.CallbackInfo{
+		CallbackType:        strp("websocket"),
+		SubscribedCallbacks: []string{"card.action.trigger"},
+	}}
+	for _, scope := range manifest.ScopeRequirements {
+		if scope.Required {
+			app.Scopes = append(app.Scopes, &larkapplication.AppScope{Scope: strp(scope.Scope), TokenTypes: []string{scope.ScopeType}})
+		}
+	}
+	version := &larkapplication.ApplicationAppVersion{
+		VersionId: strp("online-1"),
+		Status:    intp(larkapplication.AppVersionStatusAudited),
+		Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
+	}
+	for _, event := range manifest.Events {
+		version.EventInfos = append(version.EventInfos, &larkapplication.Event{EventType: strp(event.Event)})
+	}
+	plan := service.buildPlan(autoConfigSnapshot{app: app, onlineVersion: version, activeVersion: version, eventVersion: version})
+	if plan.Status != AutoConfigStatusDegraded || plan.Diff.ConfigPatchRequired || plan.Diff.PublishRequired {
+		t.Fatalf("optional scopes must not block an already published app: %#v", plan)
+	}
+	if !containsScopeRef(plan.Diff.MissingScopes, "docx:document", "tenant") {
+		t.Fatal("missing optional scope must remain in the import diff")
 	}
 }
 
@@ -623,6 +662,7 @@ func TestNarrowedManifestScopeSatisfiersHonorAlternatives(t *testing.T) {
 	}{
 		{requirement: "im:message:readonly", configured: "im:message"},
 		{requirement: "im:resource:upload", configured: "im:resource"},
+		{requirement: "im:chat.members:write_only", configured: "im:chat"},
 		{requirement: "application:application:self_manage", configured: "admin:app.info:readonly"},
 		{requirement: "im:message.group_at_msg.include_bot:readonly", configured: "im:message.group_at_msg.include_bot"},
 		{requirement: "im:message.group_msg", configured: "im:message.group_msg:readonly"},

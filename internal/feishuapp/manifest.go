@@ -54,27 +54,7 @@ type ChecklistSection struct {
 }
 
 func DefaultManifest() Manifest {
-	return Manifest{
-		Scopes: ScopesImport{
-			Scopes: PermissionScopes{
-				Tenant: []string{
-					"application:application:self_manage",
-					"drive:drive",
-					"bitable:app",
-					"im:message:readonly",
-					"im:message.group_at_msg:readonly",
-					"im:message.group_at_msg.include_bot:readonly",
-					"im:message.group_msg",
-					"im:chat:readonly",
-					"im:message.p2p_msg:readonly",
-					"im:message.reactions:read",
-					"im:message.reactions:write_only",
-					"im:message:send_as_bot",
-					"im:resource:upload",
-				},
-				User: []string{},
-			},
-		},
+	manifest := Manifest{
 		ScopeRequirements: []ScopeRequirement{
 			{
 				Scope:     "application:application:self_manage",
@@ -89,10 +69,22 @@ func DefaultManifest() Manifest {
 				Required:  true,
 			},
 			{
-				Scope:     "bitable:app",
-				ScopeType: "tenant",
-				Feature:   "team_bitable_resources",
-				Required:  true,
+				Scope:          "docx:document",
+				ScopeType:      "tenant",
+				Feature:        "team_docx_resources",
+				DegradeMessage: "机器人无法创建和维护飞书项目首页及 Docx 成果，可以在群里继续协作。",
+			},
+			{
+				Scope:          "wiki:wiki",
+				ScopeType:      "tenant",
+				Feature:        "team_wiki_resources",
+				DegradeMessage: "机器人无法使用知识库节点，可以选择云空间作为项目资料位置。",
+			},
+			{
+				Scope:          "bitable:app",
+				ScopeType:      "tenant",
+				Feature:        "team_bitable_resources",
+				DegradeMessage: "机器人无法读写多维表格，可以继续使用其他项目资料。",
 			},
 			{
 				Scope:     "im:message:readonly",
@@ -123,6 +115,36 @@ func DefaultManifest() Manifest {
 				ScopeType: "tenant",
 				Feature:   "project_group_membership",
 				Required:  true,
+			},
+			{
+				Scope:     "im:chat:read",
+				ScopeType: "tenant",
+				Feature:   "project_group_membership",
+				Required:  true,
+			},
+			{
+				Scope:     "im:chat.members:bot_access",
+				ScopeType: "tenant",
+				Feature:   "project_group_membership",
+				Required:  true,
+			},
+			{
+				Scope:          "im:chat.members:write_only",
+				ScopeType:      "tenant",
+				Feature:        "project_member_invites",
+				DegradeMessage: "负责人无法自动邀请队员，可以在飞书群里手动添加机器人。",
+			},
+			{
+				Scope:          "im:chat.tabs:read",
+				ScopeType:      "tenant",
+				Feature:        "project_navigation",
+				DegradeMessage: "机器人无法核对群标签页，可以从群里的项目导航卡打开项目。",
+			},
+			{
+				Scope:          "im:chat.tabs:write_only",
+				ScopeType:      "tenant",
+				Feature:        "project_navigation",
+				DegradeMessage: "机器人无法维护群标签页，可以从群里的项目导航卡打开项目。",
 			},
 			{
 				Scope:     "im:message.p2p_msg:readonly",
@@ -158,13 +180,13 @@ func DefaultManifest() Manifest {
 		Events: []EventRequirement{
 			{
 				Event:    "im.message.receive_v1",
-				Purpose:  "接收用户发给机器人的文本和图片消息",
+				Purpose:  "接收私聊和项目群的消息，包括回复与附件",
 				Feature:  "core_message_flow",
 				Required: true,
 			},
 			{
 				Event:    "im.message.recalled_v1",
-				Purpose:  "处理用户撤回消息",
+				Purpose:  "同步撤回的项目输入及其处理状态",
 				Feature:  "message_recall_sync",
 				Required: true,
 			},
@@ -202,7 +224,7 @@ func DefaultManifest() Manifest {
 		Callbacks: []CallbackRequirement{
 			{
 				Callback: "card.action.trigger",
-				Purpose:  "处理卡片按钮和卡片交互回调",
+				Purpose:  "处理负责人选择、项目导航、资料选择和待处理事项等卡片操作",
 				Feature:  "interactive_cards",
 				Required: true,
 			},
@@ -221,14 +243,14 @@ func DefaultManifest() Manifest {
 				Items: []string{
 					"打开“权限管理”里的“批量导入/导出权限”，粘贴 scopes import JSON。",
 					"点击“保存并申请开通”，再回到当前页面继续。",
-					"保持 manifest 里的所有权限启用。",
+					"先补齐必需权限，再按使用的项目能力补齐其余权限。",
 				},
 			},
 			{
 				Area: "事件订阅",
 				Items: []string{
 					"打开“事件与回调”页，在“订阅方式”里确认长连接并保存。",
-					"手工订阅 manifest 里的消息事件和菜单事件。",
+					"添加清单中的消息、机器人进退群、群解散和菜单事件。",
 				},
 			},
 			{
@@ -248,4 +270,16 @@ func DefaultManifest() Manifest {
 			},
 		},
 	}
+
+	permissions := PermissionScopes{Tenant: []string{}, User: []string{}}
+	for _, requirement := range manifest.ScopeRequirements {
+		switch requirement.ScopeType {
+		case "tenant":
+			permissions.Tenant = append(permissions.Tenant, requirement.Scope)
+		case "user":
+			permissions.User = append(permissions.User, requirement.Scope)
+		}
+	}
+	manifest.Scopes = ScopesImport{Scopes: permissions}
+	return manifest
 }

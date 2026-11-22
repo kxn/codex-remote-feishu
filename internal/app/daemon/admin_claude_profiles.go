@@ -313,6 +313,9 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	if req.ReasoningEffort != nil {
 		current.ReasoningEffort = config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort))
 	}
+	if req.VisionSupported != nil {
+		current.VisionSupported = *req.VisionSupported
+	}
 	if err := config.ValidateInstruction(current.Instruction); err != nil {
 		a.adminConfigMu.Unlock()
 		writeAPIError(w, http.StatusBadRequest, apiError{

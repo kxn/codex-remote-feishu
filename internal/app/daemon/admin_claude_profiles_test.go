@@ -208,6 +208,49 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	}
 }
 
+func TestAdminClaudeProfileUpdateVisionSupported(t *testing.T) {
+	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/claude/profiles", `{"name":"Vision Profile","model":"custom-model"}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+
+	for _, step := range []struct {
+		name    string
+		payload string
+		want    bool
+	}{
+		{name: "enable", payload: `{"visionSupported":true}`, want: true},
+		{name: "preserve", payload: `{"model":"another-custom-model"}`, want: true},
+		{name: "disable", payload: `{"visionSupported":false}`, want: false},
+	} {
+		if !t.Run(step.name, func(t *testing.T) {
+			update := performAdminRequest(t, app, http.MethodPut, "/api/admin/claude/profiles/vision-profile", step.payload)
+			if update.Code != http.StatusOK {
+				t.Fatalf("update status = %d body=%s", update.Code, update.Body.String())
+			}
+			var response claudeProfileResponse
+			if err := json.NewDecoder(update.Body).Decode(&response); err != nil {
+				t.Fatalf("decode update response: %v", err)
+			}
+			if response.Profile.VisionSupported != step.want {
+				t.Fatalf("response visionSupported = %t, want %t", response.Profile.VisionSupported, step.want)
+			}
+
+			loaded, err := config.LoadAppConfigAtPath(configPath)
+			if err != nil {
+				t.Fatalf("reload config: %v", err)
+			}
+			profile, ok := config.ResolveClaudeProfile(loaded.Config, "vision-profile")
+			if !ok || profile.VisionSupported != step.want {
+				t.Fatalf("persisted profile found = %t, visionSupported = %t, want %t", ok, profile.VisionSupported, step.want)
+			}
+		}) {
+			return
+		}
+	}
+}
+
 func TestAdminClaudeProfilesSubagentModelRoundTrip(t *testing.T) {
 	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 
