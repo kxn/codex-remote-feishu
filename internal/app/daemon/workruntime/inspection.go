@@ -28,27 +28,28 @@ type InspectionRequest struct {
 // frames and background process/task inspection are separate evidence domains.
 // A model report, socket close, timeout, or PID disappearance is insufficient.
 type NativeObservation struct {
-	RetiredCarrierVerified    bool            `json:"retired_carrier_verified,omitempty"`
-	NativeWriteWatermark      int64           `json:"native_write_watermark"`
-	CanonicalCommandWatermark int64           `json:"canonical_command_watermark"`
-	InspectionCommandID       string          `json:"inspection_command_id,omitempty"`
-	Source                    work.SourceRef  `json:"source,omitempty"`
-	CarrierIncarnation        string          `json:"carrier_incarnation"`
-	InstanceID                string          `json:"instance_id"`
-	InstanceGeneration        int64           `json:"instance_generation"`
-	ProcessGeneration         int64           `json:"process_generation"`
-	LocationGeneration        int64           `json:"location_generation"`
-	SessionID                 string          `json:"session_id"`
-	TurnID                    string          `json:"turn_id"`
-	NativeStopped             bool            `json:"native_stopped"`
-	ContinuationStopped       bool            `json:"continuation_stopped"`
-	BackgroundWorkStopped     bool            `json:"background_work_stopped"`
-	NativeEvidence            json.RawMessage `json:"native_evidence"`
-	ContinuationEvidence      json.RawMessage `json:"continuation_evidence"`
-	BackgroundEvidence        json.RawMessage `json:"background_evidence"`
-	GoalActive                bool            `json:"goal_active"`
-	GoalVersion               int64           `json:"goal_version"`
-	ObservedAt                time.Time       `json:"observed_at"`
+	RetirementEvidence        *RetirementEvidence `json:"retirement_evidence,omitempty"`
+	RetiredCarrierVerified    bool                `json:"retired_carrier_verified,omitempty"`
+	NativeWriteWatermark      int64               `json:"native_write_watermark"`
+	CanonicalCommandWatermark int64               `json:"canonical_command_watermark"`
+	InspectionCommandID       string              `json:"inspection_command_id,omitempty"`
+	Source                    work.SourceRef      `json:"source,omitempty"`
+	CarrierIncarnation        string              `json:"carrier_incarnation"`
+	InstanceID                string              `json:"instance_id"`
+	InstanceGeneration        int64               `json:"instance_generation"`
+	ProcessGeneration         int64               `json:"process_generation"`
+	LocationGeneration        int64               `json:"location_generation"`
+	SessionID                 string              `json:"session_id"`
+	TurnID                    string              `json:"turn_id"`
+	NativeStopped             bool                `json:"native_stopped"`
+	ContinuationStopped       bool                `json:"continuation_stopped"`
+	BackgroundWorkStopped     bool                `json:"background_work_stopped"`
+	NativeEvidence            json.RawMessage     `json:"native_evidence"`
+	ContinuationEvidence      json.RawMessage     `json:"continuation_evidence"`
+	BackgroundEvidence        json.RawMessage     `json:"background_evidence"`
+	GoalActive                bool                `json:"goal_active"`
+	GoalVersion               int64               `json:"goal_version"`
+	ObservedAt                time.Time           `json:"observed_at"`
 }
 
 func (o NativeObservation) validatesIdentity(request InspectionRequest) bool {
@@ -250,7 +251,7 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 	if c.options.Driver == nil {
 		return fmt.Errorf("native quiescence requires a host inspection driver")
 	}
-	observation, err := c.options.Driver.Inspect(ctx, request)
+	observation, err := c.observeAttemptQuiescence(ctx, request)
 	if err != nil {
 		return err
 	}
@@ -258,6 +259,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		return fmt.Errorf("native execution or continuation is not proven stopped")
 	}
 	err = c.store.Within(ctx, func(tx *workstore.Tx) error {
+		if e := validateRetirementCommit(tx, request, observation); e != nil {
+			return e
+		}
 		attempt, e := tx.GetAttempt(attemptID)
 		if e != nil {
 			return e
@@ -341,6 +345,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		if !request.Carrier.Matches(worker) {
 			return workstore.ErrConflict
 		}
+		if err := validateRetirementCommit(tx, request, observation); err != nil {
+			return err
+		}
 		proof, err := c.persistQuiescenceEvidence(tx, request, observation)
 		if err != nil {
 			return err
@@ -401,6 +408,11 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		}
 		for _, reason := range []string{"native_reconciliation", "carrier_disconnected_reconcile", "native_ownership_unproven", "native_command_rejected", "native_command_unknown"} {
 			if err := tx.ClearRuntimeGate(worker.ID, reason); err != nil {
+				return err
+			}
+		}
+		if observation.RetiredCarrierVerified {
+			if err := c.requireRetiredCarrierRebuild(tx, request); err != nil {
 				return err
 			}
 		}

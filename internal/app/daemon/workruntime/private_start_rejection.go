@@ -81,7 +81,7 @@ func (c *Coordinator) preparePrivateStartRejectionReport(tx *workstore.Tx, attem
 	if !observation.provesStopped(request) {
 		return fmt.Errorf("private rejected start awaits full native, continuation and background stop proof")
 	}
-	settled, err := privateOutcomeEffectsSettled(tx, *attempt)
+	settled, err := privateOutcomeEffectsSettled(tx, *attempt, request, observation)
 	if err != nil {
 		return err
 	}

@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
-	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
-	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/runtimejournal"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
@@ -78,15 +75,11 @@ func VerifyRetiredQuiescence(ctx context.Context, store *workstore.Store, stateD
 	if err != nil {
 		return observation, err
 	}
-	waitCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancel()
-	if err = hostinventory.WaitProcessExit(waitCtx, hostinventory.ProcessIdentity{Platform: process.Platform, PID: process.PID, StartIdentity: process.StartIdentity}); err != nil {
-		return observation, fmt.Errorf("exact carrier exit is unproven: %w", err)
-	}
-	if err = runtimejournal.VerifyRetiredWriteFence(ctx, snapshot, stateDir, observation.NativeWriteWatermark); err != nil {
+	evidence, err := verifyRetiredCarrierFence(ctx, store, stateDir, localHostID, worker, observation)
+	if err != nil {
 		return observation, err
 	}
 	observation.RetiredCarrierVerified = true
-	observation.NativeEvidence, _ = json.Marshal(map[string]any{"prior_native_evidence": json.RawMessage(observation.NativeEvidence), "retired_carrier_process": process, "native_write_watermark": observation.NativeWriteWatermark, "canonical_command_watermark": observation.CanonicalCommandWatermark})
+	observation.RetirementEvidence = evidence
 	return observation, nil
 }

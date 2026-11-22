@@ -44,7 +44,7 @@ func (c *Coordinator) preparePrivateSuccessReport(tx *workstore.Tx, attempt work
 	if !observation.provesStopped(request) {
 		return fmt.Errorf("private final waits for complete native, continuation and background quiescence")
 	}
-	settled, err := privateOutcomeEffectsSettled(tx, attempt)
+	settled, err := privateOutcomeEffectsSettled(tx, attempt, request, observation)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func privateOutcomeFinal(tx *workstore.Tx, attempt work.ExecutionAttempt, reques
 	return privateOutcomeExplicitFinal(tx, attempt, request, operations)
 }
 
-func privateOutcomeEffectsSettled(tx *workstore.Tx, attempt work.ExecutionAttempt) (bool, error) {
+func privateOutcomeEffectsSettled(tx *workstore.Tx, attempt work.ExecutionAttempt, request InspectionRequest, observation NativeObservation) (bool, error) {
 	admissions, err := tx.ListAttemptInputAdmissions(attempt.ID)
 	if err != nil {
 		return false, err
@@ -207,6 +207,13 @@ func privateOutcomeEffectsSettled(tx *workstore.Tx, attempt work.ExecutionAttemp
 			return false, err
 		}
 		if transportOnly {
+			continue
+		}
+		retiredStop, err := privateOutcomeRetiredShutdown(tx, operation, request, observation)
+		if err != nil {
+			return false, err
+		}
+		if retiredStop {
 			continue
 		}
 		if operation.Kind == "feishu.publish" && operation.Actor == (work.Actor{Kind: work.ActorSystem, ID: "private-execution-display"}) {

@@ -338,42 +338,7 @@ func (c *Coordinator) Disconnect(ctx context.Context, instanceID string) error {
 			return err
 		}
 		for _, carrier := range carriers {
-			if err := tx.SetCarrierConnected(carrier.Incarnation, false); err != nil {
-				return err
-			}
-			if err := tx.InvalidateContinuationGrants(carrier.Incarnation); err != nil {
-				return err
-			}
-			worker, err := tx.GetWorker(carrier.Owner.WorkerSessionID)
-			if err != nil {
-				return err
-			}
-			if !carrier.Matches(worker) {
-				continue
-			}
-			gate, e := tx.GetRuntimeGate(worker.ID)
-			if e == nil && gate.Reason == "snapshot_rebuild_required" && gate.RecoveryReason == "" {
-				occupied, e := tx.HasAnyCarrierOccupancy(carrier)
-				if e != nil {
-					return e
-				}
-				if !occupied {
-					continue
-				}
-			} else if e != nil && !errors.Is(e, workstore.ErrNotFound) {
-				return e
-			}
-			if worker.State == work.WorkerRetired || worker.State == work.WorkerUnavailable {
-				continue
-			}
-			expected := worker.Revision
-			worker.Revision++
-			worker.State = work.WorkerRecovering
-			worker.UpdatedAt = c.options.Clock()
-			if err := tx.PutWorker(worker, expected); err != nil {
-				return err
-			}
-			if err := tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, Reason: "carrier_disconnected_reconcile", CreatedAt: c.options.Clock()}); err != nil {
+			if err := c.disconnectCarrier(tx, carrier); err != nil {
 				return err
 			}
 		}

@@ -89,6 +89,9 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		return err
 	}
 	r.coordinator = workruntime.New(store, workruntime.Options{DefaultGoalTokenBudget: loaded.Config.Work.DefaultGoalTokenBudget, StateDir: paths.StateDir, HostID: hostID, Driver: driver, SendReceipt: a.relay.SendEventReceipt, EnqueueReconcile: r.enqueueReconcile, AuthorizeControl: authorizeControl, ApplyNativeRequest: workrequests.Apply})
+	if err = r.coordinator.RecoverConnectionsOnStartup(ctx); err != nil {
+		return err
+	}
 	driver.BindRegistrar(r.coordinator)
 	r.stops = workcontrol.NewStops(store, driver)
 	_, port, err := net.SplitHostPort(a.apiServer.Addr)

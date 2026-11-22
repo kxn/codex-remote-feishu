@@ -234,7 +234,7 @@ func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, c
 		if !errors.Is(err, workstore.ErrNotFound) {
 			return err
 		}
-		if err = tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, Reason: "snapshot_rebuild_required", CreatedAt: h.config.Now()}); err != nil {
+		if err = tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, AttemptID: gate.AttemptID, Reason: "snapshot_rebuild_required", CreatedAt: h.config.Now()}); err != nil {
 			return err
 		}
 		requestData, e := json.Marshal(carrierRebuildRequest{CarrierRegistration: carrier, ReuseNativeSession: reuseNativeSession})
@@ -259,22 +259,11 @@ func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, c
 		return h.resumeCarrierStop(ctx, *worker, operation, carrier)
 	}
 	request := workruntime.InspectionRequest{Carrier: carrier, Binding: carrier.Owner, SessionID: worker.NativeSessionID, LocationID: worker.LocationID, LocationGeneration: worker.LocationGeneration}
-	observed, err := h.config.Runtime.Inspect(ctx, request)
+	observed, err := h.inspectRebuildingCarrier(ctx, *worker, request)
 	if err != nil {
-		var attemptID string
-		if e := h.store.Within(ctx, func(tx *workstore.Tx) error {
-			gate, e := tx.GetRuntimeGate(worker.ID)
-			attemptID = gate.AttemptID
-			return e
-		}); e != nil {
-			return errors.Join(err, e)
-		}
-		var e error
-		observed, e = workruntime.VerifyRetiredQuiescence(ctx, h.store, h.config.Paths.StateDir, h.config.HostID, *worker, attemptID)
-		if e != nil {
-			return errors.Join(err, e)
-		}
+		return err
 	}
+
 	if observed.RetiredCarrierVerified {
 		request.SessionID = observed.SessionID
 		request.TurnID = observed.TurnID

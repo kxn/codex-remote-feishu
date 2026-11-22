@@ -102,7 +102,7 @@ func (c *Coordinator) preparePrivateRejectedTurnReport(tx *workstore.Tx, attempt
 	if err != nil || len(ids) == 0 {
 		return err
 	}
-	settled, err := privateOutcomeEffectsSettled(tx, attempt)
+	settled, err := privateOutcomeEffectsSettled(tx, attempt, request, observation)
 	if err != nil {
 		return err
 	}
