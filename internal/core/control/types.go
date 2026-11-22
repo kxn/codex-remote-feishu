@@ -563,6 +563,7 @@ type FinalTurnUsage struct {
 type FinalTurnSummary struct {
 	Elapsed              time.Duration
 	ThreadCWD            string
+	UsageLabel           string
 	Usage                *FinalTurnUsage
 	ThreadUsage          *FinalTurnUsage
 	TotalTokensInContext int

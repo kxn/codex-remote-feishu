@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
@@ -18,7 +19,27 @@ func Critical(event agentproto.Event) bool {
 }
 
 func (s *Store) PersistEvents(events []agentproto.Event) ([]agentproto.Event, error) {
-	output := append([]agentproto.Event(nil), events...)
+	s.displayMu.Lock()
+	defer s.displayMu.Unlock()
+	output := make([]agentproto.Event, 0, len(events))
+	var rollbacks []func()
+	committed := false
+	defer func() {
+		if !committed {
+			for i := len(rollbacks) - 1; i >= 0; i-- {
+				rollbacks[i]()
+			}
+		}
+	}()
+	for _, event := range events {
+		event = s.foldDisplayEvidence(event)
+		frames, rollback := s.publicSummaryEvents(&event, time.Now())
+		output = append(output, frames...)
+		output = append(output, event)
+		if rollback != nil {
+			rollbacks = append(rollbacks, rollback)
+		}
+	}
 	critical := false
 	for _, event := range output {
 		if Critical(event) {
@@ -78,6 +99,8 @@ func (s *Store) PersistEvents(events []agentproto.Event) ([]agentproto.Event, er
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	committed = true
+	s.discardCommittedDisplayEvidence(output)
 	return output, nil
 }
 

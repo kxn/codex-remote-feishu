@@ -173,17 +173,15 @@ func TestQuotedPrivateStopTargetsFrozenOldWorkWithoutMovingView(t *testing.T) {
 		if e != nil {
 			return e
 		}
-		found := false
-		for _, gate := range gates {
-			if gate.State == work.GateClosed {
-				found = true
-				if gate.ContextID != nav.FrontContextID {
-					t.Fatal("quoted stop paused unrelated current work")
-				}
-			}
+		if len(gates) != 0 {
+			t.Fatalf("quoted stop left a gate: %+v", gates)
 		}
-		if !found {
-			t.Fatal("old quoted context was not paused")
+		inputs, e := tx.ListInbox(nav.PersonalScopeID)
+		if e != nil {
+			return e
+		}
+		if len(inputs) != 1 || inputs[0].RecipientContextID != nav.FrontContextID || inputs[0].State != work.InboxCancelled {
+			t.Fatalf("quoted stop did not cancel the frozen old input: %+v", inputs)
 		}
 		return nil
 	})

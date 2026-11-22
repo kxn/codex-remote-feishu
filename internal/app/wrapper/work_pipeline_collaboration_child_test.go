@@ -98,7 +98,7 @@ func (call pipelineCollaborationCLI) assign(input pipelineWorkInput) error {
 		OwnerRoleID: "pipeline-expert", Requirements: []work.TaskRequirementRef{requirement}}, &task); err != nil {
 		return err
 	}
-	return call("message.publish", workservice.PublishMessageRequest{Key: "export-topic", TaskID: task.ObjectID, Body: pipelineTopicSummary}, nil)
+	return call("message.publish", workservice.PublishMessageRequest{Key: "export-topic", TaskID: task.ObjectID, Body: pipelineTopicSummary, Purpose: workservice.PublicationProgress}, nil)
 }
 
 func exportRequirement(scopeID, roleID string, input pipelineWorkInput) work.TaskRequirementRef {
@@ -232,5 +232,5 @@ func (call pipelineCollaborationCLI) review(input pipelineWorkInput) error {
 	if err := call("task.done", workservice.TaskTransitionRequest{Key: "finish-export", TaskID: task.ID, ExpectedRevision: task.Revision}, nil); err != nil {
 		return err
 	}
-	return call("message.publish", workservice.PublishMessageRequest{Key: "deliver-export", TaskID: task.ID, Body: pipelineDelivery}, nil)
+	return call("message.publish", workservice.PublishMessageRequest{Key: "deliver-export", TaskID: task.ID, Body: pipelineDelivery, Purpose: workservice.PublicationFinal}, nil)
 }

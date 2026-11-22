@@ -147,7 +147,7 @@ func (j *pipelineCollaborationJourney) check(t *testing.T, sender *pipelinePubli
 	defer sender.mu.Unlock()
 	if j.phase != 2 || len(sender.requests) != 2 ||
 		sender.requests[0].Text != pipelineTopicSummary || sender.requests[0].ReplyToMessageID != "" ||
-		sender.requests[1].Text != pipelineDelivery || sender.requests[1].ReplyToMessageID != j.topic ||
+		sender.requests[1].Text != pipelineDelivery || sender.requests[1].ReplyToMessageID != j.topic || !sender.requests[1].ReplyInThread ||
 		sender.requests[0].ChatID != j.original.ChatID || sender.requests[1].ChatID != j.original.ChatID {
 		t.Fatalf("expected root assignment and final threaded delivery, phase=%d topic=%s requests=%+v", j.phase, j.topic, sender.requests)
 	}

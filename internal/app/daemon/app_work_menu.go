@@ -137,6 +137,13 @@ func (a *App) advanceTeamMenu(ctx context.Context, menu workstore.MenuInteractio
 		result, err = a.queuePrivatePanel(ctx, source, "contexts", "")
 	case feishuapp.TeamMenuStatus:
 		result, err = a.queuePrivatePanel(ctx, source, "status", "")
+	case feishuapp.TeamMenuStop:
+		result, err = a.applyTeamPrivateStop(ctx, source, 0, false)
+	case feishuapp.TeamMenuNew:
+		err = a.navigateFromSource(ctx, source, "new", "", "", 0)
+		if err == nil {
+			result, err = a.queuePrivatePanel(ctx, source, "menu", "已新建私人会话。下一条消息会进入新会话。")
+		}
 	case feishuapp.TeamMenuHome:
 		result, err = a.queuePrivatePanel(ctx, source, "menu", route.Note)
 	default:

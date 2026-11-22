@@ -208,6 +208,10 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		if err != nil {
 			return err
 		}
+		request.StopBackground, err = tx.PrivateAttemptStopped(attempt)
+		if err != nil {
+			return err
+		}
 		count, err := tx.CountOpenNativeTurns(attemptID)
 		if err != nil {
 			return err

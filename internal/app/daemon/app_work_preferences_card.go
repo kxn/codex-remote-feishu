@@ -46,11 +46,6 @@ func (a *App) queueTeamSettingsCursor(ctx context.Context, source teamHumanSourc
 	if exists {
 		return id, nil
 	}
-	if kind == "model" || kind == "reasoning" {
-		if e := a.prepareTeamModelCatalog(ctx, source); e != nil {
-			note = e.Error()
-		}
-	}
 	service, err := a.teamPreferencesService()
 	if err != nil {
 		return "", err
@@ -58,6 +53,11 @@ func (a *App) queueTeamSettingsCursor(ctx context.Context, source teamHumanSourc
 	snapshot, err := service.DiscoverPage(ctx, source.PrincipalID, source.RoleID, source.Authority, cursor)
 	if err != nil {
 		return "", err
+	}
+	if (kind == "model" || kind == "reasoning") && snapshot.Catalog == nil && teamFixedModel(snapshot) == "" && a.teamRuntime.host != nil {
+		if e := a.prepareTeamModelCatalog(ctx, source); e != nil && note == "" {
+			note = e.Error()
+		}
 	}
 	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		wc, navRevision, e := worksettings.FrozenContext(tx, source.Authority)
@@ -96,8 +96,8 @@ func (a *App) queueTeamSettingsCursor(ctx context.Context, source teamHumanSourc
 		if e != nil {
 			return e
 		}
-		view := workstore.UIView{ID: id, ScopeID: source.ScopeID, ContextID: wc.ID, SurfaceKey: "settings:" + source.ScopeID, Kind: "bot.settings", TargetID: source.RoleID, TargetRevision: navRevision, Binding: binding, Tenant: source.Tenant, ChatID: source.ChatID, PrincipalID: source.PrincipalID, ReplyToMessageID: source.MessageID}
-		if e = workui.ReplaceFromInteraction(tx, &view, source.Authority.InteractionID); e != nil {
+		view := workstore.UIView{ID: id, ScopeID: source.ScopeID, ContextID: wc.ID, Kind: "bot.settings", TargetID: source.RoleID, TargetRevision: navRevision, Binding: binding, Tenant: source.Tenant, ChatID: source.ChatID, PrincipalID: source.PrincipalID, ReplyToMessageID: source.MessageID}
+		if e = workui.PrivateNavigationFromInteraction(tx, &view, source.Authority.InteractionID); e != nil {
 			return e
 		}
 		_, e = workui.Queue(tx, view, card)
@@ -105,6 +105,15 @@ func (a *App) queueTeamSettingsCursor(ctx context.Context, source teamHumanSourc
 	})
 	return id, err
 }
+func teamFixedModel(snapshot worksettings.Snapshot) string {
+	for _, profile := range snapshot.Profiles {
+		if profile.Backend == snapshot.Settings.Backend && profile.ID == teamSettingsProfile(snapshot.Settings) {
+			return profile.FixedModel
+		}
+	}
+	return ""
+}
+
 func teamSettingsButton(id, label, action string, extra map[string]any) map[string]any {
 	value := cardkit.CloneMap(extra)
 	if value == nil {
@@ -122,39 +131,105 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 		}
 	}
 	text(note)
-	text("机器人配置适用于这个助手。执行权限、计划模式和详细程度只影响当前工作；运行中的执行继续使用其原快照。")
-	model := snapshot.Settings.PromptOverride.Model
-	if model == "" {
-		model = "跟随所选配置"
+
+	currentModel := snapshot.Settings.PromptOverride.Model
+	currentEffort := snapshot.Settings.PromptOverride.ReasoningEffort
+	effectiveModel := currentModel
+	effectiveEffort := currentEffort
+	for _, profile := range snapshot.Profiles {
+		if profile.Backend == snapshot.Settings.Backend && profile.ID == teamSettingsProfile(snapshot.Settings) && profile.FixedModel != "" {
+			effectiveModel = profile.FixedModel
+			effectiveEffort = profile.FixedReasoning
+			break
+		}
 	}
-	effort := snapshot.Settings.PromptOverride.ReasoningEffort
-	if effort == "" {
-		effort = "自动"
+	if effectiveModel == "" && snapshot.Catalog != nil {
+		for _, entry := range snapshot.Catalog.Entries {
+			if entry.IsDefault && !entry.Hidden {
+				effectiveModel = entry.Model
+				if effectiveModel == "" {
+					effectiveModel = entry.ID
+				}
+				break
+			}
+		}
 	}
-	text(fmt.Sprintf("机器人：%s · %s\n模型：%s\n推理强度：%s", snapshot.Settings.Backend, teamSettingsProfile(snapshot.Settings), model, effort))
-	if pref.AccessMode != nil {
-		text("当前工作权限：" + *pref.AccessMode)
+	if effectiveModel == "" {
+		effectiveModel = "跟随当前配置"
 	}
-	if pref.PlanMode != nil {
-		text("当前工作计划模式：" + *pref.PlanMode)
+	if effectiveEffort == "" {
+		effectiveEffort = "自动"
 	}
-	if pref.Verbose != nil {
-		text("当前工作详细程度：" + *pref.Verbose)
+	local := func(value *string) string {
+		if value == nil {
+			return "跟随后端默认"
+		}
+		return *value
+	}
+	titles := map[string]string{"overview": "参数设置", "model": "模型", "reasoning": "推理强度", "backend": "执行后端", "codex-profile": "Codex 配置", "claude-profile": "Claude 配置", "opencode-profile": "OpenCode 配置", "access": "执行权限", "plan": "计划模式", "verbose": "消息详细程度"}
+	initial := ""
+	switch kind {
+	case "overview", "backend", "codex-profile", "claude-profile", "opencode-profile":
+		text(fmt.Sprintf("当前执行后端：%s\n当前配置：%s", snapshot.Settings.Backend, teamSettingsProfile(snapshot.Settings)))
+		if kind == "backend" {
+			initial = string(snapshot.Settings.Backend)
+		} else {
+			initial = teamSettingsProfile(snapshot.Settings)
+		}
+	case "model":
+		text("当前模型：" + effectiveModel)
+		initial = currentModel
+	case "reasoning":
+		text("当前模型：" + effectiveModel + "\n当前推理强度：" + effectiveEffort)
+		initial = currentEffort
+	case "access":
+		text("当前执行权限：" + local(pref.AccessMode))
+		if pref.AccessMode != nil {
+			initial = *pref.AccessMode
+		}
+	case "plan":
+		text("当前计划模式：" + local(pref.PlanMode))
+		if pref.PlanMode != nil {
+			initial = *pref.PlanMode
+		}
+	case "verbose":
+		text("当前详细程度：" + local(pref.Verbose))
+		if pref.Verbose != nil {
+			initial = *pref.Verbose
+		}
+	}
+	if initial == "" {
+		initial = "clear"
 	}
 	options := []map[string]any{}
 	add := func(label, value string) {
 		options = append(options, map[string]any{"text": cardkit.PlainText(label), "value": value})
 	}
 	if kind == "overview" {
-		pages := []struct{ key, label string }{{"backend", "执行后端"}, {"codex-profile", "Codex 配置"}, {"claude-profile", "Claude 配置"}, {"opencode-profile", "OpenCode 配置"}, {"model", "模型"}, {"reasoning", "推理强度"}, {"access", "工作权限"}, {"plan", "计划模式"}, {"verbose", "详细程度"}}
-		for _, page := range pages {
-			elements = append(elements, teamSettingsButton(id, page.label, "settings.page", map[string]any{"setting": page.key}))
+		pages := []string{"backend"}
+		profilePage := string(snapshot.Settings.Backend) + "-profile"
+		if titles[profilePage] != "" {
+			pages = append(pages, profilePage)
 		}
+		if snapshot.Settings.Backend != agentproto.BackendOpenCode {
+			pages = append(pages, "model")
+		}
+		pages = append(pages, "reasoning", "access", "plan", "verbose")
+		for _, page := range pages {
+			elements = append(elements, teamSettingsButton(id, titles[page], "settings.page", map[string]any{"setting": page}))
+		}
+		elements = append(elements, teamSettingsButton(id, "断线后自动继续", "automation.autocontinue.status", nil))
+		elements = append(elements, teamSettingsButton(id, "返回菜单首页", "private.menu", nil))
 	} else {
 		switch kind {
 		case "backend":
-			for _, backend := range []string{"codex", "claude", "opencode"} {
-				add(backend, backend)
+			for _, backend := range []agentproto.Backend{agentproto.BackendCodex, agentproto.BackendClaude, agentproto.BackendOpenCode} {
+				for _, profile := range snapshot.Profiles {
+					if profile.Available && profile.Backend == backend {
+						add(string(backend), string(backend))
+						break
+					}
+				}
 			}
 		case "codex-profile", "claude-profile", "opencode-profile":
 			backend := agentproto.Backend(strings.TrimSuffix(kind, "-profile"))
@@ -249,9 +324,10 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 			add("关闭计划模式", "off")
 		case "verbose":
 			add("跟随默认详细程度", "clear")
-			for _, value := range []string{"quiet", "normal", "verbose", "chatty"} {
-				add(value, value)
-			}
+			add("简洁 · 主要显示最终回复", "quiet")
+			add("普通 · 显示正文、计划和文件变化", "normal")
+			add("详细 · 增加工具和差异摘要", "verbose")
+			add("逐阶段 · 保留可公开的阶段和工具摘要", "chatty")
 		}
 		if len(options) > 100 {
 			return nil, fmt.Errorf("settings picker has more than 100 choices; narrow or paginate the actual catalog")
@@ -264,6 +340,12 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 		}
 		if len(options) > 0 {
 			selectField := map[string]any{"tag": "select_static", "name": "selection", "placeholder": cardkit.PlainText("请选择"), "options": options}
+			for _, option := range options {
+				if option["value"] == initial {
+					selectField["initial_option"] = initial
+					break
+				}
+			}
 			submit := teamSettingsButton(id, "保存选择", "settings.apply", nil)
 			submit["name"] = "__settings_submit"
 			submit["form_action_type"] = "submit"
@@ -271,9 +353,9 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 		} else {
 			text("当前没有可选配置，请先在管理页面维护已有 Profile。")
 		}
-		elements = append(elements, teamSettingsButton(id, "刷新列表", "settings.page", map[string]any{"setting": kind}), teamSettingsButton(id, "返回设置", "settings.page", map[string]any{"setting": "overview"}))
+		elements = append(elements, teamSettingsButton(id, "刷新列表", "settings.page", map[string]any{"setting": kind}), teamSettingsButton(id, "返回参数设置", "settings.page", map[string]any{"setting": "overview"}))
 	}
-	raw, err := json.Marshal(map[string]any{"schema": "2.0", "config": map[string]any{"update_multi": true}, "header": map[string]any{"title": cardkit.PlainText("模型和当前工作设置")}, "body": map[string]any{"elements": elements}})
+	raw, err := json.Marshal(map[string]any{"schema": "2.0", "config": map[string]any{"update_multi": true}, "header": map[string]any{"title": cardkit.PlainText(titles[kind])}, "body": map[string]any{"elements": elements}})
 	if err != nil {
 		return nil, err
 	}

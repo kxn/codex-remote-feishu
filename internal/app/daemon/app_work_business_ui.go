@@ -83,7 +83,13 @@ func (a *App) handleTeamBusinessView(ctx context.Context, interaction workstore.
 				}
 				cursor.References = request.Presentation.References
 			case "project.artifacts":
-				delivery, err := tx.GetDelivery(view.ScopeID, view.TargetID)
+				var delivery work.Delivery
+				var err error
+				if projectScope {
+					delivery, err = tx.GetSentDelivery(view.ScopeID, view.TargetID, view.Tenant, view.ChatID, view.ChannelGeneration)
+				} else {
+					delivery, err = tx.GetDelivery(view.ScopeID, view.TargetID)
+				}
 				if err != nil {
 					return err
 				}

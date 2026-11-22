@@ -286,7 +286,7 @@ func (t *Tx) PutInbox(v work.Inbox, expected int64) error {
 		if err != nil {
 			return err
 		}
-		if err = immutable(old.AutomationEpisodeID != v.AutomationEpisodeID || old.SessionGoalIntentID != v.SessionGoalIntentID || old.ControlOfInputID != v.ControlOfInputID || old.ScopeID != v.ScopeID || old.RecipientRoleID != v.RecipientRoleID || old.EventID != v.EventID || old.MessageID != v.MessageID || old.TaskID != v.TaskID || old.RelatedTaskID != v.RelatedTaskID); err != nil {
+		if err = immutable(old.DirectedReplyIngressID != v.DirectedReplyIngressID || old.DirectedReplyBotGeneration != v.DirectedReplyBotGeneration || old.AutomationEpisodeID != v.AutomationEpisodeID || old.SessionGoalIntentID != v.SessionGoalIntentID || old.ControlOfInputID != v.ControlOfInputID || old.ScopeID != v.ScopeID || old.RecipientRoleID != v.RecipientRoleID || old.EventID != v.EventID || old.MessageID != v.MessageID || old.TaskID != v.TaskID || old.RelatedTaskID != v.RelatedTaskID); err != nil {
 			return err
 		}
 		if old.RecipientContextID != v.RecipientContextID && (old.RecipientContextID != "" || old.State != work.InboxPending) {

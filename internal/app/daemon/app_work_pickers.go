@@ -69,7 +69,7 @@ func (a *App) queueTeamProjectPickerPage(ctx context.Context, source teamHumanSo
 	if err != nil {
 		return "", err
 	}
-	panel := workui.Panel{Title: "选择要协助的项目", Paragraphs: []string{"这里可以选择你当前可访问的项目。进入项目后，私人讨论仍保留在私聊。"}}
+	panel := workui.Panel{Title: "项目相关讨论", Paragraphs: []string{"选中项目后，后续私聊进入与该项目关联的私人会话。"}}
 	start := page * teamPickerPageSize
 	if start > len(projects) {
 		return "", workstore.ErrConflict
@@ -95,6 +95,7 @@ func (a *App) queueTeamProjectPickerPage(ctx context.Context, source teamHumanSo
 	if end < len(projects) {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "下一页", Action: "picker.project.page", Values: map[string]any{"page": strconv.Itoa(page + 1)}})
 	}
+	panel.Buttons = append(panel.Buttons, workui.Button{Label: "返回工作区与会话", Action: "private.workspace"})
 	return a.queueTeamPicker(ctx, source, "private.project-picker", source.ScopeID, source.NavigationRevision, panel)
 }
 func (a *App) queueTeamPicker(ctx context.Context, source teamHumanSource, kind, target string, revision int64, panel workui.Panel) (string, error) {
@@ -135,30 +136,43 @@ func (a *App) queueTeamPicker(ctx context.Context, source teamHumanSource, kind,
 		}
 		view := workstore.UIView{ID: id, ScopeID: source.ScopeID, SurfaceKey: source.ScopeID + ":" + kind, Kind: kind, TargetID: target, TargetRevision: revision, Binding: binding, Tenant: source.Tenant, ChatID: source.ChatID, PrincipalID: source.PrincipalID, ChannelGeneration: generation, ReplyToMessageID: source.MessageID, CreatedAt: time.Now().UTC()}
 
-		if scope.Kind == work.ScopePersonal {
+		privatePicker := scope.Kind == work.ScopePersonal && (kind == "private.project-picker" || kind == "private.context-picker" || kind == "execution.location-picker")
+		if privatePicker {
+			nav, e := tx.GetPrivateNavigation(scope.ID)
+			if e != nil {
+				return e
+			}
+			if nav.Revision != source.NavigationRevision {
+				return workstore.ErrConflict
+			}
+			view.ContextID = nav.FrontContextID
+		} else if scope.Kind == work.ScopePersonal {
 			front, _, e := worksettings.FrozenContext(tx, source.Authority)
 			if e != nil {
 				return e
 			}
 			view.ContextID = front.ID
-			if kind == "private.context-picker" && target != scope.ID {
-				described, e := tx.GetContext(target)
-				if e != nil {
-					return e
-				}
-				if described.ScopeID != scope.ID || described.RoleID != scope.RoleID {
-					return workstore.ErrScopeDenied
-				}
-				view.ContextID = described.ID
-			}
 		}
-		if source.Authority.InteractionID != "" {
+		if privatePicker {
+			if e = workui.PrivateNavigationFromInteraction(tx, &view, source.Authority.InteractionID); e != nil {
+				return e
+			}
+		} else if source.Authority.InteractionID != "" {
 			interaction, e := tx.GetHumanInteraction(source.Authority.InteractionID)
 			if e != nil {
 				return e
 			}
 			action, _ := interaction.Envelope.Values["action"].(string)
-			if strings.HasSuffix(action, ".page") || action == "history.contexts-page" || action == "history.read" {
+			if scope.Kind == work.ScopePersonal && (kind == "host.result" || kind == "host.upgrade-status" || kind == "file.result") && strings.HasPrefix(action, "private.") {
+				label, back := "返回系统管理", "private.admin"
+				if strings.HasPrefix(action, "private.mcp-") || action == "private.file-send" {
+					label, back = "返回常用工具", "private.tools"
+				}
+				panel.Buttons = append(panel.Buttons, workui.Button{Label: label, Action: back})
+				if e = workui.PrivateNavigationFromInteraction(tx, &view, interaction.ID); e != nil {
+					return e
+				}
+			} else if strings.HasSuffix(action, ".page") {
 				if e = workui.ReplaceFromInteraction(tx, &view, interaction.ID); e != nil {
 					return e
 				}

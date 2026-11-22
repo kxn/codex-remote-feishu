@@ -46,6 +46,17 @@ func TestCompletedTaskPublishesItsSavedDeliveryAndReceivesOutboxReceipt(t *testi
 	if _, err = r.service.ResourceSaveFile(ctx, token, run, save); !errors.Is(err, workauth.ErrUnauthorized) {
 		t.Fatalf("completed run could write a new resource: %v", err)
 	}
+	capabilities, err := r.service.DiscoverCommands(ctx, token, run)
+	if err != nil {
+		t.Fatalf("completed active task publication discovery: %v", err)
+	}
+	available := false
+	for _, command := range capabilities.Commands {
+		available = available || command.Name == "delivery.publish"
+	}
+	if !available {
+		t.Fatal("completed active leader's delivery tool was hidden")
+	}
 	request := workservice.PublishDeliveryRequest{Key: "delivery", Purpose: "Report", Summary: "Verified",
 		References: []work.DeliveryRef{{ResourceID: artifact.ResourceID, VersionID: artifact.VersionID}},
 		Audience:   []work.Actor{{Kind: work.ActorRole, ID: "leader"}}, Retention: work.RetentionPermanent}

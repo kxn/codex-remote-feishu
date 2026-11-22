@@ -146,6 +146,7 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 	if err != nil {
 		return err
 	}
+	replyInThread := false
 	// Recheck authorization before sending. Upload success is retained even when
 	// membership or bot identity changed while the upload was in flight.
 	err = r.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -159,6 +160,13 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 		scope, e := tx.GetScope(view.ScopeID)
 		if e != nil {
 			return e
+		}
+		if scope.Kind == work.ScopeProject || scope.Kind == work.ScopeBootstrap {
+			mapping, lookupErr := tx.GetPlatformMessageMapping(view.Tenant, view.ChatID, interaction.Envelope.MessageID)
+			if lookupErr != nil {
+				return lookupErr
+			}
+			replyInThread = mapping.TaskID != ""
 		}
 		if scope.Kind == work.ScopeProject {
 			if e = tx.RequireProjectPrincipalAccess(view.ScopeID, interaction.PrincipalID, time.Now()); e != nil {
@@ -179,7 +187,7 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 	if err != nil {
 		return a.recordArtifactFileFailure(ctx, operation.ID, err)
 	}
-	receipt, err := gateway.ProjectChatAPI().PublishResultFile(ctx, feishu.PublishResultFileRequest{ChatID: view.ChatID, ReplyToMessageID: interaction.Envelope.MessageID, FileKey: key, UUID: operation.ID})
+	receipt, err := gateway.ProjectChatAPI().PublishResultFile(ctx, feishu.PublishResultFileRequest{ChatID: view.ChatID, ReplyToMessageID: interaction.Envelope.MessageID, ReplyInThread: replyInThread, FileKey: key, UUID: operation.ID})
 	if err != nil {
 		return a.recordArtifactFileFailure(ctx, operation.ID, err)
 	}

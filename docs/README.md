@@ -186,6 +186,7 @@
 - [feishu-agent-team-ssot-audit.md](./inprogress/feishu-agent-team-ssot-audit.md) — 团队改版后的状态所有权、旧入口退役、配置执行一致性与回归证据。
 
 - [feishu-agent-team-acceptance.md](./inprogress/feishu-agent-team-acceptance.md) — 产品场景与实际实现、测试证据及真实环境边界映射。
+- [feishu-interaction-repair.md](./inprogress/feishu-interaction-repair.md) — 已确认的单聊菜单／执行展示恢复、群低频展示和发布权限整改及完整使用流程验收。
 - [feishu-agent-team-implementation.md](./inprogress/feishu-agent-team-implementation.md) — 完整产品实施计划、子代理分工、依赖与验证记录。
 
 - [claude-backend-integration-plan.md](./inprogress/claude-backend-integration-plan.md)

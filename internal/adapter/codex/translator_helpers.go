@@ -118,6 +118,9 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 	}
 	switch itemKind {
 	case "agent_message":
+		if phase, ok := item["phase"].(string); ok {
+			metadata["phase"] = phase
+		}
 		if delivery, ok := item["delivery"].(string); ok {
 			metadata["delivery"] = delivery
 		}

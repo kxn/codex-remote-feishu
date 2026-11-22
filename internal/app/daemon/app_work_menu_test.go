@@ -10,11 +10,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
-func TestTeamBotMenuStatusAndRetiredStopPublishDistinctFeedback(t *testing.T) {
+func TestTeamBotMenuStatusAndLegacyActionsPublishDistinctFeedback(t *testing.T) {
 	a, source := teamPickerFixture(t)
 	for _, tc := range []struct{ key, prompt string }{
 		{string(feishuapp.TeamMenuStatus), "当前工作状态"},
-		{"stop", "请在私聊发送 /stop 停止当前工作"},
+		{"stop", "已提交停止请求"},
+		{"new", "已新建私人会话"},
 	} {
 		t.Run(tc.key, func(t *testing.T) {
 			var click workstore.MenuInteraction

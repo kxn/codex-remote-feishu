@@ -13,6 +13,7 @@ import (
 type ProjectPublishRequest struct {
 	ChatID           string
 	ReplyToMessageID string
+	ReplyInThread    bool
 	Text             string
 	UUID             string
 }
@@ -44,6 +45,7 @@ func (a *ProjectChatAPI) PublishText(ctx context.Context, req ProjectPublishRequ
 type ProjectCardPublishRequest struct {
 	ChatID           string
 	ReplyToMessageID string
+	ReplyInThread    bool
 	Card             json.RawMessage
 	UUID             string
 }
@@ -52,7 +54,7 @@ func (a *ProjectChatAPI) PublishCard(ctx context.Context, req ProjectCardPublish
 	if req.ChatID == "" || req.UUID == "" || len(req.UUID) > 50 || len(req.Card) == 0 || len(req.Card) > 28*1024 || !json.Valid(req.Card) {
 		return ProjectPublishReceipt{}, fmt.Errorf("invalid card publication")
 	}
-	return a.publishContent(ctx, ProjectPublishRequest{ChatID: req.ChatID, ReplyToMessageID: req.ReplyToMessageID, UUID: req.UUID}, "interactive", req.Card)
+	return a.publishContent(ctx, ProjectPublishRequest{ChatID: req.ChatID, ReplyToMessageID: req.ReplyToMessageID, ReplyInThread: req.ReplyInThread, UUID: req.UUID}, "interactive", req.Card)
 }
 
 func (a *ProjectChatAPI) publishContent(ctx context.Context, req ProjectPublishRequest, kind string, content []byte) (ProjectPublishReceipt, error) {
@@ -60,7 +62,7 @@ func (a *ProjectChatAPI) publishContent(ctx context.Context, req ProjectPublishR
 	if req.ReplyToMessageID != "" {
 		const api = "im.v1.message.reply"
 		resp, e := DoSDK(ctx, a.broker, a.callSpec(api, req.ChatID, false), func(ctx context.Context, client *lark.Client) (*larkim.ReplyMessageResp, error) {
-			r, e := client.Im.V1.Message.Reply(ctx, larkim.NewReplyMessageReqBuilder().MessageId(req.ReplyToMessageID).Body(larkim.NewReplyMessageReqBodyBuilder().MsgType(kind).Content(string(content)).ReplyInThread(true).Uuid(req.UUID).Build()).Build())
+			r, e := client.Im.V1.Message.Reply(ctx, larkim.NewReplyMessageReqBuilder().MessageId(req.ReplyToMessageID).Body(larkim.NewReplyMessageReqBodyBuilder().MsgType(kind).Content(string(content)).ReplyInThread(req.ReplyInThread).Uuid(req.UUID).Build()).Build())
 			if e != nil {
 				return r, e
 			}

@@ -1,10 +1,13 @@
 package workstore
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
+
+var ErrPersonalDestinationUnavailable = errors.New("personal context has no authenticated platform destination")
 
 type PersonalDestination struct{ Tenant, ChatID string }
 
@@ -68,7 +71,7 @@ func (t *Tx) GetPersonalContextDestination(scopeID, contextID, roleID string) (P
 		destination = PersonalDestination{Tenant: tenant, ChatID: chat}
 	}
 	if destination.ChatID == "" {
-		return destination, fmt.Errorf("personal context has no authenticated platform destination")
+		return destination, ErrPersonalDestinationUnavailable
 	}
 	return destination, nil
 }

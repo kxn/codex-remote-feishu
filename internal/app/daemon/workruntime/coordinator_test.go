@@ -138,7 +138,20 @@ func newFixture(t *testing.T, backend work.Backend, review ...bool) *fixture {
 		if err := tx.PutWorker(work.WorkerSession{ID: "worker", ContextID: "context", ScopeID: "scope", RoleID: "role", Backend: backend, State: work.WorkerPreparing, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: "instance-1", InstanceGeneration: 1, ProcessGeneration: 1, CarrierIncarnation: "inc-1", LocationID: "location", LocationGeneration: 1, Revision: 1}, 0); err != nil {
 			return err
 		}
-		if err := tx.PutInbox(work.Inbox{ID: "input", ScopeID: "scope", RecipientRoleID: "role", RecipientContextID: "context", EventID: "event", State: work.InboxPending, Revision: 1}, 0); err != nil {
+		input := work.Inbox{ID: "input", ScopeID: "scope", RecipientRoleID: "role", RecipientContextID: "context", EventID: "event", State: work.InboxPending, Revision: 1}
+		if len(review) > 1 && review[1] {
+			if err := tx.PutContent(work.NewContent("source-body", "scope", "text/plain", []byte("work input"), f.now)); err != nil {
+				return err
+			}
+			input.MessageID = "private-human-input"
+			message := work.Message{ID: input.MessageID, ScopeID: "scope", ConversationID: "conversation", Source: work.Actor{Kind: work.ActorPrincipal, ID: principalID},
+				PlatformKey:  &work.MessageKey{Tenant: "tenant", ChatID: "private-chat", MessageID: "om_user"},
+				Observations: []work.Observation{{AppID: "app", IdentityGeneration: 1, ReceivedAt: f.now}}, BodyRef: "source-body", Revision: 1, CreatedAt: f.now,
+			}
+			if _, _, err := tx.AcceptMessage(message, []work.Inbox{input}); err != nil {
+				return err
+			}
+		} else if err := tx.PutInbox(input, 0); err != nil {
 			return err
 		}
 		return tx.PutContent(work.NewContent("report-outcome", "scope", "text/plain", []byte("explicit business result"), f.now))

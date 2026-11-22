@@ -350,22 +350,43 @@ func TestDeliveryJourneyCLIToFeishuFrozenFileAndOlderFeedback(t *testing.T) {
 
 func startDeliveryJourneyRun(t *testing.T, store *workstore.Store, dir, label, existingInput string, tasks ...work.Task) work.ExecutionAttempt {
 	t.Helper()
+	return startPublicationJourneyRun(t, store, dir, label, existingInput, "scope", "leader", tasks...)
+}
+
+func startPublicationJourneyRun(t *testing.T, store *workstore.Store, dir, label, existingInput, scopeID, roleID string, tasks ...work.Task) work.ExecutionAttempt {
+	t.Helper()
 	var attempt work.ExecutionAttempt
 	if err := store.Within(t.Context(), func(tx *workstore.Tx) error {
-		wc := work.WorkContext{ID: label + "-context", ScopeID: "scope", RoleID: "leader", Workstream: label, Revision: 1}
+		wc := work.WorkContext{ID: label + "-context", ScopeID: scopeID, RoleID: roleID, Workstream: label, Revision: 1}
+		if existingInput != "" {
+			input, err := tx.GetInbox(existingInput)
+			if err != nil {
+				return err
+			}
+			if input.RecipientContextID != "" {
+				wc, err = tx.GetContext(input.RecipientContextID)
+				if err != nil {
+					return err
+				}
+			}
+		}
 		var task work.Task
 		if len(tasks) > 0 {
 			task = tasks[0]
 			wc.TaskID = task.ID
 		}
-		if err := tx.PutContext(wc, 0); err != nil {
-			return err
+		if _, e := tx.GetContext(wc.ID); errors.Is(e, workstore.ErrNotFound) {
+			if err := tx.PutContext(wc, 0); err != nil {
+				return err
+			}
+		} else if e != nil {
+			return e
 		}
 		location := work.ExecutionLocation{ID: label + "-location", HostID: "local-delivery-host", Cwd: dir, IsolatedContextID: wc.ID, Generation: 1, Revision: 1}
 		if err := tx.PutLocation(location, 0); err != nil {
 			return err
 		}
-		worker := work.WorkerSession{ID: label + "-worker", ContextID: wc.ID, ScopeID: "scope", RoleID: "leader", Backend: work.BackendCodex, State: work.WorkerReady, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: label + "-instance", InstanceGeneration: 1, ProcessGeneration: 1, LocationID: location.ID, LocationGeneration: 1, Revision: 1}
+		worker := work.WorkerSession{ID: label + "-worker", ContextID: wc.ID, ScopeID: scopeID, RoleID: roleID, Backend: work.BackendCodex, State: work.WorkerReady, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: label + "-instance", InstanceGeneration: 1, ProcessGeneration: 1, LocationID: location.ID, LocationGeneration: 1, Revision: 1}
 		if err := tx.PutWorker(worker, 0); err != nil {
 			return err
 		}

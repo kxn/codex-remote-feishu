@@ -21,9 +21,15 @@ type Button struct {
 	Values        map[string]any
 	URL           string
 }
+type InputForm struct {
+	Name, Placeholder string
+	Submit            Button
+}
+
 type Panel struct {
 	Title      string
 	Paragraphs []string
+	Forms      []InputForm
 	Buttons    []Button
 }
 
@@ -43,23 +49,34 @@ func Card(viewID string, panel Panel) (json.RawMessage, error) {
 			elements = append(elements, block)
 		}
 	}
+	for _, form := range panel.Forms {
+		field := map[string]any{"tag": "input", "name": form.Name, "placeholder": cardkit.PlainText(form.Placeholder), "width": "fill"}
+		submit := callbackButton(viewID, form.Submit)
+		submit["name"] = form.Name + "_submit"
+		submit["form_action_type"] = "submit"
+		elements = append(elements, map[string]any{"tag": "form", "name": form.Name + "_form", "elements": []any{field, submit}})
+	}
 	for _, button := range panel.Buttons {
 		if button.URL != "" {
 			elements = append(elements, map[string]any{"tag": "button", "text": cardkit.PlainText(button.Label), "behaviors": []any{map[string]any{"type": "open_url", "default_url": button.URL}}})
 			continue
 		}
-		value := cardkit.CloneMap(button.Values)
-		if value == nil {
-			value = map[string]any{}
-		}
-		value["team_view"] = viewID
-		value["action"] = button.Action
-		elements = append(elements, map[string]any{"tag": "button", "text": cardkit.PlainText(button.Label), "behaviors": []any{map[string]any{"type": "callback", "value": value}}})
+		elements = append(elements, callbackButton(viewID, button))
 	}
 	if len(elements) > 150 {
 		return nil, fmt.Errorf("view needs pagination")
 	}
 	return json.Marshal(map[string]any{"schema": "2.0", "config": map[string]any{"update_multi": true}, "header": map[string]any{"title": cardkit.PlainText(panel.Title)}, "body": map[string]any{"elements": elements}})
+}
+
+func callbackButton(viewID string, button Button) map[string]any {
+	value := cardkit.CloneMap(button.Values)
+	if value == nil {
+		value = map[string]any{}
+	}
+	value["team_view"] = viewID
+	value["action"] = button.Action
+	return map[string]any{"tag": "button", "text": cardkit.PlainText(button.Label), "behaviors": []any{map[string]any{"type": "callback", "value": value}}}
 }
 
 // Queue is atomic with its caller's business transaction. Failed publication
@@ -83,7 +100,14 @@ func Queue(tx *workstore.Tx, view workstore.UIView, card json.RawMessage) (works
 		if lookupErr != nil && !errors.Is(lookupErr, workstore.ErrNotFound) {
 			return view, lookupErr
 		}
-		if (old.Invalidated && !replay) || old.ExternalMessageID == "" || op.State != work.OperationConfirmed ||
+		snapshotAllowed := false
+		if old.Invalidated && !replay {
+			snapshotAllowed, e = SnapshotReplacementAllowed(tx, old, view)
+			if e != nil {
+				return view, e
+			}
+		}
+		if (old.Invalidated && !replay && !snapshotAllowed) || old.ExternalMessageID == "" || op.State != work.OperationConfirmed ||
 			old.ScopeID != view.ScopeID || old.SurfaceKey != view.SurfaceKey || old.Binding != view.Binding ||
 			old.ChatID != view.ChatID || old.Tenant != view.Tenant || old.PrincipalID != view.PrincipalID {
 			return view, fmt.Errorf("replacement no longer owns the displayed message")
@@ -127,7 +151,7 @@ func Queue(tx *workstore.Tx, view workstore.UIView, card json.RawMessage) (works
 		return view, err
 	}
 	for _, old := range previous {
-		if old.SurfaceKey == view.SurfaceKey && !old.Invalidated {
+		if !old.Invalidated && (old.SurfaceKey == view.SurfaceKey || legacyPrivateNavigationOwner(old, view)) {
 			revision := old.Revision
 			old.Revision++
 			old.Invalidated = true

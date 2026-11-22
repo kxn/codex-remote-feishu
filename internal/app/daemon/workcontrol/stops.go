@@ -50,10 +50,10 @@ func (s *Stops) RunOnce(ctx context.Context) error {
 			if e != nil {
 				return e
 			}
-			if len(gates) == 0 {
+			if len(gates) == 0 && scope.Kind != work.ScopePersonal {
 				continue
 			}
-			attempts, e := tx.ListAttempts(scope.ID)
+			attempts, e := tx.ListOccupiedAttempts(scope.ID)
 			if e != nil {
 				return e
 			}
@@ -72,7 +72,16 @@ func (s *Stops) RunOnce(ctx context.Context) error {
 					return e
 				}
 				if allowed {
-					continue
+					if scope.Kind != work.ScopePersonal {
+						continue
+					}
+					stopped, e := tx.PrivateAttemptStopped(attempt)
+					if e != nil {
+						return e
+					}
+					if !stopped {
+						continue
+					}
 				}
 				worker, e := tx.GetWorker(attempt.RunRef.WorkerID)
 				if e != nil {

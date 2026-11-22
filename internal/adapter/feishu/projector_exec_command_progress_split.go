@@ -132,7 +132,7 @@ func execProgressCardFits(lines []execProgressRenderedLine, subtitle string) boo
 		card:            rawCardDocumentWithHeader("工作中", cardTextTagPlainText, subtitle, cardTextTagLarkMarkdown, "", cardThemeProgress, execProgressRenderedElements(lines)),
 	}
 	payload := renderOperationCard(op, op.effectiveCardEnvelope())
-	return feishuInteractiveMessageTransportFits(payload)
+	return executionCardPayloadFits(payload)
 }
 
 func execProgressCardWindow(progress control.ExecCommandProgress, lines []execProgressRenderedLine) execProgressCardWindowState {

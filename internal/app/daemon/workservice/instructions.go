@@ -152,7 +152,18 @@ func (s *Service) BuildInstructions(ctx context.Context, contextID string) (agen
 		if err != nil {
 			return err
 		}
-		text := teamWorkInstructions + "\n\n当前身份与可用记忆（JSON 数据）：\n" + string(data)
+		publicationInstructions := privatePublicationInstructions
+		if scope.Kind == work.ScopeProject {
+			project, e := tx.GetProject(scope.ProjectID)
+			if e != nil {
+				return e
+			}
+			publicationInstructions = expertPublicationInstructions
+			if project.LeaderRoleID == wc.RoleID {
+				publicationInstructions = leaderPublicationInstructions
+			}
+		}
+		text := teamWorkInstructions + "\n\n" + publicationInstructions + "\n\n当前身份与可用记忆（JSON 数据）：\n" + string(data)
 		hash := sha256.Sum256([]byte(text))
 		bundle = agentproto.InstructionBundle{Revision: hex.EncodeToString(hash[:]), Text: text}
 		return nil
@@ -190,9 +201,9 @@ const teamWorkInstructions = `你在一个持久协作系统中工作。当前�
 
 用户通常与负责人沟通。负责人负责理解需求、拆分工作、调节人的参与程度、查看和指导其他角色的工作；专家可以直接交换有明确对象的信息。接受委派不等于做完，发出消息不等于对方已经处理。需要等待其他角色时，保存检查点与依赖，再结束当前执行；结果到达后系统会安排后续工作，不需要用户说“继续”。
 
-协作用宿主提供的 CODEX_REMOTE_WORK_TEAM_BINARY 环境变量中的绝对程序路径执行 team（POSIX："$CODEX_REMOTE_WORK_TEAM_BINARY" team；PowerShell：& $env:CODEX_REMOTE_WORK_TEAM_BINARY team）。用 --help 或 commands 查询命令；不要把全部帮助、全部历史或所有方法正文一次加载进来。每次调用带本轮输入明确给出的 --run-ref。它属于这一次执行，不可从另一会话借用、猜测或查询“最新值”。凭据已由宿主注入，不能输出、复制到文档或交给其他角色。
+协作用宿主提供的 CODEX_REMOTE_WORK_TEAM_BINARY 环境变量中的绝对程序路径执行 team（POSIX："$CODEX_REMOTE_WORK_TEAM_BINARY" team；PowerShell：& $env:CODEX_REMOTE_WORK_TEAM_BINARY team）。用 commands --run-ref 或指定命令的 --help 查询本轮可用命令；不要一次加载全部帮助、历史或方法正文。每次调用带本轮输入明确给出的 --run-ref。它属于这一次执行，不可从另一会话借用、猜测或查询“最新值”。凭据已由宿主注入，不能输出、复制到文档或交给其他角色。
 
-群内分工先通过 project.inspect 确认当前负责人和成员可用性，用 role.inspect 查看同事在此项目的实际职责。task.assign 登记任务与责任人；从主群分派后，可用 message.publish 的 task_id 为这项工作发布摘要并建立对应话题。任务要求有变化时用 task.revise 持久化，后续核验须针对新版本。message.send 用 task_id 唤醒接收者自己负责的任务，用 related_task_id 提供正在讨论的另一项任务；任务上下文发出消息时默认保留本任务的关联。不带 task_id 或接收上下文时发给同事在此项目的工作入口。任务完成由 task.done 保存，检查证据按实际需要用 task.evidence.submit 和 task.review；将结论和真实交付通过 message.publish 明确告知人。
+群内分工先通过 project.inspect 确认当前负责人和成员可用性，用 role.inspect 查看同事在此项目的实际职责。task.assign 登记任务与责任人。任务要求有变化时用 task.revise 持久化，后续核验须针对新版本。message.send 用 task_id 唤醒接收者自己负责的任务，用 related_task_id 提供正在讨论的另一项任务；任务上下文发出消息时默认保留本任务的关联。不带 task_id 或接收上下文时发给同事在此项目的工作入口。任务完成由 task.done 保存，检查证据按实际需要用 task.evidence.submit 和 task.review。
 
 子任务用 task.check 或 task.done 声明结果可用时，父任务的负责人会收到独立协调输入。收到这类通知先用 task.inspect 查父、子任务和当前依赖，核验真实结果，再用 task.dependency.satisfy 结算适用版本；之后父任务自动续作。独立核验、集成结果及人工决定仍按各自要求处理。
 
@@ -208,7 +219,7 @@ const teamWorkInstructions = `你在一个持久协作系统中工作。当前�
 
 临时工作过程、正式资料和给人看的交付分别处理。只把需要人注意的结论、请求和成果明确交付；引用已登记资料的稳定入口，更新已有版本，不为每次汇报再创建一个同名文件。代码事实以仓库、issue、PR及其可验证版本为准。飞书文档适合讨论和长期说明，表格适合结构化登记和观察，不能伪装成代码事实的第二套权威。
 
-本地生成文件时放在本次执行目录内，用 resource.file.save 写入持久成果并取得 resource_id、version_id；修改时使用同一 resource_id 和当前 revision。实际成果通过 delivery.publish 明确发送，正文先给出结论、关键变化、验证和所需动作。如果本轮已把自己的任务标为完成，发送时明确传入该任务的 task_id，并引用完成前保存的资源版本。只保存文件或文档不会通知人。专家向负责人交接时可发送已保存的资源和版本 ID，由负责人选用，原件不需要重新生成。
+本地生成文件时放在本次执行目录内，用 resource.file.save 写入持久成果并取得 resource_id、version_id；修改时使用同一 resource_id 和当前 revision。保存文件或文档不会通知人。交接时提供已保存的资源和版本 ID，供接收者核验和采用。
 
 新建项目飞书文档需要供当前群打开时，负责人或创建角色先用 resource.document.share-project 核对本群的实际访问。访问已撤销时，只有本轮真实群消息明确要求为本群恢复这份文档的权限，才提交该消息的 source_message_id；期间可交付已保存的版本。已有外部原件保持来源授权。
 
@@ -219,6 +230,12 @@ const teamWorkInstructions = `你在一个持久协作系统中工作。当前�
 工作目录和模型由人的选择及已登记设置确定。你可以在已授权项目内自行操作 Git 和 worktree，并登记实际执行位置；不让用户承担 worktree 的日常管理。不得擅自把其他项目目录当作自己的工作区。
 
 结束主动执行前，用 outcome.report 保存实际处理过的输入 ID、结果摘要和下一步检查点。 同时明确 work_disposition：已授权工作仍有可继续部分填 unfinished，本轮授权范围已处理填 complete，不能判断填 unknown；该字段不会替人验收或将任务改为完成。只能声明本轮确实承接并处理的输入，不能清掉后来到达的消息。保存汇报不代表原生执行停止、不代表任务验收，也不代替明确交付。若暂时不能完成，保留问题、依赖和已做的工作，不把受阻描述成完成。`
+
+const expertPublicationInstructions = `项目专家用 message.send 向负责人交接结论、证据和成果版本。只在本轮 publication.reply_input_ids 列出的真人输入上使用 message.publish，传入对应 reply_to_input_id。收到负责人委派时使用 publication.delegations 给出的 grant_id、task_id、内容类型和已授权的固定版本。同一委派对应一次发布，多份固定成果可放进同一交付。真人直接要求文件而本轮没有交付委派时，把请求与已保存版本交给负责人安排。默认把内部进展留在项目记录。`
+
+const leaderPublicationInstructions = `项目负责人用 message.publish 回复本轮真人输入、报告需要人处理的问题和重要变化。使用 purpose=progress 提交简明可读的进展，系统会合并相同工作的待发更新；正式结果用 purpose=final 或以 delivery.publish 交付固定成果。用 task_id 归入对应工作话题。需要专家代为发布时，用 publication.grant 指定所属任务、内容类型及交付版本，再把一次发布授权交给该专家。任务完成后的发送须明确传入同一个 task_id，并使用完成前已保存的成果。`
+
+const privatePublicationInstructions = `直接在当前私聊答复。正常最终正文由系统送达；只有明确需要单独发送时才用 message.publish。用 media.publish 将本轮工作目录的文件、图片或视频临时发送到当前私聊；长期成果先通过 resource.file.save 保存版本，再用 delivery.publish 交付。已受理只表示进入队列。`
 
 // BuildWorkInput resolves the exact claimed inputs. It never substitutes the
 // most recent conversation for the attempt's immutable admitted input set.
@@ -247,13 +264,18 @@ func (s *Service) BuildWorkInput(ctx context.Context, attempt work.ExecutionAtte
 			BodyTruncated bool             `json:"body_truncated,omitempty"`
 		}
 		envelope := struct {
-			Policy     workInputPolicy  `json:"current_work_agreements_and_resources"`
-			RunRef     string           `json:"run_ref"`
-			AttemptID  string           `json:"attempt_id"`
-			Checkpoint string           `json:"checkpoint"`
-			Task       *FrozenTaskInput `json:"task,omitempty"`
-			Inputs     []input          `json:"inputs"`
+			Policy      workInputPolicy         `json:"current_work_agreements_and_resources"`
+			Publication PublicationCapabilities `json:"publication"`
+			RunRef      string                  `json:"run_ref"`
+			AttemptID   string                  `json:"attempt_id"`
+			Checkpoint  string                  `json:"checkpoint"`
+			Task        *FrozenTaskInput        `json:"task,omitempty"`
+			Inputs      []input                 `json:"inputs"`
 		}{RunRef: attempt.RunRef.RunID, AttemptID: attempt.ID, Checkpoint: wc.Checkpoint}
+		envelope.Publication, err = s.publicationCapabilities(tx, Caller{Worker: worker, Attempt: attempt}, true)
+		if err != nil {
+			return err
+		}
 		envelope.Policy, err = s.inputPolicy(tx, wc)
 		if err != nil {
 			return err

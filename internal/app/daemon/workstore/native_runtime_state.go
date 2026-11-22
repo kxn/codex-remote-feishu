@@ -155,7 +155,7 @@ func (t *Tx) HasNativeSessionOwner(incarnation, sessionID, attemptID string) (bo
 }
 func (t *Tx) CountUnresolvedNativeEvents(incarnation string) (int, error) {
 	var n int
-	err := t.tx.QueryRowContext(t.ctx, `SELECT count(*) FROM runtime_quarantine WHERE incarnation=? AND resolved=0`, incarnation).Scan(&n)
+	err := t.tx.QueryRowContext(t.ctx, `SELECT count(*) FROM runtime_quarantine WHERE incarnation=? AND resolved=0 AND reason<>'native_display_ownership_unproven'`, incarnation).Scan(&n)
 	return n, err
 }
 func (t *Tx) GetQuiescenceReceipt(attemptID string) (work.QuiescenceEvidence, error) {

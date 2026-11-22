@@ -93,11 +93,12 @@ func (i *Ingress) resolveScope(tx *workstore.Tx, record work.IngressRecord, prin
 }
 
 type routeDecision struct {
-	RoleID        string
-	TaskID        string
-	RelatedTaskID string
-	RootMessageID string
-	Note          string
+	DirectedReplyBotGeneration int64
+	RoleID                     string
+	TaskID                     string
+	RelatedTaskID              string
+	RootMessageID              string
+	Note                       string
 }
 
 func (i *Ingress) recipient(tx *workstore.Tx, scope work.WorkScope, env work.RawIngressEnvelope, mentions []string) (routeDecision, error) {
@@ -114,6 +115,8 @@ func (i *Ingress) recipient(tx *workstore.Tx, scope work.WorkScope, env work.Raw
 	}
 	result.RoleID = project.LeaderRoleID
 	var mapped *work.PlatformMessageMapping
+	var directedRole string
+	var repliedBotGeneration int64
 	for _, id := range []string{env.ParentID, env.RootID, env.ThreadID} {
 		if id == "" {
 			continue
@@ -130,6 +133,9 @@ func (i *Ingress) recipient(tx *workstore.Tx, scope work.WorkScope, env work.Raw
 			break
 		}
 		mapped = &value
+		if id == env.ParentID && value.OutboxID != "" {
+			directedRole, repliedBotGeneration = value.RoleID, value.BotGeneration
+		}
 		result.RootMessageID = value.RootMessageID
 		break
 	}
@@ -163,11 +169,13 @@ func (i *Ingress) recipient(tx *workstore.Tx, scope work.WorkScope, env work.Raw
 		}
 	}
 	if len(unique) > 1 {
+		directedRole = ""
 		result.RoleID = project.LeaderRoleID
 		result.coordinateTask()
 		result.Note = "消息提及多个同事，请负责人明确协调对象。"
 	} else {
 		for role := range unique {
+			directedRole, repliedBotGeneration = role, 0
 			eligible, e := recipientIsMember(tx, scope, role)
 			if e != nil {
 				return result, e
@@ -182,6 +190,20 @@ func (i *Ingress) recipient(tx *workstore.Tx, scope work.WorkScope, env work.Raw
 				result.coordinateTask()
 			}
 			result.RoleID = role
+		}
+	}
+	if len(unique) == 0 && directedRole != "" && directedRole != result.RoleID {
+		eligible, e := recipientIsMember(tx, scope, directedRole)
+		if e != nil {
+			return result, e
+		}
+		binding, e := tx.GetRoleBotBinding(directedRole)
+		if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+			return result, e
+		}
+		if eligible && binding.IdentityGeneration == repliedBotGeneration {
+			result.coordinateTask()
+			result.RoleID = directedRole
 		}
 	}
 	eligible, err := recipientIsMember(tx, scope, result.RoleID)
@@ -200,6 +222,15 @@ func (i *Ingress) recipient(tx *workstore.Tx, scope work.WorkScope, env work.Raw
 		result.RoleID = project.LeaderRoleID
 		result.Note = "原任务负责人已退出项目或停用团队身份；此输入交给当前负责人协调，保留原任务关联，不自动重新指派或重开任务。"
 	}
+	if directedRole != "" && directedRole == result.RoleID && directedRole != project.LeaderRoleID {
+		binding, e := tx.GetRoleBotBinding(directedRole)
+		if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+			return result, e
+		}
+		if repliedBotGeneration == 0 || repliedBotGeneration == binding.IdentityGeneration {
+			result.DirectedReplyBotGeneration = binding.IdentityGeneration
+		}
+	}
 	return result, nil
 }
 
@@ -215,7 +246,9 @@ func (i *Ingress) directoryTargets(ctx context.Context, record work.IngressRecor
 	roles := []string{}
 	unique := map[string]bool{}
 	for _, mention := range record.Envelope.Mentions {
-		if mention.Type != "bot" && mention.Type != "app" {
+		// Some SDK message events omit mentioned_type. ResolveMention
+		// still needs an exact configured Bot identity.
+		if mention.Type != "" && mention.Type != "bot" && mention.Type != "app" {
 			continue
 		}
 		role, e := i.config.Directory.ResolveMention(ctx, record.Gateway, mention)

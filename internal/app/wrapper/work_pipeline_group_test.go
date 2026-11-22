@@ -2,12 +2,14 @@ package wrapper
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"sync/atomic"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
@@ -51,7 +53,14 @@ func pipelineSeedGroup(tx *workstore.Tx, collaboration bool) error {
 		return err
 	}
 	for _, role := range roles {
-		if err := tx.PutProjectMember(work.ProjectMember{ProjectID: "pipeline-project", RoleID: role, State: work.ProjectMemberReady, Revision: 1}, 0); err != nil {
+		binding, err := tx.GetRoleBotBinding(role)
+		if err != nil {
+			return err
+		}
+		if err = tx.PutProjectMember(work.ProjectMember{
+			ProjectID: "pipeline-project", RoleID: role, State: work.ProjectMemberReady,
+			BotGeneration: binding.IdentityGeneration, Revision: 1,
+		}, 0); err != nil {
 			return err
 		}
 	}
@@ -110,4 +119,29 @@ func pipelineGroupSourcePrincipal(ctx context.Context, store *workstore.Store, i
 		return nil
 	})
 	return principal, err
+}
+
+func (p *pipelinePublisher) PublishCard(ctx context.Context, req feishu.ProjectCardPublishRequest) (feishu.ProjectPublishReceipt, error) {
+	var card struct {
+		Schema string `json:"schema"`
+		Config struct {
+			UpdateMulti bool `json:"update_multi"`
+		} `json:"config"`
+		Body struct {
+			Elements []struct {
+				Tag     string `json:"tag"`
+				Content string `json:"content"`
+			} `json:"elements"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal(req.Card, &card); err != nil {
+		return feishu.ProjectPublishReceipt{}, err
+	}
+	if card.Schema != "2.0" || !card.Config.UpdateMulti || len(card.Body.Elements) != 1 || card.Body.Elements[0].Tag != "markdown" {
+		return feishu.ProjectPublishReceipt{}, fmt.Errorf("expected one editable group progress card")
+	}
+	return p.PublishText(ctx, feishu.ProjectPublishRequest{
+		ChatID: req.ChatID, ReplyToMessageID: req.ReplyToMessageID, ReplyInThread: req.ReplyInThread,
+		Text: card.Body.Elements[0].Content, UUID: req.UUID,
+	})
 }

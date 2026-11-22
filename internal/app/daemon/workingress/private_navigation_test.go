@@ -12,7 +12,12 @@ import (
 
 func privateCommandSource(t *testing.T, i *Ingress, s *workstore.Store, id string) (workstore.PrivateActionSource, work.PrivateNavigation) {
 	t.Helper()
-	receipt := receive(t, i, rawMessage("leader", id, "dm", "p2p", "open-person", "person", "/new"))
+	return privateCommandSourceFromIngress(t, i, s, rawMessage("leader", id, "dm", "p2p", "open-person", "person", "/new"))
+}
+
+func privateCommandSourceFromIngress(t *testing.T, i *Ingress, s *workstore.Store, raw work.RawIngressEnvelope) (workstore.PrivateActionSource, work.PrivateNavigation) {
+	t.Helper()
+	receipt := receive(t, i, raw)
 	process(t, i)
 	var source workstore.PrivateActionSource
 	var nav work.PrivateNavigation
@@ -51,12 +56,12 @@ func privateTestService(t *testing.T, s *workstore.Store) *workservice.Service {
 	}
 	return service
 }
-func TestPrivateStopCancelsOnlyOwnPendingFrontAndResumeKeepsNavigation(t *testing.T) {
+func TestPrivateStopCancelsOnlyOwnPendingFrontAndKeepsNavigation(t *testing.T) {
 	i, s, _ := ingressFixture(t, false)
-	source, nav := privateCommandSource(t, i, s, "command")
 	service := privateTestService(t, s)
 	receive(t, i, rawMessage("leader", "work", "dm", "p2p", "open-person", "person", "private work"))
 	process(t, i)
+	source, nav := privateCommandSourceFromIngress(t, i, s, rawMessage("leader", "command", "dm", "p2p", "open-person", "person", "/stop"))
 	txRun(t, s, func(tx *workstore.Tx) error {
 		if e := tx.PutContext(work.WorkContext{ID: "other-front", ScopeID: nav.PersonalScopeID, RoleID: "leader", Workstream: "other", Revision: 1}, 0); e != nil {
 			return e
@@ -92,26 +97,20 @@ func TestPrivateStopCancelsOnlyOwnPendingFrontAndResumeKeepsNavigation(t *testin
 		}
 		return nil
 	})
-	req.Key = "resume"
-	if _, e := service.TrustedPrivateResume(t.Context(), req); e != nil {
-		t.Fatal(e)
-	}
 	txRun(t, s, func(tx *workstore.Tx) error {
 		current, e := tx.GetPrivateNavigation(nav.PersonalScopeID)
 		if e != nil {
 			return e
 		}
 		if current != nav {
-			t.Fatal("stop/resume retargeted navigation")
+			t.Fatal("stop retargeted navigation")
 		}
 		gates, e := tx.ListPauseGates(nav.PersonalScopeID)
 		if e != nil {
 			return e
 		}
-		for _, v := range gates {
-			if v.State != work.GateOpen {
-				t.Fatal("context remains closed")
-			}
+		if len(gates) != 0 {
+			t.Fatalf("stop installed a persistent pause: %+v", gates)
 		}
 		return nil
 	})

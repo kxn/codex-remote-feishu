@@ -47,7 +47,7 @@ func (a *App) handleTeamPickerAction(ctx context.Context, interaction workstore.
 		if err = a.navigateFromSource(ctx, source, "enter_project", scope, "", view.TargetRevision); err != nil {
 			return "", err
 		}
-		return a.queuePrivatePanel(ctx, source, "menu", "已进入项目视图，私聊原文仍只留在这里。")
+		return a.queuePrivatePanel(ctx, source, "workspace", "已切换到项目相关的私人讨论。")
 	}
 	if view.Kind == "execution.location-picker" {
 		return a.applyTeamLocationChoice(ctx, source, view, action, values)
@@ -55,57 +55,63 @@ func (a *App) handleTeamPickerAction(ctx context.Context, interaction workstore.
 	return "", workstore.ErrScopeDenied
 }
 
-func (a *App) teamFrozenPickerValues(ctx context.Context, interaction workstore.HumanInteraction, view workstore.UIView, action string) (map[string]any, error) {
-	var values map[string]any
-	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
-		if e := tx.ValidateViewInteraction(view, interaction); e != nil {
-			return e
-		}
-		body, e := tx.GetContent(view.ScopeID, view.BodyRef)
-		if e != nil {
-			return e
-		}
-		var projection struct {
-			Card json.RawMessage `json:"card"`
-		}
-		if e = json.Unmarshal(body.Data, &projection); e != nil {
-			return e
-		}
-		var card struct {
-			Body struct {
-				Elements []struct {
-					Behaviors []struct {
-						Value map[string]any `json:"value"`
-					} `json:"behaviors"`
-				} `json:"elements"`
-			} `json:"body"`
-		}
-		if e = json.Unmarshal(projection.Card, &card); e != nil {
-			return e
-		}
-		for _, element := range card.Body.Elements {
-			for _, behavior := range element.Behaviors {
-				if behavior.Value["action"] != action {
-					continue
-				}
-				matches := true
-				for key, value := range behavior.Value {
-					if !reflect.DeepEqual(interaction.Envelope.Values[key], value) {
-						matches = false
-						break
-					}
-				}
-				if matches {
-					values = behavior.Value
-					return nil
-				}
-			}
-		}
-		return fmt.Errorf("该选择不属于这张卡片，请重新打开选择器")
-	})
+type teamCardElement struct {
+	Tag      string            `json:"tag"`
+	Name     string            `json:"name"`
+	Elements []teamCardElement `json:"elements"`
+	Options  []struct {
+		Value string `json:"value"`
+	} `json:"options"`
+	Behaviors []struct {
+		Value map[string]any `json:"value"`
+	} `json:"behaviors"`
+}
+
+func teamFrozenCardElements(tx *workstore.Tx, view workstore.UIView, interaction workstore.HumanInteraction) ([]teamCardElement, error) {
+	if err := tx.ValidateViewInteraction(view, interaction); err != nil {
+		return nil, err
+	}
+	body, err := tx.GetContent(view.ScopeID, view.BodyRef)
 	if err != nil {
 		return nil, err
 	}
+	var projection struct {
+		Card struct {
+			Body struct {
+				Elements []teamCardElement `json:"elements"`
+			} `json:"body"`
+		} `json:"card"`
+	}
+	err = json.Unmarshal(body.Data, &projection)
+	return projection.Card.Body.Elements, err
+}
 
-	return values, nil
+func teamFrozenCallback(elements []teamCardElement, values map[string]any, action string) map[string]any {
+	for _, element := range elements {
+		for _, behavior := range element.Behaviors {
+			if behavior.Value["action"] == action && reflect.DeepEqual(values, behavior.Value) {
+				return behavior.Value
+			}
+		}
+		if child := teamFrozenCallback(element.Elements, values, action); child != nil {
+			return child
+		}
+	}
+	return nil
+}
+
+func (a *App) teamFrozenPickerValues(ctx context.Context, interaction workstore.HumanInteraction, view workstore.UIView, action string) (map[string]any, error) {
+	var values map[string]any
+	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+		elements, e := teamFrozenCardElements(tx, view, interaction)
+		if e != nil {
+			return e
+		}
+		values = teamFrozenCallback(elements, interaction.Envelope.Values, action)
+		if values == nil {
+			return fmt.Errorf("这项操作不属于当前卡片，请重新打开菜单")
+		}
+		return nil
+	})
+	return values, err
 }

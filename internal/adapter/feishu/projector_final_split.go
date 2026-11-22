@@ -107,7 +107,7 @@ func finalReplyChunkFits(chunk finalReplyChunk) bool {
 		card:            finalReplyCardDocument(chunk.title, chunk.subtitle, chunk.renderedBody, cardThemeFinal, chunk.elements),
 	}
 	payload := renderOperationCard(op, op.effectiveCardEnvelope())
-	return feishuInteractiveMessageTransportFits(payload)
+	return executionCardPayloadFits(payload)
 }
 
 func explodeFinalReplyUnit(unit string) []string {
@@ -191,6 +191,9 @@ func splitPreservingLines(text string) []string {
 		return nil
 	}
 	parts := strings.SplitAfter(text, "\n")
+	if parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
+	}
 	if len(parts) <= 1 {
 		return nil
 	}

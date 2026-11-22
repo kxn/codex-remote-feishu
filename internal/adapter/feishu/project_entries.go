@@ -40,6 +40,9 @@ type ProjectChatTab struct {
 func (a *ProjectChatAPI) callSpec(api, chatID string, read bool) CallSpec {
 	spec := CallSpec{API: api, Class: CallClassIMPatch, Priority: CallPriorityInteractive,
 		ResourceKey: FeishuResourceKey{ReceiveTarget: chatID}, Retry: RetryOff, Permission: PermissionFailFast}
+	if api == "im.v1.message.create" || api == "im.v1.message.reply" {
+		spec.Class = CallClassIMSend
+	}
 	if read {
 		spec.Class = CallClassIMRead
 		spec.Priority = CallPriorityReadAssist

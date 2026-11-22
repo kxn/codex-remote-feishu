@@ -42,7 +42,7 @@ func buildMockClaudeBinary(repoRoot string) (string, error) {
 		}
 		outputPath := filepath.Join(outputDir, binaryName)
 
-		cmd := exec.Command("go", "build", "-o", outputPath, "./testkit/mockclaude/cmd/mockclaude")
+		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", outputPath, "./testkit/mockclaude/cmd/mockclaude")
 		cmd.Dir = repoRoot
 		output, err := cmd.CombinedOutput()
 		if err != nil {

@@ -26,7 +26,6 @@ func (a *App) handleTeamAutomation(ctx context.Context, source teamHumanSource, 
 	if len(args) > 2 || (verb != "status" && verb != "on" && verb != "off") {
 		return "", fmt.Errorf("用法：/%s on、off 或 status", kind)
 	}
-	enabled := false
 	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		wc, _, e := worksettings.FrozenContext(tx, source.Authority)
 		if e != nil {
@@ -53,15 +52,14 @@ func (a *App) handleTeamAutomation(ctx context.Context, source teamHumanSource, 
 				return e
 			}
 		}
-		enabled = policy.Enabled
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
-	text := name + "：已关闭。"
-	if enabled {
-		text = name + "：已开启。仅继续已有授权工作，遇到需要核对的结果或权限会等待处理。"
+	note := ""
+	if verb != "status" {
+		note = "已保存「" + name + "」设置。"
 	}
-	return a.queuePrivatePanel(ctx, source, "status", text)
+	return a.queuePrivatePanel(ctx, source, string(kind), note)
 }

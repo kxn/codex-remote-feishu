@@ -101,7 +101,7 @@ func (a *App) presentTeamSelection(ctx context.Context, selection workingress.Se
 	live, err := (teamDirectory{app: a, store: r.store}).gateway(ctx, binding)
 	var receipt feishu.ProjectPublishReceipt
 	if err == nil {
-		receipt, err = live.ProjectChatAPI().PublishCard(ctx, feishu.ProjectCardPublishRequest{ChatID: notice.ChatID, ReplyToMessageID: selection.Envelope.MessageID, Card: notice.Card, UUID: notice.UUID})
+		receipt, err = live.ProjectChatAPI().PublishCard(ctx, feishu.ProjectCardPublishRequest{ChatID: notice.ChatID, ReplyToMessageID: selection.Envelope.MessageID, ReplyInThread: selection.Envelope.ThreadID != "", Card: notice.Card, UUID: notice.UUID})
 	}
 	outcome := workstore.SelectionNoticeOutcome{State: work.OperationConfirmed, ExternalMessageID: receipt.MessageID, ChatID: receipt.ChatID, Now: time.Now().UTC()}
 	if err != nil {

@@ -225,11 +225,15 @@ func parseTeamSettingsIntent(source teamHumanSource, action control.Action, part
 	return result, nil
 }
 func (a *App) applyTeamSettingsIntent(ctx context.Context, source teamHumanSource, intent teamSettingsIntent) (string, error) {
+	return a.applyTeamSettingsPage(ctx, source, intent, "overview", nil)
+}
+
+func (a *App) applyTeamSettingsPage(ctx context.Context, source teamHumanSource, intent teamSettingsIntent, page string, trail []string) (string, error) {
 	service, err := a.teamPreferencesService()
 	if err != nil {
 		return "", err
 	}
-	note := "已保存，下次执行会采用新设置；当前运行保持原快照。"
+	note := "已保存。下一次执行采用新设置。"
 	if intent.Bot != nil {
 		result, e := service.UpdateBot(ctx, source.PrincipalID, source.Authority, *intent.Bot)
 		if e != nil {
@@ -243,12 +247,12 @@ func (a *App) applyTeamSettingsIntent(ctx context.Context, source teamHumanSourc
 		if _, err = service.UpdateContext(ctx, source.PrincipalID, source.Authority, *intent.Context); err != nil {
 			return "", err
 		}
-		note = "已保存当前工作的设置；其他工作和机器人全局配置保持原值。"
+		note = "已保存。该设置用于这项工作的下一次执行。"
 	}
 	if intent.Bot == nil && intent.Context == nil {
 		return "", fmt.Errorf("settings intent has no action")
 	}
-	return a.queueTeamSettings(ctx, source, "overview", note)
+	return a.queueTeamSettingsCursor(ctx, source, page, note, trail)
 }
 
 // Settings callbacks read the selection and server-owned page state from the
@@ -262,14 +266,19 @@ func (a *App) handleTeamSettingsView(ctx context.Context, source teamHumanSource
 	}
 	var interaction workstore.HumanInteraction
 	var frozen teamSettingsState
+	var elements []teamCardElement
 	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		var e error
 		interaction, e = tx.GetHumanInteraction(source.Authority.InteractionID)
 		if e != nil {
 			return e
 		}
-		if e = tx.ValidateViewInteraction(view, interaction); e != nil {
+		elements, e = teamFrozenCardElements(tx, view, interaction)
+		if e != nil {
 			return e
+		}
+		if teamFrozenCallback(elements, interaction.Envelope.Values, action) == nil {
+			return fmt.Errorf("这项操作不属于当前参数页面，请重新打开参数设置")
 		}
 		body, e := tx.GetContent(view.ScopeID, view.ID+":settings-state")
 		if e != nil {
@@ -279,6 +288,9 @@ func (a *App) handleTeamSettingsView(ctx context.Context, source teamHumanSource
 	})
 	if err != nil {
 		return "", err
+	}
+	if action == "automation.autocontinue.status" {
+		return a.handleTeamAutomation(ctx, source, control.Action{Kind: control.ActionAutoContinueCommand, Text: "/autocontinue status"})
 	}
 	if action == "settings.next" || action == "settings.previous" {
 		trail := append([]string(nil), frozen.CursorTrail...)
@@ -303,8 +315,8 @@ func (a *App) handleTeamSettingsView(ctx context.Context, source teamHumanSource
 		return "", fmt.Errorf("unknown settings action")
 	}
 	value, ok := interaction.Envelope.Form["selection"].(string)
-	if !ok || value == "" {
-		return "", fmt.Errorf("choose one of the displayed settings")
+	if !ok || !teamSettingsOptionShown(elements, value) {
+		return "", fmt.Errorf("请从这张卡片的下拉菜单选择一个值")
 	}
 	actionKind := map[string]control.ActionKind{"model": control.ActionModelCommand, "reasoning": control.ActionReasoningCommand, "backend": control.ActionModeCommand, "access": control.ActionAccessCommand, "plan": control.ActionPlanCommand, "verbose": control.ActionVerboseCommand, "codex-profile": control.ActionCodexProfileCommand, "claude-profile": control.ActionClaudeProfileCommand, "opencode-profile": control.ActionOpenCodeProfileCommand}[frozen.Kind]
 	if actionKind == "" {
@@ -332,5 +344,24 @@ func (a *App) handleTeamSettingsView(ctx context.Context, source teamHumanSource
 	if intent.Bot != nil {
 		intent.Bot.CatalogCursor = cursor
 	}
-	return a.applyTeamSettingsIntent(ctx, source, intent)
+	return a.applyTeamSettingsPage(ctx, source, intent, frozen.Kind, frozen.CursorTrail)
+}
+
+func teamSettingsOptionShown(elements []teamCardElement, input string) bool {
+	if input == "" {
+		return false
+	}
+	for _, element := range elements {
+		if element.Tag == "select_static" && element.Name == "selection" {
+			for _, option := range element.Options {
+				if input == option.Value {
+					return true
+				}
+			}
+		}
+		if teamSettingsOptionShown(element.Elements, input) {
+			return true
+		}
+	}
+	return false
 }

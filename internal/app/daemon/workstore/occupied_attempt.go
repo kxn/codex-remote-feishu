@@ -19,3 +19,7 @@ func (t *Tx) GetOccupiedAttemptForWorker(workerID string) (work.ExecutionAttempt
 	}
 	return t.GetAttempt(id)
 }
+
+func (t *Tx) ListOccupiedAttempts(scopeID string) ([]work.ExecutionAttempt, error) {
+	return listRecords[work.ExecutionAttempt](t, "attempts", " WHERE scope_id=? AND id IN (SELECT attempt_id FROM carrier_occupancy)", scopeID)
+}

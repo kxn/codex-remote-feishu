@@ -133,10 +133,22 @@ func (i *Ingress) process(ctx context.Context, record work.IngressRecord, expand
 			contentState = work.InputContentPartial
 		}
 		input := work.Inbox{ID: opaque("inbox", record.ID, recipient.RoleID), ScopeID: scope.ID, TaskID: recipient.TaskID, RelatedTaskID: recipient.RelatedTaskID, RecipientRoleID: recipient.RoleID, EventID: "message:" + message.ID, MessageID: message.ID, State: work.InboxPending, ContentState: contentState, AvailableAt: record.Envelope.ReceivedAt, Revision: 1}
+		if recipient.DirectedReplyBotGeneration > 0 {
+			input.DirectedReplyIngressID = record.ID
+			input.DirectedReplyBotGeneration = recipient.DirectedReplyBotGeneration
+		}
 		if scope.Kind == work.ScopePersonal {
 			input.RecipientContextID = record.Route.ContextID
 		}
 		if _, _, e = tx.AcceptMessage(message, []work.Inbox{input}); e != nil {
+			return e
+		}
+		if scope.Kind == work.ScopePersonal && i.config.QueuePrivateExecution != nil {
+			if e = i.config.QueuePrivateExecution(tx, scope, input, record, i.config.Now().UTC()); e != nil {
+				return e
+			}
+		}
+		if e = tx.OpenLegacyPrivateStopForInput(scope, input, message); e != nil {
 			return e
 		}
 		if e = i.controlCopy(tx, scope, input); e != nil {

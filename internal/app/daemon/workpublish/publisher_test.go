@@ -70,7 +70,11 @@ func publisherFixture(t *testing.T) (*workstore.Store, *fakePublisher, *Publishe
 func queuePublication(t *testing.T, store *workstore.Store, id string, generation int64) {
 	t.Helper()
 	err := store.Within(context.Background(), func(tx *workstore.Tx) error {
-		projection := workservice.MessageProjection{RoleID: "role", GatewayRef: "gateway", AppID: "app", BotGeneration: generation, Tenant: "tenant", ChatID: "oc_chat", Body: "A useful result"}
+		contextID, authority, err := testPublicationAuthority(tx, "scope", "role", "", id, "tenant", "oc_chat", generation)
+		if err != nil {
+			return err
+		}
+		projection := workservice.MessageProjection{Authority: authority, RoleID: "role", GatewayRef: "gateway", AppID: "app", BotGeneration: generation, Tenant: "tenant", ChatID: "oc_chat", Body: "A useful result"}
 		data, err := json.Marshal(projection)
 		if err != nil {
 			return err
@@ -79,7 +83,7 @@ func queuePublication(t *testing.T, store *workstore.Store, id string, generatio
 		if err = tx.PutContent(content); err != nil {
 			return err
 		}
-		op := work.Operation{ID: "op_" + id, ScopeID: "scope", Actor: work.Actor{Kind: work.ActorRole, ID: "role"}, Kind: "feishu.publish", TargetID: "oc_chat", TargetGeneration: generation, IdempotencyKey: id, RequestHash: content.SHA256, RequestRef: content.ID, State: work.OperationPrepared, Revision: 1}
+		op := work.Operation{ID: "op_" + id, ScopeID: "scope", ContextID: contextID, Actor: work.Actor{Kind: work.ActorRole, ID: "role"}, Kind: "feishu.publish", TargetID: "oc_chat", TargetGeneration: generation, IdempotencyKey: id, RequestHash: content.SHA256, RequestRef: content.ID, State: work.OperationPrepared, Revision: 1}
 		if _, _, err = tx.PutOperation(op, 0); err != nil {
 			return err
 		}

@@ -176,16 +176,24 @@ const (
 )
 
 type Project struct {
-	Name         string       `json:"name"`
-	ID           string       `json:"id"`
-	ScopeID      string       `json:"scope_id"`
-	TeamID       string       `json:"team_id"`
-	LeaderRoleID string       `json:"leader_role_id"`
-	State        ProjectState `json:"state"`
-	Revision     int64        `json:"revision"`
+	LeaderGeneration int64        `json:"leader_generation,omitempty"`
+	Name             string       `json:"name"`
+	ID               string       `json:"id"`
+	ScopeID          string       `json:"scope_id"`
+	TeamID           string       `json:"team_id"`
+	LeaderRoleID     string       `json:"leader_role_id"`
+	State            ProjectState `json:"state"`
+	Revision         int64        `json:"revision"`
+}
+
+func (v Project) LeadershipGeneration() int64 {
+	return max(v.LeaderGeneration, 1)
 }
 
 func (v Project) Validate() error {
+	if v.LeaderGeneration < 0 {
+		return fmt.Errorf("negative project leadership generation")
+	}
 	if err := required(v.ID, v.Name, v.ScopeID, v.TeamID, v.LeaderRoleID); err != nil {
 		return err
 	}

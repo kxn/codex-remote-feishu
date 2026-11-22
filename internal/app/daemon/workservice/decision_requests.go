@@ -73,6 +73,11 @@ func (s *Service) RequestDecision(ctx context.Context, token, run string, req Re
 				}
 				owner = message.Source
 			}
+			if scope.Kind == work.ScopeProject && owner.Kind == work.ActorPrincipal {
+				if _, _, err := requirePublicationLeader(tx, c); err != nil {
+					return "", 0, err
+				}
+			}
 			prompt := work.NewContent(stableID("decision-prompt", id), scope.ID, "text/plain; charset=utf-8", []byte(req.Prompt), s.now())
 			if err = tx.PutContent(prompt); err != nil {
 				return "", 0, err

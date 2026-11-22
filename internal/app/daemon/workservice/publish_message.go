@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
@@ -15,36 +16,114 @@ import (
 )
 
 type PublishMessageRequest struct {
-	Key            string `json:"key"`
-	Body           string `json:"body"`
-	ReplyToInputID string `json:"reply_to_input_id,omitempty"`
-	TaskID         string `json:"task_id,omitempty"`
+	Purpose        PublicationPurpose `json:"purpose,omitempty"`
+	GrantID        string             `json:"grant_id,omitempty"`
+	Key            string             `json:"key"`
+	Body           string             `json:"body"`
+	ReplyToInputID string             `json:"reply_to_input_id,omitempty"`
+	TaskID         string             `json:"task_id,omitempty"`
 }
 
 // MessageProjection freezes the sending identity and destination. A later Bot
 // rebinding or channel switch cannot retarget an already accepted publication.
 type MessageProjection struct {
-	ReplaceMessageID  string          `json:"replace_message_id,omitempty"`
-	Card              json.RawMessage `json:"card,omitempty"`
-	UIViewID          string          `json:"ui_view_id,omitempty"`
-	RoleID            string          `json:"role_id"`
-	GatewayRef        string          `json:"gateway_ref"`
-	AppID             string          `json:"app_id"`
-	BotGeneration     int64           `json:"bot_generation"`
-	Tenant            string          `json:"tenant"`
-	ChatID            string          `json:"chat_id"`
-	ChannelGeneration int64           `json:"channel_generation"`
-	ReplyToMessageID  string          `json:"reply_to_message_id,omitempty"`
-	TaskID            string          `json:"task_id,omitempty"`
-	RootMessageID     string          `json:"root_message_id,omitempty"`
-	Body              string          `json:"body"`
+	Purpose           PublicationPurpose         `json:"purpose,omitempty"`
+	Authority         *PublicationAuthority      `json:"authority,omitempty"`
+	PrivateDisplay    *PrivateDisplayPublication `json:"private_display,omitempty"`
+	SourceRunRef      string                     `json:"source_run_ref,omitempty"`
+	Media             *PrivateMediaPublication   `json:"media,omitempty"`
+	ReplaceMessageID  string                     `json:"replace_message_id,omitempty"`
+	Card              json.RawMessage            `json:"card,omitempty"`
+	UIViewID          string                     `json:"ui_view_id,omitempty"`
+	RoleID            string                     `json:"role_id"`
+	GatewayRef        string                     `json:"gateway_ref"`
+	AppID             string                     `json:"app_id"`
+	BotGeneration     int64                      `json:"bot_generation"`
+	Tenant            string                     `json:"tenant"`
+	ChatID            string                     `json:"chat_id"`
+	ChannelGeneration int64                      `json:"channel_generation"`
+	ReplyToMessageID  string                     `json:"reply_to_message_id,omitempty"`
+	TaskID            string                     `json:"task_id,omitempty"`
+	RootMessageID     string                     `json:"root_message_id,omitempty"`
+	Body              string                     `json:"body"`
 }
 
 func (s *Service) PublishMessage(ctx context.Context, token, runRef string, req PublishMessageRequest) (Result, error) {
 	var result Result
+	err := s.withMessagePublisher(ctx, token, runRef, req.TaskID, func(tx *workstore.Tx, c Caller) error {
+		if strings.TrimSpace(req.Body) == "" {
+			return publicationArgument("Publication body is required.")
+		}
+		projection, err := s.authorizePublication(tx, c, req.ReplyToInputID, req.TaskID, req.GrantID, publicationMessage, nil)
+		if err != nil {
+			return err
+		}
+		if err = setPublicationPurpose(&projection, req.Purpose, req.Body); err != nil {
+			return err
+		}
+		id := stableID("publication", c.Worker.ScopeID, c.Worker.RoleID, req.Key)
+		if projection.Authority.Kind == publicationDelegated {
+			id = delegatedPublicationOperationID(c.Worker.ScopeID, projection.Authority.GrantID, publicationMessage)
+		}
+		if projection.Authority.InputID != "" && projection.Authority.Kind == publicationDirected {
+			id = directedPublicationID(c.Worker.ScopeID, c.Worker.RoleID, projection.Authority.InputID)
+		}
+		result, err = s.mutate(tx, c, "message.publish", req.Key, id, req, func() (string, int64, error) {
+			if projection.Purpose == PublicationProgress && projection.Authority.Kind != publicationPrivate {
+				final, e := tx.HasFinalPublication(c.Worker.ScopeID, c.Attempt.ID, projection.TaskID, projection.RootMessageID)
+				if e != nil {
+					return "", 0, e
+				}
+				if final {
+					return "", 0, fmt.Errorf("%w: the final result has already been accepted for this work", ErrPublicationDenied)
+				}
+			}
+			if projection.Authority.Kind == publicationPrivate {
+				existing, found, e := FindPrivateDisplayResult(tx, c.Worker.ScopeID, c.Worker.ContextID, c.Attempt.RunRef.RunID, req.Body)
+				if e != nil {
+					return "", 0, e
+				}
+				if found {
+					return existing.ID, existing.Revision, nil
+				}
+			}
+			if projection.Authority.Kind == publicationDirected || projection.Authority.Kind == publicationDelegated {
+				if e := requireFirstBoundPublication(tx, id); e != nil {
+					return "", 0, e
+				}
+			}
+			return id, 1, s.queueRolePublication(tx, c, id, projection)
+		})
+		return err
+	})
+	if err == nil {
+		result.Status = "accepted"
+	}
+	return result, err
+}
+
+func (s *Service) queueRolePublication(tx *workstore.Tx, c Caller, id string, projection MessageProjection) error {
+	body, err := json.Marshal(projection)
+	if err != nil {
+		return err
+	}
+	content := work.NewContent(stableID("body", id), c.Worker.ScopeID, "application/json", body, s.now())
+	if err = tx.PutContent(content); err != nil {
+		return err
+	}
+	hash := sha256.Sum256(body)
+	op := work.Operation{ID: id, ScopeID: c.Worker.ScopeID, ContextID: c.Worker.ContextID, Actor: work.Actor{Kind: work.ActorRole, ID: c.Worker.RoleID}, Kind: "feishu.publish", TargetID: projection.ChatID, TargetGeneration: projection.BotGeneration, IdempotencyKey: id, RequestRef: content.ID, RequestHash: hex.EncodeToString(hash[:]), State: work.OperationPrepared, Revision: 1, CreatedAt: s.now(), UpdatedAt: s.now()}
+	if _, _, err = tx.PutOperation(op, 0); err != nil {
+		return err
+	}
+	outbox := work.Outbox{ID: stableID("outbox", id), ScopeID: c.Worker.ScopeID, OperationID: id, Target: projection.ChatID, EventID: id, PayloadRef: content.ID, State: work.OutboxPending, Revision: 1}
+	return tx.PutOutbox(outbox, 0)
+}
+
+func (s *Service) withMessagePublisher(ctx context.Context, token, runRef, taskID string, apply func(*workstore.Tx, Caller) error) error {
 	claims, err := s.signer.Verify(token)
 	if err != nil {
-		return result, err
+		return err
 	}
 	var bootstrap bool
 	err = s.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -56,39 +135,6 @@ func (s *Service) PublishMessage(ctx context.Context, token, runRef string, req 
 		return nil
 	})
 	if err != nil {
-		return result, err
-	}
-	apply := func(tx *workstore.Tx, c Caller) error {
-		id := stableID("publication", c.Worker.ScopeID, c.Worker.RoleID, req.Key)
-		var err error
-		result, err = s.mutate(tx, c, "message.publish", req.Key, id, req, func() (string, int64, error) {
-			if strings.TrimSpace(req.Body) == "" {
-				return "", 0, fmt.Errorf("publication body is required")
-			}
-			projection, e := s.messageDestination(tx, c, req.ReplyToInputID, req.TaskID)
-			if e != nil {
-				return "", 0, e
-			}
-			projection.Body = req.Body
-			body, e := json.Marshal(projection)
-			if e != nil {
-				return "", 0, e
-			}
-			content := work.NewContent(stableID("body", id), c.Worker.ScopeID, "application/json", body, s.now())
-			if e = tx.PutContent(content); e != nil {
-				return "", 0, e
-			}
-			hash := sha256.Sum256(body)
-			op := work.Operation{ID: id, ScopeID: c.Worker.ScopeID, ContextID: c.Worker.ContextID, Actor: work.Actor{Kind: work.ActorRole, ID: c.Worker.RoleID}, Kind: "feishu.publish", TargetID: projection.ChatID, TargetGeneration: projection.BotGeneration, IdempotencyKey: id, RequestRef: content.ID, RequestHash: hex.EncodeToString(hash[:]), State: work.OperationPrepared, Revision: 1, CreatedAt: s.now(), UpdatedAt: s.now()}
-			if _, _, e = tx.PutOperation(op, 0); e != nil {
-				return "", 0, e
-			}
-			outbox := work.Outbox{ID: stableID("outbox", id), ScopeID: c.Worker.ScopeID, OperationID: id, Target: projection.ChatID, EventID: id, PayloadRef: content.ID, State: work.OutboxPending, Revision: 1}
-			if e = tx.PutOutbox(outbox, 0); e != nil {
-				return "", 0, e
-			}
-			return id, 1, nil
-		})
 		return err
 	}
 	if bootstrap {
@@ -101,14 +147,11 @@ func (s *Service) PublishMessage(ctx context.Context, token, runRef string, req 
 		})
 	} else {
 		err = s.withManagementWorker(ctx, token, runRef, apply)
-		if errors.Is(err, workauth.ErrUnauthorized) && req.TaskID != "" {
-			err = s.withCompletedTaskPublication(ctx, token, runRef, req.TaskID, apply)
+		if errors.Is(err, workauth.ErrUnauthorized) && taskID != "" {
+			err = s.withCompletedTaskPublication(ctx, token, runRef, taskID, apply)
 		}
 	}
-	if err == nil {
-		result.Status = "accepted"
-	}
-	return result, err
+	return err
 }
 
 // A task turn may deliver its own result after recording completion. It still
@@ -192,13 +235,16 @@ func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID, t
 			}
 		}
 	}
-	if replyInputID == "" && scope.Kind == work.ScopePersonal {
+	if scope.Kind == work.ScopePersonal {
 		destination, e := tx.GetPersonalContextDestination(scope.ID, c.Worker.ContextID, c.Worker.RoleID)
 		if e != nil {
 			return target, e
 		}
 		target.Tenant, target.ChatID = destination.Tenant, destination.ChatID
 		for _, id := range c.Attempt.InputIDs {
+			if replyInputID != "" {
+				break
+			}
 			input, e := tx.GetInbox(id)
 			if e != nil {
 				return target, e
@@ -216,11 +262,14 @@ func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID, t
 		}
 	}
 	if replyInputID != "" {
+		if !slices.Contains(c.Attempt.InputIDs, replyInputID) {
+			return target, fmt.Errorf("%w: reply requires an input admitted to this run", ErrPublicationDenied)
+		}
 		input, e := tx.GetInbox(replyInputID)
 		if e != nil {
 			return target, e
 		}
-		if input.ScopeID != scope.ID || input.MessageID == "" {
+		if input.ScopeID != scope.ID || input.MessageID == "" || input.RecipientRoleID != c.Worker.RoleID || input.ClaimedAttemptID != c.Attempt.ID {
 			return target, workauth.ErrUnauthorized
 		}
 		if taskID != "" && (input.TaskID != "" && input.TaskID != taskID || input.RelatedTaskID != "" && input.RelatedTaskID != taskID) {
@@ -247,10 +296,9 @@ func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID, t
 		}
 		key := message.PlatformKey
 		if scope.Kind == work.ScopePersonal {
-			if message.Source.Kind != work.ActorPrincipal || message.Source.ID != scope.PrincipalID {
+			if message.Source.Kind != work.ActorPrincipal || message.Source.ID != scope.PrincipalID || key.Tenant != target.Tenant || key.ChatID != target.ChatID {
 				return target, workauth.ErrUnauthorized
 			}
-			target.Tenant, target.ChatID = key.Tenant, key.ChatID
 		} else if target.Tenant != key.Tenant || target.ChatID != key.ChatID {
 			return target, workauth.ErrUnauthorized
 		}
@@ -291,4 +339,16 @@ func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID, t
 		return target, fmt.Errorf("no unambiguous conversation destination")
 	}
 	return target, nil
+}
+
+func directedPublicationID(scopeID, roleID, inputID string) string {
+	return stableID("publication-directed", scopeID, roleID, inputID)
+}
+
+func requireFirstBoundPublication(tx *workstore.Tx, operationID string) error {
+	exists, err := boundPublicationExists(tx, operationID)
+	if err == nil && exists {
+		return fmt.Errorf("%w: this input or delegation already has a publication", ErrPublicationDenied)
+	}
+	return err
 }

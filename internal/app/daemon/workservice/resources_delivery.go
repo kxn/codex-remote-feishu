@@ -14,6 +14,7 @@ import (
 )
 
 type PublishDeliveryRequest struct {
+	GrantID            string              `json:"grant_id,omitempty"`
 	Key                string              `json:"key"`
 	Purpose            string              `json:"purpose"`
 	Summary            string              `json:"summary"`
@@ -33,14 +34,23 @@ func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req
 	var result Result
 	err := s.withDeliveryPublisher(ctx, token, runRef, req.TaskID, func(tx *workstore.Tx, c Caller) error {
 		id := stableID("delivery", c.Worker.ScopeID, c.Worker.RoleID, req.Key)
+		if req.GrantID != "" {
+			id = delegatedDeliveryID(c.Worker.ScopeID, req.GrantID)
+		}
 		var err error
 		result, err = s.mutate(tx, c, "delivery.publish", req.Key, id, req, func() (string, int64, error) {
 			if len(req.References) == 0 {
 				return "", 0, fmt.Errorf("delivery requires an explicit resource manifest")
 			}
-			projection, err := s.messageDestination(tx, c, req.ReplyToInputID, req.TaskID)
+			projection, err := s.authorizePublication(tx, c, req.ReplyToInputID, req.TaskID, req.GrantID, publicationDelivery, req.References)
 			if err != nil {
 				return "", 0, err
+			}
+			notificationID := stableID("delivery-notification", id)
+			if projection.Authority.Kind == publicationDelegated {
+				if err = requireFirstBoundPublication(tx, notificationID); err != nil {
+					return "", 0, err
+				}
 			}
 			if req.ConversationTarget != "" && req.ConversationTarget != projection.ChatID {
 				return "", 0, workauth.ErrUnauthorized
@@ -120,7 +130,7 @@ func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req
 					navigation.WriteString("\n已保存：" + resource.Purpose)
 					if accessPending {
 						navigation.WriteString("（当前原件的群访问待确认）")
-					} else if resource.ConnectorIdentity != work.SavedFileConnector {
+					} else if projection.Authority.Kind != publicationDelegated && resource.ConnectorIdentity != work.SavedFileConnector {
 						links = append(links, currentResourceButton(resource.Purpose+"（当前原件）", resource.CanonicalURI))
 					}
 				}
@@ -140,6 +150,7 @@ func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req
 			if len(card) > 28*1024 {
 				return "", 0, fmt.Errorf("delivery notice too large; use a concise summary")
 			}
+			projection.Purpose = PublicationFinal
 			projection.Card = card
 			projection.UIViewID = viewID
 			projection.Body = navigation.String()
@@ -151,7 +162,6 @@ func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req
 			if err := tx.PutContent(body); err != nil {
 				return "", 0, err
 			}
-			notificationID := stableID("delivery-notification", id)
 			operation := work.Operation{ID: notificationID, ScopeID: scope.ID, ContextID: c.Worker.ContextID, Actor: work.Actor{Kind: work.ActorRole, ID: c.Worker.RoleID}, Kind: "feishu.publish", TargetID: projection.ChatID, TargetGeneration: projection.BotGeneration, IdempotencyKey: notificationID, RequestRef: body.ID, RequestHash: stableID("delivery-notification-hash", string(encoded)), State: work.OperationPrepared, Revision: 1, CreatedAt: s.now(), UpdatedAt: s.now()}
 			outbox := work.Outbox{ID: stableID("delivery-outbox", id), ScopeID: scope.ID, OperationID: notificationID, Target: projection.ChatID, EventID: id, PayloadRef: body.ID, State: work.OutboxPending, Revision: 1}
 			delivery := work.Delivery{ID: id, ScopeID: scope.ID, Audience: req.Audience, Purpose: req.Purpose, Summary: req.Summary, NeededAction: req.NeededAction, References: req.References, Retention: req.Retention, ConversationTarget: projection.ChatID, SourceAttemptID: c.Attempt.ID, NotificationOutboxID: outbox.ID, Revision: 1, CreatedAt: s.now()}

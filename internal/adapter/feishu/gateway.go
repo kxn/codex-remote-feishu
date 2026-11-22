@@ -113,6 +113,7 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 		messages:  map[string]string{},
 		botOpenID: strings.TrimSpace(config.BotOpenID),
 	}
+	gateway.broker.sharedReceive = liveReceiveBudget
 	if config.RawIngressHook != nil {
 		copy := *config.RawIngressHook
 		gateway.rawIngressHook = &copy

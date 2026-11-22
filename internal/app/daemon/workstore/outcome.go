@@ -108,6 +108,10 @@ func (t *Tx) commitOutcome(request OutcomeRequest) error {
 	for _, id := range request.ProcessedInputIDs {
 		processed[id] = true
 	}
+	stop, err := t.privateAttemptStop(attempt)
+	if err != nil {
+		return err
+	}
 	for _, id := range effectiveIDs {
 		input, e := t.GetInbox(id)
 		if e != nil {
@@ -128,6 +132,28 @@ func (t *Tx) commitOutcome(request OutcomeRequest) error {
 		}
 		if e = t.PutInbox(input, expected); e != nil {
 			return e
+		}
+		if !processed[id] && !stop.Cutoff.IsZero() {
+			receivedAt := input.AvailableAt
+			if receivedAt.IsZero() {
+				receivedAt = attempt.CreatedAt
+			}
+			if input.MessageID != "" {
+				message, e := t.GetMessage(input.MessageID)
+				if e != nil {
+					return e
+				}
+				receivedAt = message.CreatedAt
+			}
+			older, e := t.privateInputPredatesStop(input, receivedAt, stop.Cutoff)
+			if e != nil {
+				return e
+			}
+			if older {
+				if e = t.cancelPrivateInbox(input); e != nil {
+					return e
+				}
+			}
 		}
 	}
 	staleTask := false

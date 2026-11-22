@@ -218,13 +218,15 @@ func TestDefaultFixedPolicy(t *testing.T) {
 }
 
 func TestResolveTeamMenuPublishedCompatibility(t *testing.T) {
-	for _, key := range []string{"stop", "new", "unknown"} {
-		got := ResolveTeamMenu(key)
-		if got.Action != TeamMenuHome || got.Note == "" {
-			t.Errorf("key %q must explain the fallback: %#v", key, got)
+	if got := ResolveTeamMenu("unknown"); got.Action != TeamMenuHome || got.Note == "" {
+		t.Errorf("unknown key must explain the fallback: %#v", got)
+	}
+	for key, action := range map[string]TeamMenuAction{"stop": TeamMenuStop, "new": TeamMenuNew, "list": TeamMenuHistory} {
+		if got := ResolveTeamMenu(key); got.Action != action || got.Note != "" {
+			t.Errorf("key %q must use its live private operation: %#v", key, got)
 		}
 	}
-	for _, key := range []string{"model", "reasoning", "access"} {
+	for _, key := range []string{"model", "reasoning", "access", "plan"} {
 		got := ResolveTeamMenu(key)
 		if got.Action != TeamMenuSettings || got.Argument != key || got.Note != "" {
 			t.Errorf("key %q must open its settings page: %#v", key, got)

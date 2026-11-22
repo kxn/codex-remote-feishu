@@ -51,7 +51,7 @@ func pipelineDependency(env pipelineWorkEnvelope, call pipelineCollaborationCLI)
 			return "", fmt.Errorf("completed task run could still perform other business mutations")
 		}
 		return "complete", call("message.publish", workservice.PublishMessageRequest{Key: "deliver-dependency",
-			TaskID: task.ID, Body: "The specialist's result was verified and incorporated."}, nil)
+			TaskID: task.ID, Body: "The specialist's result was verified and incorporated.", Purpose: workservice.PublicationFinal}, nil)
 	}
 	var started workservice.Result
 	if err := call("task.start", workservice.TaskTransitionRequest{Key: "start-" + task.ID, TaskID: task.ID,

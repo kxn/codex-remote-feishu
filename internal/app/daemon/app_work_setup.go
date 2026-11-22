@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workcontrol"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workdisplay"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workengine"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workhost"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workhttp"
@@ -118,7 +119,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err != nil {
 		return err
 	}
-	r.ingress, err = workingress.New(store, workingress.Config{Directory: directory, Expander: teamMessageExpander{directory: directory}, PrivateCommands: commands})
+	r.ingress, err = workingress.New(store, workingress.Config{Directory: directory, Expander: teamMessageExpander{directory: directory}, PrivateCommands: commands, QueuePrivateExecution: workdisplay.QueueIfBusy})
 	if err != nil {
 		return err
 	}

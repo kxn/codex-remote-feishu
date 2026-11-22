@@ -27,7 +27,11 @@ func queueTaskReviewPublication(t *testing.T, store *workstore.Store, id string)
 		} else if err != nil {
 			return err
 		}
-		projection := workservice.MessageProjection{RoleID: "role", GatewayRef: "gateway", AppID: "app", BotGeneration: 1, Tenant: "tenant", ChatID: "oc_chat", ChannelGeneration: 1, TaskID: "task", Body: "Task publication " + id}
+		contextID, authority, err := testPublicationAuthority(tx, "scope", "role", "task", id, "tenant", "oc_chat", 1)
+		if err != nil {
+			return err
+		}
+		projection := workservice.MessageProjection{Authority: authority, RoleID: "role", GatewayRef: "gateway", AppID: "app", BotGeneration: 1, Tenant: "tenant", ChatID: "oc_chat", ChannelGeneration: 1, TaskID: "task", Body: "Task publication " + id}
 		raw, err := json.Marshal(projection)
 		if err != nil {
 			return err
@@ -36,7 +40,7 @@ func queueTaskReviewPublication(t *testing.T, store *workstore.Store, id string)
 		if err = tx.PutContent(content); err != nil {
 			return err
 		}
-		op := work.Operation{ID: "op_" + id, ScopeID: "scope", Actor: work.Actor{Kind: work.ActorRole, ID: "role"}, Kind: "feishu.publish", TargetID: "oc_chat", TargetGeneration: 1, IdempotencyKey: id, RequestHash: content.SHA256, RequestRef: content.ID, State: work.OperationPrepared, Revision: 1}
+		op := work.Operation{ID: "op_" + id, ScopeID: "scope", ContextID: contextID, Actor: work.Actor{Kind: work.ActorRole, ID: "role"}, Kind: "feishu.publish", TargetID: "oc_chat", TargetGeneration: 1, IdempotencyKey: id, RequestHash: content.SHA256, RequestRef: content.ID, State: work.OperationPrepared, Revision: 1}
 		if _, _, err = tx.PutOperation(op, 0); err != nil {
 			return err
 		}

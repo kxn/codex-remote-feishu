@@ -797,7 +797,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			Delta:        lookupString(message, "params", "delta"),
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
-			Metadata:     map[string]any{"summaryIndex": summaryIndex},
+			Metadata:     map[string]any{"summaryIndex": summaryIndex, "publicReasoningSummary": true},
 		}}}, nil
 	case "item/reasoning/textDelta":
 		threadID := lookupString(message, "params", "threadId")

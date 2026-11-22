@@ -20,6 +20,10 @@ func (c *Coordinator) commitNativeOutcome(tx *workstore.Tx, attempt work.Executi
 	if err != nil {
 		return err
 	}
+	stopped, err := tx.PrivateAttemptStopped(attempt)
+	if err != nil {
+		return err
+	}
 	state := work.AttemptCompleted
 	if len(turns) == 0 {
 		state = work.AttemptFailed
@@ -51,7 +55,18 @@ func (c *Coordinator) commitNativeOutcome(tx *workstore.Tx, attempt work.Executi
 		return err
 	}
 	report, err := tx.GetProcessingReport(attempt.ID)
-	if errors.Is(err, workstore.ErrNotFound) {
+	if errors.Is(err, workstore.ErrNotFound) && stopped {
+		state = work.AttemptInterrupted
+		wc, e := tx.GetContext(attempt.ContextID)
+		if e != nil {
+			return e
+		}
+		ref := "private-stop-outcome:" + attempt.ID
+		if e = tx.PutContent(work.NewContent(ref, attempt.ScopeID, "text/plain", []byte("私人执行已收到停止请求。尚未处理的原输入已取消。"), c.options.Clock())); e != nil {
+			return e
+		}
+		report = workstore.ProcessingReport{AttemptID: attempt.ID, RunRef: attempt.RunRef, OutcomeRef: ref, Checkpoint: wc.Checkpoint}
+	} else if errors.Is(err, workstore.ErrNotFound) {
 		if state != work.AttemptInterrupted {
 			state = work.AttemptFailed
 		}

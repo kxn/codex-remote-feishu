@@ -39,3 +39,27 @@ func ReplaceFromInteraction(tx *workstore.Tx, view *workstore.UIView, interactio
 	}
 	return nil
 }
+
+// PrivateNavigationFromInteraction gives the private menu and its pages a common
+// presentation owner. Their view kinds, frozen objects and revisions still
+// own their separate authorization and mutation contracts.
+func PrivateNavigationFromInteraction(tx *workstore.Tx, view *workstore.UIView, interactionID string) error {
+	view.SurfaceKey = "private-menu:" + view.ScopeID
+	return ReplaceFromInteraction(tx, view, interactionID)
+}
+
+// Private navigation used separate presentation keys before menu pages shared
+// one message. Retire only those keys when publishing a new private menu page.
+func legacyPrivateNavigationOwner(old, next workstore.UIView) bool {
+	if next.SurfaceKey != "private-menu:"+next.ScopeID || old.ScopeID != next.ScopeID || old.PrincipalID != next.PrincipalID {
+		return false
+	}
+	switch old.Kind {
+	case "bot.settings":
+		return old.SurfaceKey == "settings:"+old.ScopeID
+	case "private.project-picker", "private.context-picker", "execution.location-picker":
+		return old.SurfaceKey == old.ScopeID+":"+old.Kind
+	default:
+		return false
+	}
+}

@@ -10,6 +10,17 @@ func (t *Tx) validatePublicationMappingActor(operation work.Operation, mapping w
 	if operation.Actor == (work.Actor{Kind: work.ActorRole, ID: mapping.RoleID}) {
 		return nil
 	}
+	if operation.Actor == (work.Actor{Kind: work.ActorSystem, ID: "private-execution-display"}) {
+		display, err := t.VerifyPrivateDisplayPublication(operation)
+		if err != nil {
+			return err
+		}
+		if display.Bot.RoleID != mapping.RoleID || display.Bot.IdentityGeneration != mapping.BotGeneration ||
+			display.Tenant != mapping.Tenant || display.ChatID != mapping.ChatID {
+			return ErrScopeDenied
+		}
+		return nil
+	}
 	if operation.Actor != (work.Actor{Kind: work.ActorSystem, ID: "team-ui"}) {
 		return fmt.Errorf("publication actor has no role or exact UI ownership")
 	}

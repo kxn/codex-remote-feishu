@@ -154,13 +154,24 @@ func teamProjectFacts(tx *workstore.Tx, id string) (teamProjectProjection, error
 		v.Problems = append(v.Problems, v.MemberNames[problem.RoleID]+"："+teamProjectProblem(problem.Reason))
 	}
 	sort.Strings(v.Problems)
-	resources, err := tx.ListResources(project.ScopeID)
+	deliveries, err := tx.ListSentDeliveries(project.ScopeID, v.Channel.Tenant, v.Channel.ChatID, v.Channel.BindingGeneration)
 	if err != nil {
 		return v, err
 	}
-	deliveries, err := tx.ListDeliveries(project.ScopeID)
-	if err != nil {
-		return v, err
+	var resources []work.Resource
+	seenResources := map[string]bool{}
+	for _, delivery := range deliveries {
+		for _, ref := range delivery.References {
+			if seenResources[ref.ResourceID] {
+				continue
+			}
+			resource, e := tx.GetResource(project.ScopeID, ref.ResourceID)
+			if e != nil {
+				return v, e
+			}
+			resources = append(resources, resource)
+			seenResources[ref.ResourceID] = true
+		}
 	}
 	raw, _ := json.Marshal(struct {
 		Resources  []work.Resource
@@ -280,8 +291,8 @@ func teamProjectPanel(v teamProjectProjection) workui.Panel {
 	return panel
 }
 
-// Ordinary task progress updates the fixed home. Group cards notify only
-// lifecycle changes, human decisions, blockers or availability of the entrance.
+// Human-visible project summaries update one low-frequency status card.
+// Internal execution events never become group progress messages.
 func (a *App) runTeamProjectViews(ctx context.Context) error {
 	if a.teamRuntime == nil {
 		return nil
@@ -319,6 +330,7 @@ func (a *App) runTeamProjectViews(ctx context.Context) error {
 				return err
 			}
 			attention := struct {
+				TaskStates                                                   map[work.TaskState]int
 				State                                                        work.ProjectState
 				Revision                                                     int64
 				Decisions, Problems                                          []string
@@ -329,18 +341,48 @@ func (a *App) runTeamProjectViews(ctx context.Context) error {
 				NavigationStatus                                             string
 				TeamMaterials                                                teamMaterialsProjection
 				NavigationTabMissing, NavigationPinMissing, NavigationLegacy bool
-			}{facts.Project.State, facts.Project.Revision, facts.Attention, facts.Problems, facts.HomeURL, "", facts.Binding, facts.Channel, facts.NavigationGeneration, facts.NavigationStatus, facts.TeamMaterials, facts.NavigationTabMissing, facts.NavigationPinMissing, facts.NavigationLegacy}
+			}{facts.TaskStates, facts.Project.State, facts.Project.Revision, facts.Attention, facts.Problems, facts.HomeURL, "", facts.Binding, facts.Channel, facts.NavigationGeneration, facts.NavigationStatus, facts.TeamMaterials, facts.NavigationTabMissing, facts.NavigationPinMissing, facts.NavigationLegacy}
 			if facts.HomeSync == "unknown" || facts.HomeSync == "conflict" {
 				attention.HomeRecovery = facts.HomeSync
 			}
 			raw, _ := json.Marshal(attention)
-			viewID := workui.ID("project.status", string(raw))
-			if _, err = tx.GetUIView(viewID); err == nil {
-				return nil
-			} else if !errors.Is(err, workstore.ErrNotFound) {
+			previousID := ""
+			var previousCreated time.Time
+			views, err := tx.ListUIViews(facts.Project.ScopeID)
+			if err != nil {
 				return err
 			}
+			for _, previous := range views {
+				if previous.SurfaceKey == "project.status:"+id && (previousID == "" || previous.CreatedAt.After(previousCreated)) {
+					previousID, previousCreated = previous.ID, previous.CreatedAt
+				}
+			}
+			var previousSnapshot []byte
+			if previousID != "" {
+				fingerprint, e := tx.GetContent(facts.Project.ScopeID, previousID+":snapshot")
+				previousSnapshot = fingerprint.Data
+				if e == nil && string(fingerprint.Data) == string(raw) {
+					return nil
+				}
+				if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+					return e
+				}
+			}
+			viewID := workui.ID("project.status", string(raw), previousID)
 			view := workstore.UIView{ID: viewID, ScopeID: facts.Project.ScopeID, SurfaceKey: "project.status:" + id, Kind: "project.status", TargetID: id, TargetRevision: facts.Project.Revision, Binding: facts.Binding, Tenant: facts.Channel.Tenant, ChatID: facts.Channel.ChatID, ChannelGeneration: facts.Channel.BindingGeneration}
+			urgent := projectSnapshotUrgent(previousSnapshot, facts)
+			ready, err := workui.PrepareSnapshot(tx, &view, time.Now().UTC(), urgent)
+			if err != nil || !ready {
+				return err
+			}
+			if err = tx.PutContent(work.NewContent(viewID+":snapshot", facts.Project.ScopeID, "application/json", raw, time.Now().UTC())); err != nil {
+				return err
+			}
+			if urgent {
+				if err = tx.PutContent(work.NewContent(viewID+":snapshot-priority", facts.Project.ScopeID, "text/plain", []byte("urgent"), time.Now().UTC())); err != nil {
+					return err
+				}
+			}
 			return queueTeamProjectStatus(tx, view, facts)
 		})
 		if err != nil {
@@ -365,6 +407,17 @@ func (a *App) refreshTeamProjectHome(ctx context.Context, facts teamProjectProje
 	}
 	perform := false
 	err := r.store.Within(ctx, func(tx *workstore.Tx) error {
+		budgetKey := "project.home:" + facts.Project.ID
+		until, err := tx.PublicationBudgetUntil(budgetKey)
+		if err != nil {
+			return err
+		}
+		if until.After(time.Now()) {
+			return nil
+		}
+		if err = tx.SetPublicationBudget(budgetKey, time.Now().Add(30*time.Second)); err != nil {
+			return err
+		}
 		old, err := tx.GetOperation(id)
 		if err == nil {
 			if old.State == work.OperationConfirmed || time.Since(old.UpdatedAt) < 30*time.Second {

@@ -17,9 +17,15 @@ func (s *Service) refreshDeliveryProjectAccess(ctx context.Context, token, run s
 		} else if !errors.Is(err, workstore.ErrNotFound) {
 			return err
 		}
-		projection, err := s.messageDestination(tx, c, req.ReplyToInputID, req.TaskID)
+		projection, err := s.authorizePublication(tx, c, req.ReplyToInputID, req.TaskID, req.GrantID, publicationDelivery, req.References)
 		if err != nil {
 			return err
+		}
+		if projection.Authority.Kind == publicationDelegated {
+			id := delegatedDeliveryID(c.Worker.ScopeID, req.GrantID)
+			if err = requireFirstBoundPublication(tx, stableID("delivery-notification", id)); err != nil {
+				return err
+			}
 		}
 		targets, err = s.loadDeliveryAccessTargets(ctx, tx, c.Worker.ScopeID, projection, req.References)
 		return err
@@ -61,7 +67,7 @@ func (s *Service) RefreshArtifactAccessFromInteraction(ctx context.Context, inte
 			return nil
 		}
 		var references []work.DeliveryRef
-		delivery, err := tx.GetDelivery(scope.ID, id)
+		delivery, err := tx.GetSentDelivery(scope.ID, id, view.Tenant, view.ChatID, view.ChannelGeneration)
 		if err == nil {
 			if delivery.ConversationTarget != view.ChatID {
 				return workstore.ErrScopeDenied

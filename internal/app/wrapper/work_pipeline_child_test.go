@@ -212,7 +212,7 @@ func pipelineChildBusiness(frame map[string]any) error {
 				return err
 			}
 			disposition = "unfinished"
-		} else if err := call("message.publish", map[string]any{"key": "leader-group-reply", "body": "Leader received the internal expert result and replies to the source group."}); err != nil {
+		} else if err := call("message.publish", map[string]any{"key": "leader-group-reply", "body": "Leader received the internal expert result and replies to the source group.", "purpose": "final"}); err != nil {
 			return err
 		}
 		if os.Getenv("FSC_NATIVE_PIPELINE_GROUP") == "2" && (role == "pipeline-expert" || human) {
@@ -232,8 +232,10 @@ func pipelineChildBusiness(frame map[string]any) error {
 				time.Sleep(5 * time.Millisecond)
 			}
 		}
-	} else if err := call("message.publish", map[string]any{"key": "pipeline-reply", "body": "pipeline explicit source reply", "reply_to_input_id": envelope.Inputs[0].ID}); err != nil {
-		return err
+	} else if os.Getenv("FSC_NATIVE_PIPELINE_AUTO_PRIVATE") != "true" {
+		if err := call("message.publish", map[string]any{"key": "pipeline-reply", "body": "pipeline explicit source reply", "reply_to_input_id": envelope.Inputs[0].ID}); err != nil {
+			return err
+		}
 	}
 	ids := []string{}
 	for _, input := range envelope.Inputs {

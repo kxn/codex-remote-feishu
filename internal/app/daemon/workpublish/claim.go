@@ -3,7 +3,9 @@ package workpublish
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
@@ -90,6 +92,12 @@ func (p *Publisher) claim(ctx context.Context, id string, recovery bool) (public
 		if err = json.Unmarshal(body.Data, &job.Projection); err != nil {
 			return err
 		}
+		if err = p.resolvePrivateDisplay(tx, op, item, &job, recovery); err != nil {
+			return err
+		}
+		if job.TerminalReason != "" {
+			return abort(job.TerminalReason)
+		}
 		if recovery && job.Projection.ReplaceMessageID != "" {
 			return fmt.Errorf("uncertain card update requires observation; replay could overwrite a newer view")
 		}
@@ -111,7 +119,7 @@ func (p *Publisher) claim(ctx context.Context, id string, recovery bool) (public
 				return abort("presentation superseded before publication")
 			}
 		}
-		if job.Projection.ReplaceMessageID != "" && job.Projection.UIViewID == "" {
+		if job.Projection.ReplaceMessageID != "" && job.Projection.UIViewID == "" && job.Projection.PrivateDisplay == nil {
 			return fmt.Errorf("card update requires a durable presentation owner")
 		}
 		binding, err := tx.GetRoleBotBinding(job.Projection.RoleID)
@@ -136,9 +144,34 @@ func (p *Publisher) claim(ctx context.Context, id string, recovery bool) (public
 		} else if scope.Kind == work.ScopeBootstrap && (scope.Tenant != job.Projection.Tenant || scope.ChatID != job.Projection.ChatID) {
 			return fmt.Errorf("bootstrap publication escaped chat")
 		}
+		if err = workservice.ValidatePublication(tx, op, job.Projection); err != nil {
+			if errors.Is(err, workservice.ErrPublicationDenied) {
+				return abort(err.Error())
+			}
+			return err
+		}
+		if obsolete, e := p.progressObsolete(tx, scope, op, job.Projection); e != nil {
+			return e
+		} else if obsolete {
+			return abort("progress superseded by newer state or its attempt's final result")
+		}
+		if err = p.resolveGroupProgress(tx, scope, op, &job, recovery); err != nil {
+			return err
+		}
+		if job.TerminalReason != "" {
+			return abort(job.TerminalReason)
+		}
 		if err = p.resolveTopic(tx, &op, &job); err != nil {
 			return err
 		}
+		if recovery && job.Projection.ReplaceMessageID != "" {
+			return fmt.Errorf("uncertain card update requires observation before recovery")
+		}
+		job.ReplyInThread, err = publicationRepliesInThread(tx, scope, job.Projection)
+		if err != nil {
+			return err
+		}
+
 		root := job.Projection.RootMessageID
 		if root == "" {
 			root = job.Projection.ReplyToMessageID
@@ -156,6 +189,11 @@ func (p *Publisher) claim(ctx context.Context, id string, recovery bool) (public
 					return fmt.Errorf("topic root was recalled; original send remains unknown")
 				}
 				return abort("topic root was recalled; delivery requires an explicit replacement topic")
+			}
+		}
+		if !recovery {
+			if err = p.reserveBackground(tx, scope, op, job.Projection); err != nil {
+				return err
 			}
 		}
 		found := false

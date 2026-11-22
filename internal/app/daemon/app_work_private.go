@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workingress"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
@@ -52,14 +51,16 @@ func (h teamPrivateCommands) Handle(ctx context.Context, command work.TypedComma
 	if err != nil {
 		return workingress.PrivateCommandReceipt{}, err
 	}
-	action, known := control.ParseFeishuTextActionWithoutCatalog(command.Text)
+	action, known := parseTeamPrivateCommand(command.Text)
 	var receipt string
 	if !known {
 		receipt, err = a.queuePrivatePanel(ctx, source, "help", "没有识别这个命令，可以使用下面的入口。")
 	} else {
 		switch action.Kind {
-		case control.ActionShowCommandMenu, control.ActionShowCommandHelp:
+		case control.ActionShowCommandMenu:
 			receipt, err = a.queuePrivatePanel(ctx, source, "menu", "")
+		case control.ActionShowCommandHelp:
+			receipt, err = a.queuePrivatePanel(ctx, source, "help", "")
 		case control.ActionStatus:
 			receipt, err = a.queuePrivatePanel(ctx, source, "status", "")
 		case control.ActionShowHistory, control.ActionShowThreads, control.ActionShowAllThreads:
@@ -124,6 +125,9 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 	if kind == "contexts" {
 		return a.queueTeamContexts(ctx, source, 0)
 	}
+	a.mu.Lock()
+	backend := a.workBotSettingsLocked(source.Gateway.GatewayRef).Backend
+	a.mu.Unlock()
 	id := workui.ID(source.Key, kind)
 	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		if _, e := tx.GetUIView(id); e == nil {
@@ -139,26 +143,12 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 		if e != nil {
 			return e
 		}
-		panel := workui.Panel{Title: "和助手一起工作"}
-		if note != "" {
-			panel.Paragraphs = append(panel.Paragraphs, note)
+		if e = a.validateTeamPickerSource(tx, source); e != nil {
+			return e
 		}
-		if nav.Mode == work.PrivateProject {
-			if e = tx.RequireProjectPrincipalAccess(nav.ProjectScopeID, source.PrincipalID, time.Now().UTC()); e == nil {
-				scope, e := tx.GetScope(nav.ProjectScopeID)
-				if e != nil {
-					return e
-				}
-				project, e := tx.GetProject(scope.ProjectID)
-				if e != nil {
-					return e
-				}
-				panel.Paragraphs = append(panel.Paragraphs, "当前查看项目："+project.Name+"。这里的私人讨论不会自动发到项目群。")
-			} else {
-				panel.Paragraphs = append(panel.Paragraphs, "当前项目的访问范围需要重新核对；私人讨论仍保留在这里。")
-			}
-		} else {
-			panel.Paragraphs = append(panel.Paragraphs, "当前是私人工作。可以进入项目查看进展，也可以继续在这里处理自己的事情。")
+		panel, e := teamPrivateMenuPanel(tx, source, nav, backend, kind, note)
+		if e != nil {
+			return e
 		}
 		switch kind {
 		case "workers":
@@ -196,12 +186,8 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 			}
 			panel.Paragraphs = append(panel.Paragraphs, diagnostics...)
 		}
-		panel.Buttons = append(panel.Buttons, workui.Button{Label: "项目", Action: "private.projects"}, workui.Button{Label: "新建工作", Action: "private.new"}, workui.Button{Label: "已有工作", Action: "private.contexts"}, workui.Button{Label: "模型和设置", Action: "private.settings"}, workui.Button{Label: "工作目录", Action: "private.resources"}, workui.Button{Label: "暂停", Action: "private.stop"}, workui.Button{Label: "继续", Action: "private.resume"})
-		if nav.Mode == work.PrivateProject {
-			panel.Buttons = append(panel.Buttons, workui.Button{Label: "返回私人工作", Action: "private.return_personal"})
-		}
-		view := workstore.UIView{ID: id, ScopeID: source.ScopeID, ContextID: nav.FrontContextID, SurfaceKey: "private-menu:" + source.ScopeID, Kind: "private.navigation", TargetID: source.ScopeID, TargetRevision: nav.Revision, Binding: binding, Tenant: source.Tenant, ChatID: source.ChatID, PrincipalID: source.PrincipalID, ReplyToMessageID: source.MessageID}
-		if e = workui.ReplaceFromInteraction(tx, &view, source.Authority.InteractionID); e != nil {
+		view := workstore.UIView{ID: id, ScopeID: source.ScopeID, ContextID: nav.FrontContextID, Kind: "private.navigation", TargetID: source.ScopeID, TargetRevision: nav.Revision, Binding: binding, Tenant: source.Tenant, ChatID: source.ChatID, PrincipalID: source.PrincipalID, ReplyToMessageID: source.MessageID}
+		if e = workui.PrivateNavigationFromInteraction(tx, &view, source.Authority.InteractionID); e != nil {
 			return e
 		}
 		card, e := workui.Card(id, panel)
@@ -215,13 +201,22 @@ func (a *App) queuePrivatePanel(ctx context.Context, source teamHumanSource, kin
 }
 
 func (a *App) handleTeamViewAction(ctx context.Context, interaction workstore.HumanInteraction, view workstore.UIView, action string) error {
-	if view.Kind != "private.context-picker" && view.Kind != "host.upgrade-confirm" && view.Kind != "private.navigation" && view.Kind != "bot.settings" && view.Kind != "private.project-picker" && view.Kind != "execution.location-picker" {
+	if view.Kind != "private.context-picker" && view.Kind != "host.upgrade-confirm" && view.Kind != "private.navigation" && view.Kind != "bot.settings" && view.Kind != "private.project-picker" && view.Kind != "execution.location-picker" && view.Kind != "host.result" && view.Kind != "host.upgrade-status" && view.Kind != "file.result" {
 		return fmt.Errorf("这个入口不支持此操作。")
 	}
 	source := teamHumanSource{NavigationRevision: view.TargetRevision, Key: interaction.ID, ScopeID: view.ScopeID, PrincipalID: interaction.PrincipalID, RoleID: interaction.Gateway.RoleID, Tenant: interaction.Envelope.Tenant, ChatID: interaction.Envelope.ChatID, MessageID: interaction.Envelope.MessageID, Gateway: interaction.Gateway, SenderIDs: interaction.Envelope.SenderIDs, Authority: workstore.PrivateActionSource{PersonalScopeID: view.ScopeID, InteractionID: interaction.ID}}
 	var err error
 	result := ""
-	if view.Kind == "private.context-picker" {
+	if action == "private.menu" || action == "private.basic" || action == "private.workspace" || action == "private.tools" || action == "private.admin" || action == "private.settings" && view.Kind != "private.navigation" {
+		if _, err = a.teamFrozenPickerValues(ctx, interaction, view, action); err != nil {
+			return err
+		}
+		if action == "private.settings" {
+			result, err = a.queueTeamSettings(ctx, source, "overview", "")
+		} else {
+			result, err = a.queuePrivatePanel(ctx, source, strings.TrimPrefix(action, "private."), "")
+		}
+	} else if view.Kind == "private.context-picker" {
 		result, err = a.handleTeamHistoryViewAction(ctx, interaction, view, action)
 	} else if view.Kind == "host.upgrade-confirm" {
 		result, err = a.handleTeamHostViewAction(ctx, interaction, view, action)
@@ -230,19 +225,10 @@ func (a *App) handleTeamViewAction(ctx context.Context, interaction workstore.Hu
 	} else if view.Kind == "bot.settings" {
 		result, err = a.handleTeamSettingsView(ctx, source, view, action)
 	} else {
-		switch action {
-		case "private.new", "private.return_personal", "private.enter_project", "private.select_context":
-			project, _ := interaction.Envelope.Values["project_scope_id"].(string)
-			workContext, _ := interaction.Envelope.Values["context_id"].(string)
-			err = a.navigateFromSource(ctx, source, strings.TrimPrefix(action, "private."), project, workContext, view.TargetRevision)
-			if err == nil {
-				result, err = a.queuePrivatePanel(ctx, source, "menu", "当前工作已切换。")
-			}
-		case "private.contexts":
-			result, err = a.queuePrivatePanel(ctx, source, "contexts", "")
-		default:
-			result, err = a.handleTeamPrivateViewOperation(ctx, source, view, action)
+		if _, err = a.teamFrozenPickerValues(ctx, interaction, view, action); err != nil {
+			return err
 		}
+		result, err = a.handleTeamPrivateViewOperation(ctx, source, view, action, interaction.Envelope.Form)
 	}
 	if err != nil {
 		return err

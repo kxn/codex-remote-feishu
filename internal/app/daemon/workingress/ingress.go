@@ -44,11 +44,12 @@ type PrivateCommandHandler interface {
 	Handle(context.Context, work.TypedCommandEnvelope) (PrivateCommandReceipt, error)
 }
 type Config struct {
-	Directory        Directory
-	Expander         Expander
-	PrivateCommands  PrivateCommandHandler
-	Now              func() time.Time
-	ExpansionTimeout time.Duration
+	Directory             Directory
+	Expander              Expander
+	PrivateCommands       PrivateCommandHandler
+	QueuePrivateExecution func(*workstore.Tx, work.WorkScope, work.Inbox, work.IngressRecord, time.Time) error
+	Now                   func() time.Time
+	ExpansionTimeout      time.Duration
 }
 type Ingress struct {
 	store  *workstore.Store

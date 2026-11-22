@@ -7,6 +7,8 @@ type TeamMenuAction string
 const (
 	TeamMenuHome         TeamMenuAction = "menu"
 	TeamMenuStatus       TeamMenuAction = "status"
+	TeamMenuStop         TeamMenuAction = "stop"
+	TeamMenuNew          TeamMenuAction = "new"
 	TeamMenuSteer        TeamMenuAction = "steerall"
 	TeamMenuProjects     TeamMenuAction = "projects"
 	TeamMenuResources    TeamMenuAction = "resources"
@@ -49,8 +51,14 @@ func ResolveTeamMenu(key string) TeamMenuRoute {
 		return TeamMenuRoute{Action: TeamMenuProjects}
 	case "workspace":
 		return TeamMenuRoute{Action: TeamMenuResources}
-	case "model", "reasoning", "access":
+	case "list", "use", "useall":
+		return TeamMenuRoute{Action: TeamMenuHistory}
+	case "model", "reasoning", "access", "plan", "verbose":
 		return TeamMenuRoute{Action: TeamMenuSettings, Argument: key}
+	case "mode":
+		return TeamMenuRoute{Action: TeamMenuSettings, Argument: "backend"}
+	case "codexprofile", "claudeprofile", "opencodeprofile":
+		return TeamMenuRoute{Action: TeamMenuSettings, Argument: strings.TrimSuffix(key, "profile") + "-profile"}
 	case string(TeamMenuReview):
 		return TeamMenuRoute{Action: TeamMenuReview}
 	case string(TeamMenuAutoWhip), "autowhip_on", "autowhip_off", "autowhip_status":
@@ -59,10 +67,10 @@ func ResolveTeamMenu(key string) TeamMenuRoute {
 	case string(TeamMenuAutoContinue), "autocontinue_on", "autocontinue_off", "autocontinue_status":
 		_, mode, _ := strings.Cut(key, "_")
 		return TeamMenuRoute{Action: TeamMenuAutoContinue, Argument: mode}
-	case "stop":
-		return TeamMenuRoute{Action: TeamMenuHome, Note: "这个旧菜单按钮已停用。请在私聊发送 /stop 停止当前工作。"}
-	case "new":
-		return TeamMenuRoute{Action: TeamMenuHome, Note: "这个旧菜单按钮已停用。请在私聊发送 /new 开始新的工作。"}
+	case string(TeamMenuStop):
+		return TeamMenuRoute{Action: TeamMenuStop}
+	case string(TeamMenuNew):
+		return TeamMenuRoute{Action: TeamMenuNew}
 	default:
 		return TeamMenuRoute{Action: TeamMenuHome, Note: "这个菜单入口已不可用。请从工作菜单选择当前可用的操作。"}
 	}

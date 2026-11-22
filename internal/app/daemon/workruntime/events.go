@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workdisplay"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
@@ -119,8 +120,8 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 	if event.Kind == agentproto.EventRuntimeMCPResult || event.Kind == agentproto.EventMCPOAuthLoginURLReady || event.Kind == agentproto.EventMCPOAuthLoginCompleted {
 		return "", c.applyMCPReceipt(tx, carrier, event)
 	}
-	if event.Kind == agentproto.EventItemCompleted && event.ItemKind == "agent_message" && c.options.ApplyReviewEvent != nil {
-		return "", c.applyReviewOutput(tx, carrier, event)
+	if workdisplay.IsOutput(event) {
+		return "", c.applyNativeOutput(tx, carrier, event)
 	}
 	if event.Kind == agentproto.EventThreadGoalCommandResult && event.Execution != nil && event.Execution.AttemptID == "" && event.Execution.RunRef == "" {
 		return "", c.applyOwnerGoalReceipt(tx, carrier, event)
@@ -157,6 +158,11 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 	if event.Kind == agentproto.EventRequestStarted || event.Kind == agentproto.EventRequestResolved {
 		if c.options.ApplyNativeRequest == nil {
 			return "", c.gate(tx, carrier, binding.AttemptID, "native_request_handler_unavailable")
+		}
+		if event.Kind == agentproto.EventRequestStarted {
+			if err := c.applyPrivateDisplay(tx, carrier, binding, event); err != nil {
+				return "", err
+			}
 		}
 		return "", c.options.ApplyNativeRequest(tx, carrier, binding, event)
 	}
@@ -276,6 +282,9 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 			if err := tx.RecordNativeRejection(event.CommandID, event); err != nil {
 				return "", err
 			}
+			if err := c.applyPrivateDisplay(tx, carrier, binding, event); err != nil {
+				return "", err
+			}
 			if current {
 				return binding.AttemptID, nil
 			}
@@ -339,6 +348,11 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 			return "", err
 		}
 	}
+	if event.Kind == agentproto.EventTurnStarted {
+		if err := c.applyPrivateDisplay(tx, carrier, binding, event); err != nil {
+			return "", err
+		}
+	}
 	if drain {
 		pending, err := tx.QuarantinedNativeEvents(carrier.Incarnation, event.ThreadID, event.TurnID)
 		if err != nil {
@@ -355,6 +369,11 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 			if err := tx.ResolveQuarantine(carrier.Incarnation, old.Journal.Sequence); err != nil {
 				return "", err
 			}
+		}
+	}
+	if event.Kind == agentproto.EventTurnCompleted {
+		if err := c.applyPrivateDisplay(tx, carrier, binding, event); err != nil {
+			return "", err
 		}
 	}
 	if event.Kind == agentproto.EventTurnCompleted && c.options.ApplyReviewEvent != nil {

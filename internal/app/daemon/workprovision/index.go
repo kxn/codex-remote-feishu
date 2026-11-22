@@ -72,20 +72,7 @@ func (s *Service) index(ctx context.Context, state snapshot) (HomeIndex, error) 
 				result.DoneTasks++
 			}
 		}
-		resources, err := tx.ListResources(project.ScopeID)
-		if err != nil {
-			return err
-		}
-		for _, resource := range resources {
-			if resource.ID != state.home.ResourceID && resource.ConnectorIdentity != work.SavedFileConnector {
-				resourceIndex, err := homeResourceIndex(tx, state, resource)
-				if err != nil {
-					return err
-				}
-				result.Resources = append(result.Resources, resourceIndex)
-			}
-		}
-		deliveries, err := tx.ListDeliveries(project.ScopeID)
+		deliveries, err := tx.ListSentDeliveries(project.ScopeID, state.request.Tenant, state.request.ChatID, state.home.ChannelGeneration)
 		if err != nil {
 			return err
 		}
@@ -96,9 +83,6 @@ func (s *Service) index(ctx context.Context, state snapshot) (HomeIndex, error) 
 			return deliveries[i].CreatedAt.After(deliveries[j].CreatedAt)
 		})
 		for _, delivery := range deliveries {
-			if delivery.ConversationTarget != state.request.ChatID {
-				continue
-			}
 			item := HomeDelivery{Summary: delivery.Summary, NeededAction: delivery.NeededAction}
 			for _, ref := range delivery.References {
 				resource, err := tx.GetResource(project.ScopeID, ref.ResourceID)
@@ -115,6 +99,7 @@ func (s *Service) index(ctx context.Context, state snapshot) (HomeIndex, error) 
 						return err
 					}
 					entry.Version = version.Source.Version
+					entry.URL = ""
 				}
 				item.Resources = append(item.Resources, entry)
 			}

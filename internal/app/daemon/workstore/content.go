@@ -41,14 +41,19 @@ func (t *Tx) GetContent(scopeID, id string) (work.Content, error) {
 	if v.ScopeID != scopeID {
 		return work.Content{}, ErrScopeDenied
 	}
-	v.CreatedAt, err = time.Parse(time.RFC3339Nano, at)
+	return validateStoredContent(v, at)
+}
+
+func validateStoredContent(content work.Content, createdAt string) (work.Content, error) {
+	var err error
+	content.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
-		return v, err
+		return content, err
 	}
-	if err = v.Validate(); err != nil {
+	if err = content.Validate(); err != nil {
 		return work.Content{}, fmt.Errorf("stored content integrity: %w", err)
 	}
-	return v, nil
+	return content, nil
 }
 func (t *Tx) requireContent(scopeID, ref string) error {
 	_, err := t.GetContent(scopeID, ref)

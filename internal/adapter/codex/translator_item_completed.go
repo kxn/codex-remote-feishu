@@ -3,6 +3,7 @@ package codex
 import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
+	"strings"
 )
 
 func (t *Translator) observeItemCompleted(message map[string]any) Result {
@@ -22,6 +23,9 @@ func (t *Translator) observeItemCompleted(message map[string]any) Result {
 	if itemKind == "reasoning" {
 		events = append(events, t.reasoningSummaryFallbackEvents(threadID, turnID, itemID, item)...)
 		itemKind = "reasoning_summary"
+		// The app-server exposes public summaries and private content in
+		// distinct fields. Never carry the private field into completed items.
+		metadata = map[string]any{"publicSummary": strings.Join(extractStringList(item["summary"]), "\n\n")}
 	}
 	events = append(events, agentproto.Event{
 		Kind:         agentproto.EventItemCompleted,
@@ -55,7 +59,7 @@ func (t *Translator) reasoningSummaryFallbackEvents(threadID, turnID, itemID str
 			Delta:        summary,
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
-			Metadata:     map[string]any{"summaryIndex": summaryIndex},
+			Metadata:     map[string]any{"summaryIndex": summaryIndex, "publicReasoningSummary": true},
 		})
 	}
 	return events

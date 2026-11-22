@@ -133,6 +133,9 @@ func (a *App) queueTeamReview(ctx context.Context, source teamHumanSource, actio
 		return e
 	})
 	if errors.Is(err, errTeamReviewLocation) {
+		if source.Authority.InteractionID != "" {
+			return a.queuePrivatePanel(ctx, source, "review", "请先设置默认审查目录，再发起审查。")
+		}
 		if err = a.rememberTeamPendingReview(ctx, source, action); err != nil {
 			return "", err
 		}

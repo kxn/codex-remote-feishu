@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -32,9 +33,12 @@ const (
 )
 
 type Store struct {
-	db          *sql.DB
-	lock        *relayruntime.FileLock
-	incarnation string
+	db            *sql.DB
+	lock          *relayruntime.FileLock
+	incarnation   string
+	workspaceRoot string
+	displayMu     sync.Mutex
+	display       map[displayTurnKey]*displayEvidence
 }
 
 // Open takes an exclusive carrier lock. Reopening conservatively marks every
@@ -79,7 +83,7 @@ func Open(ctx context.Context, path, stateDir, cwd, incarnation string) (*Store,
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	store := &Store{db: db, lock: lock, incarnation: incarnation}
+	store := &Store{db: db, lock: lock, incarnation: incarnation, workspaceRoot: cwd}
 	if err := store.initialize(ctx); err != nil {
 		_ = db.Close()
 		return nil, err

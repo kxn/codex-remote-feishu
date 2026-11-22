@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worksettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workui"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
@@ -21,6 +20,10 @@ func (a *App) queueTeamResourcePicker(ctx context.Context, source teamHumanSourc
 	return a.queueTeamResourcePickerPage(ctx, source, 0)
 }
 func (a *App) queueTeamResourcePickerPage(ctx context.Context, source teamHumanSource, page int) (string, error) {
+	return a.queueTeamResourcePickerNotice(ctx, source, page, "")
+}
+
+func (a *App) queueTeamResourcePickerNotice(ctx context.Context, source teamHumanSource, page int, notice string) (string, error) {
 	if page < 0 {
 		return "", fmt.Errorf("无效页码")
 	}
@@ -56,6 +59,12 @@ func (a *App) queueTeamResourcePickerPage(ctx context.Context, source teamHumanS
 	panel, err := a.teamResourcePickerPanel(source, target, page, preference, locations)
 	if err != nil {
 		return "", err
+	}
+	if notice != "" {
+		panel.Paragraphs = append([]string{notice}, panel.Paragraphs...)
+	}
+	if source.NavigationRevision > 0 && source.BootstrapSourceMessageID == "" {
+		panel.Buttons = append(panel.Buttons, workui.Button{Label: "返回工作区与会话", Action: "private.workspace"})
 	}
 	return a.queueTeamPicker(ctx, source, "execution.location-picker", target, max(1, preference.Revision), panel)
 }
@@ -133,7 +142,7 @@ func (a *App) teamPickerTarget(tx *workstore.Tx, source teamHumanSource) (string
 	if nav.Revision != source.NavigationRevision {
 		return "", workstore.ErrConflict
 	}
-	front, _, err := worksettings.FrozenContext(tx, source.Authority)
+	front, err := tx.GetContext(nav.FrontContextID)
 	if err != nil {
 		return "", err
 	}
@@ -298,5 +307,12 @@ func (a *App) applyTeamLocationChoice(ctx context.Context, source teamHumanSourc
 			return receipt, nil
 		}
 	}
-	return a.queueTeamResourcePicker(ctx, source)
+	notice := "已将所选目录设为默认。"
+	switch action {
+	case "picker.location.scratch":
+		notice = "已清空默认目录。后续工作将使用独立临时工作区。"
+	case "picker.location.remove":
+		notice = "已移除所选目录。"
+	}
+	return a.queueTeamResourcePickerNotice(ctx, source, 0, notice)
 }

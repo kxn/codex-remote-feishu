@@ -7,5 +7,5 @@ func allSchemaV1() []string {
 	for _, group := range [][]string{schemaV1, schemaKnowledge, RuntimeSchemaV1, ProvisioningSchemaV1, ingressSchemaV1, ManagementSchemaV1, MigrationSchemaV1, privateSchemaV1} {
 		statements = append(statements, group...)
 	}
-	return append(statements, SchemaExecutionPreferencesV1, SchemaSettingsReferenceV1, SchemaDesiredLocationV1, SchemaNativeRequestsV1, SchemaHumanInteractionsV1, SchemaUIViewsV1, SchemaMaintenanceV1, SchemaPlatformObservationsV1, SchemaMenuInteractionsV1, SchemaDispatchProblemsV1, SchemaReviewResultsV1, SchemaSessionGoalIntentsV1, SchemaAutomationV1, SchemaReviewFailuresV1, SchemaInputAdmissionsV1, NativeUpgradeSchemaV1)
+	return append(statements, SchemaPrivateExecutionDisplayV1, SchemaPublicationBudgetV1, SchemaPublicationOutboxIndexV1, SchemaExecutionPreferencesV1, SchemaSettingsReferenceV1, SchemaDesiredLocationV1, SchemaNativeRequestsV1, SchemaHumanInteractionsV1, SchemaUIViewsV1, SchemaMaintenanceV1, SchemaPlatformObservationsV1, SchemaMenuInteractionsV1, SchemaDispatchProblemsV1, SchemaReviewResultsV1, SchemaSessionGoalIntentsV1, SchemaAutomationV1, SchemaReviewFailuresV1, SchemaInputAdmissionsV1, NativeUpgradeSchemaV1)
 }

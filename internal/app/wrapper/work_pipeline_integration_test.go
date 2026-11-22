@@ -109,7 +109,7 @@ func buildPipelineTeamCLI(t *testing.T) string {
 		name += ".exe"
 	}
 	binary := filepath.Join(t.TempDir(), name)
-	if output, err := execlaunch.CommandContext(t.Context(), "go", "build", "-o", binary, "../../../cmd/codex-remote").CombinedOutput(); err != nil {
+	if output, err := execlaunch.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binary, "../../../cmd/codex-remote").CombinedOutput(); err != nil {
 		t.Fatalf("build actual CLI executable: %v\n%s", err, output)
 	}
 	return binary
@@ -117,6 +117,7 @@ func buildPipelineTeamCLI(t *testing.T) string {
 
 func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, groupCapacity ...int) {
 	group := len(groupCapacity) > 0
+	t.Setenv("FSC_NATIVE_PIPELINE_AUTO_PRIVATE", strconv.FormatBool(!group))
 	collaboration := os.Getenv("FSC_NATIVE_PIPELINE_COLLABORATION") != ""
 	dependency := os.Getenv("FSC_NATIVE_PIPELINE_DEPENDENCY") != ""
 	capacity, reserve := 2, 1
@@ -364,7 +365,13 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 	}()
 	var attempt work.ExecutionAttempt
 	sender := &pipelinePublisher{}
-	publisher, err := workpublish.New(store, sender, nil)
+	var platform *pipelinePrivatePlatform
+	var resolver workpublish.Resolver = sender
+	if !group {
+		platform = newPipelinePrivatePlatform(t, raw.ChatID, raw.MessageID)
+		resolver = platform
+	}
+	publisher, err := workpublish.New(store, resolver, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,6 +488,10 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 	}
 	if dependency {
 		checkPipelineDependency(t, store, scope.ID)
+	}
+	if platform != nil {
+		platform.verify(t, ctx, publisher, backend)
+		return
 	}
 	if n, e := publisher.RunOnce(ctx, 16); e != nil || n != 1 {
 		t.Fatalf("actual source reply publication=%d %v", n, e)

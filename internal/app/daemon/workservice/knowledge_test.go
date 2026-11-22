@@ -25,7 +25,7 @@ func knowledgeService(t *testing.T) (*Service, string, string) {
 		if err := tx.PutContent(work.NewContent("human-content", "scope", "text/plain", []byte("Share this experience and delegate this decision to the leader."), s.now())); err != nil {
 			return err
 		}
-		message := work.Message{ID: "human-input", ScopeID: "scope", ConversationID: "conversation", Source: work.Actor{Kind: work.ActorPrincipal, ID: "human"}, PlatformKey: &work.MessageKey{Tenant: "tenant", ChatID: "personal-chat", MessageID: "platform-message"}, BodyRef: "human-content", Revision: 1}
+		message := work.Message{ID: "human-input", ScopeID: "scope", ConversationID: "conversation", Source: work.Actor{Kind: work.ActorPrincipal, ID: "human"}, PlatformKey: &work.MessageKey{Tenant: "tenant", ChatID: "personal-chat", MessageID: "platform-message"}, BodyRef: "human-content", Observations: []work.Observation{{AppID: "app", IdentityGeneration: 1, ReceivedAt: s.now()}}, Revision: 1}
 		inbox := work.Inbox{ID: "human-inbox", ScopeID: "scope", RecipientRoleID: "leader", RecipientContextID: "sharing-context", EventID: "human", State: work.InboxPending, Revision: 1}
 		if _, _, err := tx.AcceptMessage(message, []work.Inbox{inbox}); err != nil {
 			return err

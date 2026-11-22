@@ -112,7 +112,15 @@ func (s *Store) initialize(ctx context.Context) error {
 			return fmt.Errorf("work schema %d is newer than supported %d", version, SchemaVersion)
 		}
 		if version == SchemaVersion {
-			return t.repairLegacyTaskInboxBindings()
+			for _, statement := range []string{SchemaPrivateExecutionDisplayV1, SchemaPublicationBudgetV1, SchemaPublicationOutboxIndexV1} {
+				if _, err := t.tx.ExecContext(ctx, statement); err != nil {
+					return err
+				}
+			}
+			if err := t.repairLegacyTaskInboxBindings(); err != nil {
+				return err
+			}
+			return t.initPublicationGrants()
 		}
 		if version != 0 {
 			return fmt.Errorf("unsupported work schema migration from %d", version)
@@ -121,6 +129,9 @@ func (s *Store) initialize(ctx context.Context) error {
 			if _, err := t.tx.ExecContext(ctx, statement); err != nil {
 				return fmt.Errorf("initialize work schema: %w", err)
 			}
+		}
+		if err := t.initPublicationGrants(); err != nil {
+			return err
 		}
 		_, err := t.tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version=%d", SchemaVersion))
 		return err

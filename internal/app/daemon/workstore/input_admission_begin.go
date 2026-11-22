@@ -95,6 +95,13 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 				return ErrConflict
 			}
 		}
+		stopped, e := t.PrivateAttemptStopped(attempt)
+		if e != nil {
+			return e
+		}
+		if stopped {
+			return ErrScopeDenied
+		}
 		gates, e := t.ListPauseGates(scope.ID)
 		if e != nil {
 			return e

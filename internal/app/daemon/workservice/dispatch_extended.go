@@ -14,6 +14,10 @@ func extendedCommandDTOs() map[string]any {
 		"resource.register": RegisterResourceRequest{}, "resource.capture": CaptureResourceRequest{}, "resource.read-version": ReadResourceVersionRequest{}, "resource.reconcile": ReconcileResourceRequest{}, "delivery.publish": PublishDeliveryRequest{},
 		"decision.list": KnowledgeListRequest{}, "decision.mine": KnowledgeListRequest{}, "decision.respond": DecisionRespondRequest{}, "agreement.list": KnowledgeListRequest{}, "agreement.apply": AgreementApplyRequest{},
 	}
+	dtos["commands"] = struct{}{}
+	dtos["publication.grant"] = GrantPublicationRequest{}
+	dtos["publication.revoke"] = RevokePublicationRequest{}
+	dtos["media.publish"] = PublishPrivateMediaRequest{}
 	dtos["decision.request"] = RequestDecisionRequest{}
 	dtos["resource.file.save"] = SaveResourceFileRequest{}
 	dtos["session.goal"] = SessionGoalRequest{}

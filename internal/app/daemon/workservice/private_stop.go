@@ -3,6 +3,8 @@ package workservice
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
@@ -16,12 +18,16 @@ type TrustedPrivateStopRequest struct {
 func (s *Service) TrustedPrivateStop(ctx context.Context, req TrustedPrivateStopRequest) (Result, error) {
 	return s.trustedPrivateControl(ctx, req, false)
 }
+
+// This only reopens a legacy private pause created before Stop was scoped to
+// the occupied attempt. Project lifecycle actions use their own authority.
 func (s *Service) TrustedPrivateResume(ctx context.Context, req TrustedPrivateStopRequest) (Result, error) {
 	return s.trustedPrivateControl(ctx, req, true)
 }
+
 func (s *Service) trustedPrivateControl(ctx context.Context, req TrustedPrivateStopRequest, resume bool) (result Result, err error) {
 	err = s.store.Within(ctx, func(tx *workstore.Tx) error {
-		scope, _, e := tx.ValidatePrivateAction(req.Source)
+		scope, proof, e := tx.ValidatePrivateAction(req.Source)
 		if e != nil {
 			return e
 		}
@@ -37,87 +43,94 @@ func (s *Service) trustedPrivateControl(ctx context.Context, req TrustedPrivateS
 			if nav.Revision != req.ExpectedNavRevision {
 				return "", 0, workstore.ErrConflict
 			}
+			contextID := nav.FrontContextID
 			if target, quoted, e := quotedPrivateCommandContext(tx, req.Source); e != nil {
 				return "", 0, e
 			} else if quoted {
-				nav.FrontContextID = target.ID
-				nav.ProjectScopeID = target.ProjectViewScopeID
-				nav.ProjectContextID = target.ProjectContextID
-				nav.Mode = work.PrivatePersonal
-				if target.ProjectViewScopeID != "" {
-					nav.Mode = work.PrivateProject
-				}
+				contextID = target.ID
 			}
-			if nav.Mode == work.PrivateProject {
-				if e = tx.RequireProjectPrincipalAccess(nav.ProjectScopeID, scope.PrincipalID, s.now()); e != nil {
-					return "", 0, e
-				}
-				if e = ensureMember(tx, nav.ProjectScopeID, scope.RoleID); e != nil {
-					return "", 0, e
-				}
-				projectScope, e := tx.GetScope(nav.ProjectScopeID)
-				if e != nil {
-					return "", 0, e
-				}
-				project, e := tx.GetProject(projectScope.ProjectID)
-				if e != nil {
-					return "", 0, e
-				}
-				transition := "project.pause"
-				if resume {
-					transition = "project.resume"
-				}
-				if (!resume && (project.State == work.ProjectPaused || project.State == work.ProjectPausing)) || (resume && (project.State == work.ProjectActive || project.State == work.ProjectDegraded)) {
-					return project.ID, project.Revision, nil
-				}
-				project, e = applyProjectTransition(tx, project, transition)
-				return project.ID, project.Revision, e
-			}
-			id := stableID("private_context_gate", scope.ID, nav.FrontContextID)
-			gate, e := tx.GetPauseGate(id)
-			expected := int64(0)
-			if errors.Is(e, workstore.ErrNotFound) {
-				gate = work.PauseGate{ID: id, ScopeID: scope.ID, ContextID: nav.FrontContextID, Source: work.GateContext, SourceID: scope.PrincipalID, Revision: 1}
-			} else if e != nil {
+			front, e := tx.GetContext(contextID)
+			if e != nil {
 				return "", 0, e
-			} else {
-				expected = gate.Revision
-				gate.Revision++
 			}
-			gate.State = work.GateClosed
-			if resume {
-				gate.State = work.GateOpen
+			if front.ScopeID != scope.ID || front.RoleID != scope.RoleID || front.Purpose == work.PurposeControl || front.Purpose == work.PurposeReview {
+				return "", 0, workstore.ErrScopeDenied
 			}
-			if e = tx.PutPauseGate(gate, expected); e != nil {
+			cutoff, e := privateControlReceivedAt(tx, req.Source)
+			if e != nil {
 				return "", 0, e
 			}
 			if !resume {
-				inputs, e := tx.ListInbox(scope.ID)
-				if e != nil {
+				if e = s.requestPrivateStop(tx, scope, contextID, proof, cutoff); e != nil {
 					return "", 0, e
 				}
-				for _, input := range inputs {
-					if input.State != work.InboxPending || input.RecipientContextID != nav.FrontContextID || input.MessageID == "" {
-						continue
-					}
-					message, e := tx.GetMessage(input.MessageID)
-					if e != nil {
-						return "", 0, e
-					}
-					if message.Source != (work.Actor{Kind: work.ActorPrincipal, ID: scope.PrincipalID}) {
-						continue
-					}
-					previous := input.Revision
-					input.Revision++
-					input.State = work.InboxCancelled
-					if e = tx.PutInbox(input, previous); e != nil {
-						return "", 0, e
-					}
-				}
 			}
-			return nav.FrontContextID, gate.Revision, nil
+			// A previously created permanent private stop must not strand the
+			// next user message after they use this control.
+			id := workstore.LegacyPrivateStopGateID(scope.ID, contextID)
+			gate, e := tx.GetPauseGate(id)
+			if e == nil && gate.State == work.GateClosed {
+				before := gate.Revision
+				gate.Revision++
+				gate.State = work.GateOpen
+				e = tx.PutPauseGate(gate, before)
+			}
+			if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+				return "", 0, e
+			}
+			return contextID, nav.Revision, nil
 		})
 		return e
 	})
 	return
+}
+
+func privateControlReceivedAt(tx *workstore.Tx, source workstore.PrivateActionSource) (time.Time, error) {
+	switch {
+	case source.CommandID != "":
+		command, err := tx.GetPrivateCommand(source.CommandID)
+		if err != nil {
+			return time.Time{}, err
+		}
+		raw, err := tx.GetIngress(command.IngressID)
+		return raw.Envelope.ReceivedAt, err
+	case source.InteractionID != "":
+		interaction, err := tx.GetHumanInteraction(source.InteractionID)
+		return interaction.Envelope.ReceivedAt, err
+	case source.MenuInteractionID != "":
+		menu, err := tx.GetMenuInteraction(source.MenuInteractionID)
+		return menu.Envelope.ReceivedAt, err
+	default:
+		return time.Time{}, workstore.ErrScopeDenied
+	}
+}
+
+func (s *Service) requestPrivateStop(tx *workstore.Tx, scope work.WorkScope, contextID string, proof work.SourceRef, cutoff time.Time) error {
+	workers, err := tx.ListWorkers(scope.ID)
+	if err != nil {
+		return err
+	}
+	for _, worker := range workers {
+		if worker.ContextID != contextID || worker.Controller != work.ControllerAutomatic {
+			continue
+		}
+		attempt, e := tx.GetOccupiedAttemptForWorker(worker.ID)
+		if errors.Is(e, workstore.ErrNotFound) {
+			continue
+		}
+		if e != nil {
+			return e
+		}
+		older, e := tx.PrivateAttemptPredatesStop(attempt, scope, cutoff)
+		if e != nil {
+			return e
+		}
+		if !older {
+			continue
+		}
+		if e = tx.RecordPrivateAttemptStop(attempt, scope, proof, cutoff, s.now()); e != nil {
+			return e
+		}
+	}
+	return tx.CancelOlderPrivateInputs(scope, contextID, cutoff)
 }

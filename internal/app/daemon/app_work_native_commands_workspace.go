@@ -19,14 +19,38 @@ func (a *App) queueTeamWorkspaceWork(ctx context.Context, source teamHumanSource
 		if e != nil {
 			return e
 		}
-		if source.Authority.CommandID == "" {
-			return workstore.ErrScopeDenied
-		}
-		command, e := tx.GetPrivateCommand(source.Authority.CommandID)
-		if e != nil {
-			return e
-		}
-		if command.Text != action.Text || command.Text == "" {
+		switch {
+		case source.Authority.CommandID != "":
+			command, e := tx.GetPrivateCommand(source.Authority.CommandID)
+			if e != nil {
+				return e
+			}
+			if command.Text != action.Text || command.Text == "" {
+				return workstore.ErrScopeDenied
+			}
+		case source.Authority.InteractionID != "":
+			click, e := tx.GetHumanInteraction(source.Authority.InteractionID)
+			if e != nil {
+				return e
+			}
+			viewID, _ := click.Envelope.Values["team_view"].(string)
+			view, e := tx.GetUIView(viewID)
+			if e != nil {
+				return e
+			}
+			elements, e := teamFrozenCardElements(tx, view, click)
+			if e != nil {
+				return e
+			}
+			callback, _ := click.Envelope.Values["action"].(string)
+			if teamFrozenCallback(elements, click.Envelope.Values, callback) == nil {
+				return workstore.ErrScopeDenied
+			}
+			fromForm, known, e := teamMenuToolCommand(callback, click.Envelope.Form)
+			if e != nil || !known || fromForm.Kind != action.Kind || fromForm.Text != action.Text {
+				return workstore.ErrScopeDenied
+			}
+		default:
 			return workstore.ErrScopeDenied
 		}
 		wc, _, e := worksettings.FrozenContext(tx, source.Authority)
@@ -57,7 +81,7 @@ func (a *App) queueTeamWorkspaceWork(ctx context.Context, source teamHumanSource
 		} else if e != workstore.ErrNotFound {
 			return e
 		}
-		body := work.NewContent(id+":body", scope.ID, "text/plain", []byte(command.Text), now)
+		body := work.NewContent(id+":body", scope.ID, "text/plain", []byte(action.Text), now)
 		if e = tx.PutContent(body); e != nil {
 			return e
 		}
@@ -69,5 +93,5 @@ func (a *App) queueTeamWorkspaceWork(ctx context.Context, source teamHumanSource
 	if err != nil {
 		return "", err
 	}
-	return a.queuePrivatePanel(ctx, source, "status", "已交给当前同事处理目录操作，执行结果会在这项工作中回复。")
+	return a.queuePrivatePanel(ctx, source, "status", "已将工作目录操作加入当前会话，等待助手处理。")
 }

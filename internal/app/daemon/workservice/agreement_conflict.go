@@ -43,6 +43,15 @@ func sameAgreementValues(a, b []string) bool {
 }
 
 func (s *Service) requestAgreementConflict(tx *workstore.Tx, c Caller, old, next work.ParticipationAgreement, req AgreementApplyRequest) (string, int64, error) {
+	scope, err := tx.GetScope(c.Worker.ScopeID)
+	if err != nil {
+		return "", 0, err
+	}
+	if scope.Kind == work.ScopeProject {
+		if _, _, err = requirePublicationLeader(tx, c); err != nil {
+			return "", 0, err
+		}
+	}
 	if err := next.Validate(); err != nil {
 		return "", 0, err
 	}

@@ -584,12 +584,16 @@ func projectorTurnDiffPreviewURL(preview *control.TurnDiffPreview) string {
 }
 
 func formatFinalTurnSummaryLine(summary *control.FinalTurnSummary) string {
-	if summary == nil || summary.Elapsed <= 0 {
+	if summary == nil {
 		return ""
 	}
-	parts := []string{fmt.Sprintf("**本轮用时** %s", formatElapsedDuration(summary.Elapsed))}
+	var parts []string
+	if summary.Elapsed > 0 {
+		parts = append(parts, fmt.Sprintf("**本轮用时** %s", formatElapsedDuration(summary.Elapsed)))
+	}
 	if usage := summary.Usage; usage != nil {
-		parts = append(parts, fmt.Sprintf("**本轮累计** %s", formatTokenUsageSummary(usage, false)))
+		label := xutil.FirstNonEmpty(summary.UsageLabel, "本轮累计")
+		parts = append(parts, fmt.Sprintf("**%s** %s", label, formatTokenUsageSummary(usage, false)))
 	}
 	if usage := summary.ThreadUsage; usage != nil {
 		parts = append(parts, fmt.Sprintf("**线程累计** %s", formatTokenUsageSummary(usage, true)))

@@ -17,6 +17,13 @@ func (t *Tx) QueueAutomationFollowup(attemptID string, kind work.AutomationKind,
 		if e != nil {
 			return e
 		}
+		stopped, e := t.PrivateAttemptStopped(attempt)
+		if e != nil {
+			return e
+		}
+		if stopped {
+			return ErrAutomationNotApplicable
+		}
 		wc, e := t.GetContext(attempt.ContextID)
 		if e != nil {
 			return e
@@ -164,6 +171,10 @@ func retryableAutomationProblem(problem *agentproto.ErrorInfo) bool {
 func (t *Tx) CanAutoContinueFailure(attemptID string, event agentproto.Event) (bool, error) {
 	attempt, err := t.GetAttempt(attemptID)
 	if err != nil {
+		return false, err
+	}
+	stopped, err := t.PrivateAttemptStopped(attempt)
+	if err != nil || stopped {
 		return false, err
 	}
 	policy, err := t.GetAutomationPolicy(attempt.ContextID, work.AutomationContinue)

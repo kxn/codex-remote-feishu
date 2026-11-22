@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -38,23 +39,25 @@ func parse(args []string) (invocation, error) {
 		call.help = true
 		return call, nil
 	}
-	if args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
-		call.help = true
-		if len(args) == 2 && args[0] == "help" {
-			call.name = args[1]
-			if _, ok := workcmd.Lookup(call.name); !ok {
-				return call, fmt.Errorf("unknown team command %q", call.name)
-			}
-		} else if len(args) != 1 {
-			return call, fmt.Errorf("help accepts at most one command name")
+	if args[0] == "help" && len(args) >= 2 && !strings.HasPrefix(args[1], "-") {
+		args = append([]string{args[1], "--help"}, args[2:]...)
+	} else if args[0] == "commands" || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		call.discover = args[0] == "commands"
+		call.help = !call.discover
+		if len(args) == 1 {
+			return call, nil
 		}
-		return call, nil
-	}
-	if args[0] == "commands" {
-		if len(args) != 1 {
-			return call, fmt.Errorf("commands accepts no arguments")
+		ref, value, inline := strings.Cut(args[1], "=")
+		if ref != "--run-ref" || (inline && len(args) != 2) || (!inline && len(args) != 3) {
+			return call, fmt.Errorf("expected only an optional --run-ref")
 		}
-		call.discover = true
+		if !inline {
+			value = args[2]
+		}
+		if value == "" || strings.HasPrefix(value, "--") {
+			return call, fmt.Errorf("--run-ref requires a nonempty value")
+		}
+		call.runRef = value
 		return call, nil
 	}
 	call.name = args[0]
@@ -137,15 +140,8 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	encoder := json.NewEncoder(opts.Stdout)
 	encoder.SetIndent("", "  ")
-	if call.discover {
-		return encoder.Encode(workcmd.List())
-	}
-	if call.help {
-		if call.name != "" {
-			command, _ := workcmd.Lookup(call.name)
-			return encoder.Encode(command)
-		}
-		return encoder.Encode(map[string]any{"usage": "codex-remote team <command> --run-ref <run_ref> [--file <path>|--stdin]", "commands": workcmd.List(), "help": "Use <command> --help or help <command>; commands prints the registry. Credentials come from the bound work process environment."})
+	if call.discover || call.help {
+		return showHelp(ctx, opts, call, encoder)
 	}
 	payload := json.RawMessage(`{}`)
 	if call.file != "" || call.stdin {
@@ -198,4 +194,53 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("invalid team result JSON")
 	}
 	return encoder.Encode(value)
+}
+
+func showHelp(ctx context.Context, opts Options, call invocation, encoder *json.Encoder) error {
+	if call.name != "" && !workcmd.RequiresPublicationCapability(call.name) {
+		command, _ := workcmd.Lookup(call.name)
+		return encoder.Encode(command)
+	}
+	commands := workcmd.List()
+	commands = slices.DeleteFunc(commands, func(cmd workcmd.Command) bool {
+		return workcmd.RequiresPublicationCapability(cmd.Name)
+	})
+	var publication json.RawMessage
+	token := opts.Getenv(config.WorkSessionTokenEnv)
+	if token != "" {
+		client := opts.Client
+		if client == nil {
+			client = NewClient()
+		}
+		raw, err := client.Execute(ctx, opts.Getenv(config.WorkToolEndpointEnv), token, workcmd.DispatchRequest{
+			Name: "commands", RunRef: call.runRef, Payload: json.RawMessage(`{}`),
+		})
+		if err != nil {
+			return err
+		}
+		var discovery struct {
+			Commands    []workcmd.Command `json:"commands"`
+			Publication json.RawMessage   `json:"publication"`
+		}
+		if err := json.Unmarshal(raw, &discovery); err != nil {
+			return fmt.Errorf("invalid team command discovery result")
+		}
+		commands, publication = discovery.Commands, discovery.Publication
+	}
+	if call.discover {
+		return encoder.Encode(commands)
+	}
+	if call.name != "" {
+		for _, command := range commands {
+			if command.Name == call.name {
+				return encoder.Encode(command)
+			}
+		}
+		return fmt.Errorf("%s is unavailable in this work session", call.name)
+	}
+	help := map[string]any{"usage": "codex-remote team <command> --run-ref <run_ref> [--file <path>|--stdin]", "commands": commands, "help": "Use commands or <command> --help for commands available in the current work session."}
+	if len(publication) != 0 {
+		help["publication"] = publication
+	}
+	return encoder.Encode(help)
 }

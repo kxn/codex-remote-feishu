@@ -107,6 +107,10 @@ func (t *Tx) PrepareSessionGoalsForAttempt(attemptID, sessionID string, now time
 		if e != nil {
 			return e
 		}
+		stopped, e := t.PrivateAttemptStopped(attempt)
+		if e != nil || stopped {
+			return e
+		}
 		worker, e := t.GetWorker(attempt.RunRef.WorkerID)
 		if e != nil {
 			return e

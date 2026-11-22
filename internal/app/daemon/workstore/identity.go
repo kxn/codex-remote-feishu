@@ -73,6 +73,12 @@ func (t *Tx) PutProject(v work.Project, expected int64) error {
 		if e = work.ValidateProjectTransition(old.State, v.State); e != nil {
 			return e
 		}
+		v.LeaderGeneration = old.LeaderGeneration
+		if old.LeaderRoleID != v.LeaderRoleID {
+			v.LeaderGeneration = old.LeadershipGeneration() + 1
+		}
+	} else {
+		v.LeaderGeneration = 0
 	}
 	return t.record("projects", v.ID, v.Revision, expected, v)
 }

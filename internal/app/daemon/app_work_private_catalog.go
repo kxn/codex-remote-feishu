@@ -52,10 +52,17 @@ func teamPrivateDiagnostics(tx *workstore.Tx, scopeID, contextID string) ([]stri
 	return lines, nil
 }
 func (a *App) queueTeamContexts(ctx context.Context, source teamHumanSource, page int) (string, error) {
+	return a.queueTeamContextsNotice(ctx, source, page, "")
+}
+
+func (a *App) queueTeamContextsNotice(ctx context.Context, source teamHumanSource, page int, note string) (string, error) {
 	if page < 0 {
 		return "", fmt.Errorf("无效页码")
 	}
-	panel := workui.Panel{Title: "选择已有工作", Paragraphs: []string{"查看记录不会接管或恢复旧的原生执行。点击继续会选择这项工作，后台的其他工作仍按各自状态进行。"}}
+	panel := workui.Panel{Title: "已有会话", Paragraphs: []string{"「查看」只打开历史。「切换」决定下一条私聊进入的会话。"}}
+	if note != "" {
+		panel.Paragraphs = append([]string{note}, panel.Paragraphs...)
+	}
 	var navigation work.PrivateNavigation
 	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		if e := a.validateTeamPickerSource(tx, source); e != nil {
@@ -119,7 +126,7 @@ func (a *App) queueTeamContexts(ctx context.Context, source teamHumanSource, pag
 				title += " · " + wc.CreatedAt.Local().Format("01-02 15:04")
 			}
 			if wc.Purpose != work.PurposeReview {
-				panel.Buttons = append(panel.Buttons, workui.Button{Label: title, Action: "history.select-context", Values: map[string]any{"context_id": wc.ID}})
+				panel.Buttons = append(panel.Buttons, workui.Button{Label: "切换到 " + title, Action: "history.select-context", Values: map[string]any{"context_id": wc.ID}})
 			}
 			panel.Buttons = append(panel.Buttons, workui.Button{Label: "查看：" + title, Action: "history.read", Values: map[string]any{"context_id": wc.ID, "page": "0"}})
 		}
@@ -137,113 +144,9 @@ func (a *App) queueTeamContexts(ctx context.Context, source teamHumanSource, pag
 	if err != nil {
 		return "", err
 	}
+	panel.Buttons = append(panel.Buttons, workui.Button{Label: "返回工作区与会话", Action: "private.workspace"})
 	source.NavigationRevision = navigation.Revision
 	return a.queueTeamPicker(ctx, source, "private.context-picker", source.ScopeID, navigation.Revision, panel)
-}
-func (a *App) queueTeamContextHistory(ctx context.Context, source teamHumanSource, contextID string, page int) (string, error) {
-	if handled, note, err := a.queueTeamReviewHistory(ctx, source, contextID, page); handled || err != nil {
-		return note, err
-	}
-	if page < 0 {
-		return "", fmt.Errorf("无效页码")
-	}
-	panel := workui.Panel{Title: "工作讨论记录", Paragraphs: []string{"这里展示这项工作的输入和回复。查看不会重新启动旧会话。"}}
-	var nav work.PrivateNavigation
-	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
-		if e := a.validateTeamPickerSource(tx, source); e != nil {
-			return e
-		}
-		wc, e := tx.GetContext(contextID)
-		if e != nil {
-			return e
-		}
-		if wc.ScopeID != source.ScopeID || wc.RoleID != source.RoleID {
-			return workstore.ErrScopeDenied
-		}
-		nav, e = tx.GetPrivateNavigation(source.ScopeID)
-		if e != nil {
-			return e
-		}
-		inputs, e := tx.ListInbox(source.ScopeID)
-		if e != nil {
-			return e
-		}
-		type item struct {
-			Message work.Message
-			State   work.InboxState
-		}
-		items := []item{}
-		seen := map[string]bool{}
-		for _, input := range inputs {
-			if input.RecipientContextID != contextID || input.MessageID == "" || seen[input.MessageID] {
-				continue
-			}
-			message, e := tx.GetMessage(input.MessageID)
-			if e != nil {
-				return e
-			}
-			if message.ScopeID != source.ScopeID {
-				return workstore.ErrScopeDenied
-			}
-			seen[message.ID] = true
-			items = append(items, item{message, input.State})
-		}
-		sort.SliceStable(items, func(i, j int) bool { return items[i].Message.CreatedAt.Before(items[j].Message.CreatedAt) })
-		start := page * teamPickerPageSize
-		if start > len(items) {
-			return workstore.ErrConflict
-		}
-		end := min(start+teamPickerPageSize, len(items))
-		for _, entry := range items[start:end] {
-			body, e := tx.GetContent(source.ScopeID, entry.Message.BodyRef)
-			if e != nil {
-				return e
-			}
-			who := "系统"
-			switch entry.Message.Source.Kind {
-			case work.ActorPrincipal:
-				who = "你"
-			case work.ActorRole:
-				who = "助手"
-			}
-			text := string(body.Data)
-			if runes := []rune(text); len(runes) > 1400 {
-				text = string(runes[:1400]) + "…"
-			}
-			if entry.Message.RecalledEvidenceRef != "" {
-				text = "[已撤回，保留审计记录]\n" + text
-			}
-			panel.Paragraphs = append(panel.Paragraphs, who+"：\n"+text)
-			for _, attachment := range entry.Message.Attachments {
-				panel.Paragraphs = append(panel.Paragraphs, "附件："+attachment.FileName)
-			}
-		}
-		if len(items) == 0 {
-			panel.Paragraphs = append(panel.Paragraphs, "这项工作还没有新的讨论记录。")
-		}
-		if page > 0 {
-			panel.Buttons = append(panel.Buttons, workui.Button{Label: "上一页", Action: "history.read", Values: map[string]any{"context_id": contextID, "page": strconv.Itoa(page - 1)}})
-		}
-		if end < len(items) {
-			panel.Buttons = append(panel.Buttons, workui.Button{Label: "下一页", Action: "history.read", Values: map[string]any{"context_id": contextID, "page": strconv.Itoa(page + 1)}})
-		}
-		if wc.Purpose != work.PurposeReview && wc.Purpose != work.PurposeControl {
-			panel.Buttons = append(panel.Buttons, workui.Button{Label: "选择这项工作继续", Action: "history.select-context", Values: map[string]any{"context_id": contextID}})
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if page == 0 {
-		legacy, e := a.teamClaimedLegacyHistory(ctx, source, contextID)
-		if e != nil {
-			return "", e
-		}
-		panel.Paragraphs = append(panel.Paragraphs, legacy...)
-	}
-	source.NavigationRevision = nav.Revision
-	return a.queueTeamPicker(ctx, source, "private.context-picker", source.ScopeID, nav.Revision, panel)
 }
 func (a *App) handleTeamHistoryViewAction(ctx context.Context, interaction workstore.HumanInteraction, view workstore.UIView, action string) (string, error) {
 	if view.Kind != "private.context-picker" {
@@ -259,7 +162,7 @@ func (a *App) handleTeamHistoryViewAction(ctx context.Context, interaction works
 		if err = a.navigateFromSource(ctx, source, "select_context", "", contextID, view.TargetRevision); err != nil {
 			return "", err
 		}
-		return a.queuePrivatePanel(ctx, source, "menu", "已选择这项工作；没有擅自恢复任何旧的原生执行。")
+		return a.queueTeamContextsNotice(ctx, source, 0, "已切换会话。下一条消息会进入所选会话。")
 	}
 	text, _ := values["page"].(string)
 	page, err := strconv.Atoi(text)

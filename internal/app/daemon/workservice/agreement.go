@@ -88,7 +88,7 @@ func (s *Service) AgreementApply(ctx context.Context, token, runRef string, req 
 			if scope.Kind == work.ScopePersonal && req.DecisionOwner.Kind == work.ActorPrincipal && req.DecisionOwner.ID != scope.PrincipalID {
 				return "", 0, workauth.ErrUnauthorized
 			}
-			if scope.Kind == work.ScopeProject && req.SubjectKind != work.AgreementItem {
+			if scope.Kind == work.ScopeProject && (req.SubjectKind != work.AgreementItem || req.DecisionOwner.Kind == work.ActorPrincipal) {
 				project, e := tx.GetProject(scope.ProjectID)
 				if e != nil {
 					return "", 0, e

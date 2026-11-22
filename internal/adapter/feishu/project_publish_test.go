@@ -22,7 +22,7 @@ func TestProjectPublishUsesDurableUUIDAndActualReceipt(t *testing.T) {
 				}
 				fmt.Fprint(w, `{"code":0,"data":{"message_id":"om_sent","chat_id":"oc_project"}}`)
 			})
-			receipt, err := api.PublishText(context.Background(), ProjectPublishRequest{ChatID: "oc_project", ReplyToMessageID: reply, Text: "Work is waiting for your decision", UUID: "fixed-uuid"})
+			receipt, err := api.PublishText(context.Background(), ProjectPublishRequest{ChatID: "oc_project", ReplyToMessageID: reply, ReplyInThread: true, Text: "Work is waiting for your decision", UUID: "fixed-uuid"})
 			if err != nil || receipt.MessageID != "om_sent" || calls != 1 {
 				t.Fatalf("receipt=%+v calls=%d err=%v", receipt, calls, err)
 			}

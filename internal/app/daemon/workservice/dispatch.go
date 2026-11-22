@@ -2,14 +2,35 @@ package workservice
 
 import (
 	"context"
+	"errors"
 	"github.com/kxn/codex-remote-feishu/internal/core/workcmd"
 )
 
-func (s *Service) Execute(ctx context.Context, token string, req workcmd.DispatchRequest) (any, error) {
+func (s *Service) Execute(ctx context.Context, token string, req workcmd.DispatchRequest) (result any, err error) {
+	defer func() {
+		if errors.Is(err, ErrPublicationDenied) {
+			err = &workcmd.Error{Code: "forbidden", Message: err.Error()}
+		}
+	}()
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	switch req.Name {
+	case "commands":
+		var input struct{}
+		if err := workcmd.DecodePayload(req.Payload, &input); err != nil {
+			return nil, &workcmd.Error{Code: "invalid_argument", Message: err.Error()}
+		}
+		return s.DiscoverCommands(ctx, token, req.RunRef)
+	case "publication.grant":
+		result, _, err := executeDTO(ctx, token, req, s.GrantPublication)
+		return result, err
+	case "publication.revoke":
+		result, _, err := executeDTO(ctx, token, req, s.RevokePublication)
+		return result, err
+	case "media.publish":
+		result, _, err := executeDTO(ctx, token, req, s.PublishPrivateMedia)
+		return result, err
 	case "bootstrap.location.pick":
 		result, _, err := executeDTO(ctx, token, req, s.BootstrapPickLocation)
 		return result, err

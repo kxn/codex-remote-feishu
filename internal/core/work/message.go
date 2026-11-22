@@ -99,28 +99,34 @@ const (
 )
 
 type Inbox struct {
-	AutomationEpisodeID  string            `json:"automation_episode_id,omitempty"`
-	SessionGoalIntentID  string            `json:"session_goal_intent_id,omitempty"`
-	ControlOfInputID     string            `json:"control_of_input_id,omitempty"`
-	RelatedTaskID        string            `json:"related_task_id,omitempty"`
-	ContentState         InputContentState `json:"content_state,omitempty"`
-	TaskID               string            `json:"task_id,omitempty"`
-	ID                   string            `json:"id"`
-	ScopeID              string            `json:"scope_id"`
-	RecipientContextID   string            `json:"recipient_context_id,omitempty"`
-	RecipientRoleID      string            `json:"recipient_role_id"`
-	EventID              string            `json:"event_id"`
-	MessageID            string            `json:"message_id,omitempty"`
-	State                InboxState        `json:"state"`
-	ClaimedAttemptID     string            `json:"claimed_attempt_id,omitempty"`
-	ReadAt               *time.Time        `json:"read_at,omitempty"`
-	ProcessedAt          *time.Time        `json:"processed_at,omitempty"`
-	ProcessingOutcomeRef string            `json:"processing_outcome_ref,omitempty"`
-	AvailableAt          time.Time         `json:"available_at"`
-	Revision             int64             `json:"revision"`
+	DirectedReplyIngressID     string            `json:"directed_reply_ingress_id,omitempty"`
+	DirectedReplyBotGeneration int64             `json:"directed_reply_bot_generation,omitempty"`
+	AutomationEpisodeID        string            `json:"automation_episode_id,omitempty"`
+	SessionGoalIntentID        string            `json:"session_goal_intent_id,omitempty"`
+	ControlOfInputID           string            `json:"control_of_input_id,omitempty"`
+	RelatedTaskID              string            `json:"related_task_id,omitempty"`
+	ContentState               InputContentState `json:"content_state,omitempty"`
+	TaskID                     string            `json:"task_id,omitempty"`
+	ID                         string            `json:"id"`
+	ScopeID                    string            `json:"scope_id"`
+	RecipientContextID         string            `json:"recipient_context_id,omitempty"`
+	RecipientRoleID            string            `json:"recipient_role_id"`
+	EventID                    string            `json:"event_id"`
+	MessageID                  string            `json:"message_id,omitempty"`
+	State                      InboxState        `json:"state"`
+	ClaimedAttemptID           string            `json:"claimed_attempt_id,omitempty"`
+	ReadAt                     *time.Time        `json:"read_at,omitempty"`
+	ProcessedAt                *time.Time        `json:"processed_at,omitempty"`
+	ProcessingOutcomeRef       string            `json:"processing_outcome_ref,omitempty"`
+	AvailableAt                time.Time         `json:"available_at"`
+	Revision                   int64             `json:"revision"`
 }
 
 func (v Inbox) Validate() error {
+	if (v.DirectedReplyIngressID == "") != (v.DirectedReplyBotGeneration == 0) || v.DirectedReplyBotGeneration < 0 ||
+		(v.DirectedReplyIngressID != "" && (v.MessageID == "" || v.ControlOfInputID != "" || v.AutomationEpisodeID != "" || v.SessionGoalIntentID != "")) {
+		return fmt.Errorf("invalid directed human reply evidence")
+	}
 	if !oneOf(v.ContentState, InputContentNone, InputContentPending, InputContentReady, InputContentPartial) {
 		return fmt.Errorf("invalid input content state")
 	}

@@ -49,6 +49,7 @@ type publication struct {
 	Projection     workservice.MessageProjection
 	Binding        work.RoleBotBinding
 	TerminalReason string
+	ReplyInThread  bool
 }
 
 func (p *Publisher) RunOnce(ctx context.Context, limit int) (int, error) {
@@ -57,36 +58,9 @@ func (p *Publisher) RunOnce(ctx context.Context, limit int) (int, error) {
 	}
 	var ids []string
 	err := p.store.Within(ctx, func(tx *workstore.Tx) error {
-		scopes, err := tx.ListScopes()
-		if err != nil {
-			return err
-		}
-		for _, scope := range scopes {
-			items, e := tx.ListOutbox(scope.ID)
-			if e != nil {
-				return e
-			}
-			for _, item := range items {
-				if item.State != work.OutboxPending && item.State != work.OutboxRetryable {
-					continue
-				}
-				if item.NextAttemptAt != nil && item.NextAttemptAt.After(p.now()) {
-					continue
-				}
-				op, e := tx.GetOperation(item.OperationID)
-				if e != nil {
-					return e
-				}
-				if op.Kind != "feishu.publish" {
-					continue
-				}
-				ids = append(ids, item.ID)
-				if len(ids) == limit {
-					return nil
-				}
-			}
-		}
-		return nil
+		var err error
+		ids, err = p.selectPublications(tx, limit)
+		return err
 	})
 	if err != nil {
 		return 0, err
@@ -105,6 +79,9 @@ func (p *Publisher) RunOnce(ctx context.Context, limit int) (int, error) {
 			continue
 		}
 		completed++
+		if completed == limit {
+			break
+		}
 	}
 	return completed, errors.Join(failures...)
 }
@@ -128,11 +105,16 @@ func (p *Publisher) send(ctx context.Context, id string, recovery bool) error {
 	if err == nil && sender == nil {
 		err = fmt.Errorf("configured bot sender is unavailable")
 	}
+	if err == nil && job.Projection.Media == nil {
+		err = p.revalidateClaim(ctx, job)
+	}
 	notSent := err != nil
 	var receipt feishu.ProjectPublishReceipt
 	if err == nil {
 		uuid := sha256.Sum256([]byte(job.Operation.ID))
-		if job.Projection.ReplaceMessageID != "" {
+		if job.Projection.Media != nil {
+			receipt, err, notSent = p.sendPrivateMedia(ctx, sender, &job, hex.EncodeToString(uuid[:20]))
+		} else if job.Projection.ReplaceMessageID != "" {
 			patcher, ok := sender.(CardPatcher)
 			if !ok {
 				err = fmt.Errorf("card update adapter is unavailable")
@@ -146,10 +128,10 @@ func (p *Publisher) send(ctx context.Context, id string, recovery bool) error {
 				err = fmt.Errorf("card publication adapter is unavailable")
 				notSent = true
 			} else {
-				receipt, err = cardSender.PublishCard(ctx, feishu.ProjectCardPublishRequest{ChatID: job.Projection.ChatID, ReplyToMessageID: job.Projection.ReplyToMessageID, Card: job.Projection.Card, UUID: hex.EncodeToString(uuid[:20])})
+				receipt, err = cardSender.PublishCard(ctx, feishu.ProjectCardPublishRequest{ChatID: job.Projection.ChatID, ReplyToMessageID: job.Projection.ReplyToMessageID, ReplyInThread: job.ReplyInThread, Card: job.Projection.Card, UUID: hex.EncodeToString(uuid[:20])})
 			}
 		} else {
-			receipt, err = sender.PublishText(ctx, feishu.ProjectPublishRequest{ChatID: job.Projection.ChatID, ReplyToMessageID: job.Projection.ReplyToMessageID, Text: job.Projection.Body, UUID: hex.EncodeToString(uuid[:20])})
+			receipt, err = sender.PublishText(ctx, feishu.ProjectPublishRequest{ChatID: job.Projection.ChatID, ReplyToMessageID: job.Projection.ReplyToMessageID, ReplyInThread: job.ReplyInThread, Text: job.Projection.Body, UUID: hex.EncodeToString(uuid[:20])})
 		}
 	}
 	return p.finish(ctx, job, receipt, err, notSent)
@@ -178,6 +160,8 @@ func (p *Publisher) finish(ctx context.Context, job publication, receipt feishu.
 			}
 			op.State, op.ExternalReceipt = work.OperationConfirmed, string(encoded)
 			item.State, item.ExternalMessageID = work.OutboxSent, receipt.MessageID
+		} else if errors.Is(sendErr, workservice.ErrPublicationDenied) {
+			op.State, op.LastError, item.State = work.OperationTerminal, sendErr.Error(), work.OutboxTerminal
 		} else {
 			op.State, op.LastError = work.OperationUnknown, sendErr.Error()
 			item.State = work.OutboxUnknown

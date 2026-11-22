@@ -34,19 +34,12 @@ func (a *App) openTeamProjectDeliveries(ctx context.Context, interaction worksto
 		switch action {
 		case "project.deliveries.inspect":
 			deliveryID, _ := interaction.Envelope.Values["delivery_id"].(string)
-			delivery, err := tx.GetDelivery(source.ScopeID, deliveryID)
-			if err != nil {
-				return err
-			}
-			if delivery.ConversationTarget != source.ChatID {
-				return workstore.ErrScopeDenied
-			}
-			outbox, err := tx.GetOutbox(delivery.NotificationOutboxID)
+			delivery, err := tx.GetSentDelivery(source.ScopeID, deliveryID, source.Tenant, source.ChatID, source.ChannelGeneration)
 			if err != nil {
 				return err
 			}
 			panel.Title = deliveryLabel(delivery.Purpose, 80)
-			panel.Paragraphs = []string{deliveryLabel(delivery.Summary, 2000), "通知状态：" + deliveryNotificationState(outbox.State)}
+			panel.Paragraphs = []string{deliveryLabel(delivery.Summary, 2000)}
 			if delivery.NeededAction != "" {
 				panel.Paragraphs = append(panel.Paragraphs, "需要处理："+deliveryLabel(delivery.NeededAction, 1000))
 			}
@@ -61,9 +54,9 @@ func (a *App) openTeamProjectDeliveries(ctx context.Context, interaction worksto
 				if err != nil {
 					return err
 				}
-				if managed && !access {
+				if ref.Current && managed && !access {
 					panel.Paragraphs = append(panel.Paragraphs, deliveryLabel(resource.Purpose, 80)+"的原件群访问待核对或恢复。可在群里请项目负责人处理。")
-				} else if resource.ConnectorIdentity != work.SavedFileConnector {
+				} else if ref.Current && resource.ConnectorIdentity != work.SavedFileConnector {
 					panel.Buttons = append(panel.Buttons, workui.Button{Label: deliveryLabel(resource.Purpose, 80) + "（当前原件）", URL: resource.CanonicalURI})
 				}
 			}
@@ -82,15 +75,9 @@ func (a *App) openTeamProjectDeliveries(ctx context.Context, interaction worksto
 					return fmt.Errorf("成果页码无效")
 				}
 			}
-			deliveries, err := tx.ListDeliveries(source.ScopeID)
+			visible, err := tx.ListSentDeliveries(source.ScopeID, source.Tenant, source.ChatID, source.ChannelGeneration)
 			if err != nil {
 				return err
-			}
-			var visible []work.Delivery
-			for _, delivery := range deliveries {
-				if delivery.ConversationTarget == source.ChatID {
-					visible = append(visible, delivery)
-				}
 			}
 			sort.Slice(visible, func(i, j int) bool {
 				if visible[i].CreatedAt.Equal(visible[j].CreatedAt) {
@@ -103,7 +90,7 @@ func (a *App) openTeamProjectDeliveries(ctx context.Context, interaction worksto
 				return fmt.Errorf("成果页已变化，请从项目状态重新打开")
 			}
 			if len(visible) == 0 {
-				panel.Paragraphs = append(panel.Paragraphs, "此项目还没有已登记的交付。")
+				panel.Paragraphs = append(panel.Paragraphs, "此项目还没有已发送的交付。")
 			}
 			for _, delivery := range visible[page*pageSize : min(len(visible), (page+1)*pageSize)] {
 				label := delivery.CreatedAt.In(time.Local).Format("01-02 15:04") + " · " + deliveryLabel(delivery.Purpose, 50)
@@ -138,17 +125,4 @@ func deliveryLabel(text string, max int) string {
 		return string(runes[:max]) + "…"
 	}
 	return text
-}
-
-func deliveryNotificationState(state work.OutboxState) string {
-	switch state {
-	case work.OutboxSent:
-		return "已发送"
-	case work.OutboxUnknown:
-		return "成果已保存，发送结果待核对"
-	case work.OutboxTerminal:
-		return "成果已保存，通知发送未完成"
-	default:
-		return "成果已保存，通知待发送"
-	}
 }

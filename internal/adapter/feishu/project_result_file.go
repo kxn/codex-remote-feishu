@@ -15,7 +15,10 @@ type UploadResultFileRequest struct {
 	FileName, FileType string
 	Content            []byte
 }
-type PublishResultFileRequest struct{ ChatID, ReplyToMessageID, FileKey, UUID string }
+type PublishResultFileRequest struct {
+	ChatID, ReplyToMessageID, FileKey, UUID string
+	ReplyInThread                           bool
+}
 
 // UploadResultFile returns only an upload receipt, never a sent/read receipt.
 // Feishu im.v1.file.create permits nonempty files up to 30 MB. No endpoint
@@ -66,5 +69,5 @@ func (a *ProjectChatAPI) PublishResultFile(ctx context.Context, req PublishResul
 	if err != nil {
 		return ProjectPublishReceipt{}, err
 	}
-	return a.publishContent(ctx, ProjectPublishRequest{ChatID: req.ChatID, ReplyToMessageID: req.ReplyToMessageID, UUID: req.UUID}, "file", content)
+	return a.publishContent(ctx, ProjectPublishRequest{ChatID: req.ChatID, ReplyToMessageID: req.ReplyToMessageID, ReplyInThread: req.ReplyInThread, UUID: req.UUID}, "file", content)
 }
