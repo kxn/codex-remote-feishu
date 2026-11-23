@@ -50,15 +50,16 @@ type paginatedSelectRenderSpec struct {
 }
 
 type paginatedSelectFlowLane struct {
-	Flow          selectflow.PaginatedSelectFlowDefinition
-	Label         string
-	Placeholder   string
-	Cursor        int
-	SelectedValue string
-	FixedOptions  []map[string]any
-	Options       []map[string]any
-	SelectPayload map[string]any
-	PagePayload   func(cursor int) map[string]any
+	Flow           selectflow.PaginatedSelectFlowDefinition
+	Label          string
+	Placeholder    string
+	Cursor         int
+	SelectedValue  string
+	SelectedDetail string
+	FixedOptions   []map[string]any
+	Options        []map[string]any
+	SelectPayload  map[string]any
+	PagePayload    func(cursor int) map[string]any
 }
 
 func planPaginatedSelectPage(spec paginatedSelectPageSpec, maxBytes int, measure paginatedSelectMeasure) paginatedSelectPlan {
@@ -219,7 +220,7 @@ func (lane paginatedSelectFlowLane) renderElements(daemonLifecycleID string, pag
 	if lane.PagePayload != nil {
 		nextPayload = lane.PagePayload(page.NextCursor)
 	}
-	elements = append(elements, renderPaginatedSelectElements(paginatedSelectRenderSpec{
+	rendered := renderPaginatedSelectElements(paginatedSelectRenderSpec{
 		Name:           lane.Flow.FieldName,
 		Placeholder:    lane.Placeholder,
 		SelectPayload:  stampActionValue(cardkit.CloneMap(lane.SelectPayload), daemonLifecycleID),
@@ -227,8 +228,14 @@ func (lane paginatedSelectFlowLane) renderElements(daemonLifecycleID string, pag
 		NextPayload:    stampActionValue(nextPayload, daemonLifecycleID),
 		Page:           page,
 		PaginationHint: lane.Flow.PaginationHint,
-	})...)
-	return elements
+	})
+	if page.InitialOption != "" && len(rendered) != 0 {
+		if block := cardkit.PlainTextBlockElement(lane.SelectedDetail); len(block) != 0 {
+			elements = append(elements, rendered[0], block)
+			return append(elements, rendered[1:]...)
+		}
+	}
+	return append(elements, rendered...)
 }
 
 func paginatedSelectRowColumns(selectElement map[string]any, spec paginatedSelectRenderSpec) []map[string]any {
@@ -406,6 +413,7 @@ func measurePaginatedSelectPage(measure paginatedSelectMeasure, page paginatedSe
 func selectStaticElement(name, placeholder string, payload map[string]any, options []map[string]any, initialOption string) map[string]any {
 	element := map[string]any{
 		"tag":         "select_static",
+		"width":       "fill",
 		"name":        strings.TrimSpace(name),
 		"placeholder": cardkit.PlainText(placeholder),
 		"options":     cardkit.CloneAny(options),

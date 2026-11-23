@@ -90,9 +90,12 @@ func TargetPickerTheme(view control.FeishuTargetPickerView) string {
 }
 
 func targetPickerLockedWorkspaceSections(view control.FeishuTargetPickerView) []control.FeishuCardTextSection {
-	lines := make([]string, 0, 2)
+	lines := make([]string, 0, 3)
 	if label := strings.TrimSpace(view.SelectedWorkspaceLabel); label != "" {
 		lines = append(lines, label)
+	}
+	if detail := targetPickerDetailLine("完整路径", view.SelectedWorkspaceKey); detail != "" {
+		lines = append(lines, detail)
 	}
 	if meta := strings.TrimSpace(view.SelectedWorkspaceMeta); meta != "" {
 		lines = append(lines, meta)
@@ -469,7 +472,10 @@ func targetPickerSessionOptions(options []control.FeishuTargetPickerSessionOptio
 		}
 		label := option.Label
 		if option.Kind == control.FeishuTargetPickerSessionThread {
-			label = xutil.TruncateRunes(strings.TrimSpace(label), 80, xutil.TruncateOptions{Ellipsis: "…（名称过长，已截断）", ReserveEllipsis: true})
+			label = xutil.TruncateRunes(strings.TrimSpace(xutil.FirstNonEmpty(option.FullTitle, label)), 80, xutil.TruncateOptions{Ellipsis: "…（名称过长，已截断）", ReserveEllipsis: true})
+			if !option.LastUsedAt.IsZero() {
+				label = option.LastUsedAt.Local().Format("01-02 15:04") + " · " + label
+			}
 		}
 		result = append(result, map[string]any{
 			"text":  cardkit.PlainText(targetPickerOptionLabel(label, option.MetaText)),

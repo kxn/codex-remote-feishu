@@ -68,6 +68,22 @@ func TestTargetPickerDraftNavigationUsesFrozenOptionsWithoutCatalogReads(t *test
 		if len(events) != 1 || !events[0].InlineReplaceCurrentCard || events[0].TargetPickerView == nil {
 			t.Fatalf("navigation did not replace its card: %#v", events)
 		}
+		if action.Kind == control.ActionTargetPickerSelectSession {
+			options := events[0].TargetPickerView.SessionOptions
+			found := false
+			for _, option := range options {
+				if option.Value != targetPickerThreadValue("thread-a") {
+					continue
+				}
+				found = true
+				if option.FullTitle != "thread-a" || normalizeWorkspaceClaimKey(option.WorkingDirectory) != normalizeWorkspaceClaimKey(a) || !option.LastUsedAt.Equal(now) {
+					t.Fatalf("selection lost frozen title, directory or activity: %#v", option)
+				}
+			}
+			if !found {
+				t.Fatalf("expected the selected thread option in %#v", options)
+			}
+		}
 	}
 	if catalog.reads != 0 {
 		t.Fatalf("draft navigation reentered catalog %d times", catalog.reads)

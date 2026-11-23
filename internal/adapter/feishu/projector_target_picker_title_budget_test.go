@@ -3,6 +3,7 @@ package feishu
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
@@ -107,6 +108,39 @@ func TestTargetPickerHugeTitleKeepsPaginationAndSwitchButton(t *testing.T) {
 	if !sawPage || !sawSwitch {
 		t.Errorf("long title must preserve pagination and switch actions: page=%v switch=%v", sawPage, sawSwitch)
 	}
+}
+
+func TestTargetPickerShowsSelectedWorkspaceAndSessionDetails(t *testing.T) {
+	name := "核对原会话"
+	workspace := "/data/projects/main"
+	cwd := workspace + "/source"
+	lastUsed := time.Date(2026, 11, 20, 10, 15, 0, 0, time.Local)
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
+		PickerID: "details", SelectedWorkspaceKey: workspace, SelectedSessionValue: "thread:current",
+		WorkspaceOptions: []control.FeishuTargetPickerWorkspaceOption{{Value: workspace, Label: "main"}},
+		SessionOptions: []control.FeishuTargetPickerSessionOption{
+			{Value: "thread:current", Kind: control.FeishuTargetPickerSessionThread, Label: "简短名称", FullTitle: name, WorkingDirectory: cwd, LastUsedAt: lastUsed, MetaText: "已接管"},
+		},
+	}, "life-details")
+	var workspaceDetail, sessionDetail bool
+	for _, element := range elements {
+		content := plainTextContent(element)
+		workspaceDetail = workspaceDetail || strings.Contains(content, "完整路径："+workspace)
+		sessionDetail = sessionDetail || content == "完整名称："+name+"\n会话工作目录："+cwd
+	}
+	if !workspaceDetail || !sessionDetail {
+		t.Fatalf("selected details missing: workspace=%v session=%v", workspaceDetail, sessionDetail)
+	}
+	for _, option := range titleBudgetSelectOptions(elements) {
+		if option["value"] == "thread:current" {
+			text, _ := option["text"].(map[string]any)
+			if got := cardkit.StringValue(text["content"]); got != "11-20 10:15 · "+name+" · 已接管" {
+				t.Fatalf("session label must prefix activity and preserve its status: %q", got)
+			}
+			return
+		}
+	}
+	t.Fatal("selected session option missing")
 }
 
 func titleBudgetSelectOptions(value any) []map[string]any {

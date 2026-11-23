@@ -114,13 +114,14 @@ func targetPickerWorktreeWorkspaceLane(view control.FeishuTargetPickerView) pagi
 
 func targetPickerWorkspaceLaneWithLabel(view control.FeishuTargetPickerView, label, placeholder string) paginatedSelectFlowLane {
 	return paginatedSelectFlowLane{
-		Flow:          selectflow.TargetPickerWorkspaceFlow,
-		Label:         strings.TrimSpace(label),
-		Placeholder:   strings.TrimSpace(placeholder),
-		Cursor:        view.WorkspaceCursor,
-		SelectedValue: strings.TrimSpace(view.SelectedWorkspaceKey),
-		Options:       targetPickerWorkspaceOptions(view.WorkspaceOptions),
-		SelectPayload: targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID)),
+		Flow:           selectflow.TargetPickerWorkspaceFlow,
+		Label:          strings.TrimSpace(label),
+		Placeholder:    strings.TrimSpace(placeholder),
+		Cursor:         view.WorkspaceCursor,
+		SelectedValue:  strings.TrimSpace(view.SelectedWorkspaceKey),
+		SelectedDetail: targetPickerDetailLine("完整路径", view.SelectedWorkspaceKey),
+		Options:        targetPickerWorkspaceOptions(view.WorkspaceOptions),
+		SelectPayload:  targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID)),
 		PagePayload: func(cursor int) map[string]any {
 			return targetPickerPayload(view, actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerWorkspaceFlow.FieldName, cursor))
 		},
@@ -129,13 +130,14 @@ func targetPickerWorkspaceLaneWithLabel(view control.FeishuTargetPickerView, lab
 
 func targetPickerSessionLane(view control.FeishuTargetPickerView) paginatedSelectFlowLane {
 	return paginatedSelectFlowLane{
-		Flow:          selectflow.TargetPickerSessionFlow,
-		Label:         "会话",
-		Placeholder:   xutil.FirstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
-		Cursor:        view.SessionCursor,
-		SelectedValue: strings.TrimSpace(view.SelectedSessionValue),
-		Options:       targetPickerSessionOptions(view.SessionOptions),
-		SelectPayload: targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID)),
+		Flow:           selectflow.TargetPickerSessionFlow,
+		Label:          "会话",
+		Placeholder:    xutil.FirstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
+		Cursor:         view.SessionCursor,
+		SelectedValue:  strings.TrimSpace(view.SelectedSessionValue),
+		SelectedDetail: targetPickerSelectedSessionDetail(view),
+		Options:        targetPickerSessionOptions(view.SessionOptions),
+		SelectPayload:  targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID)),
 		PagePayload: func(cursor int) map[string]any {
 			return targetPickerPayload(view, actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerSessionFlow.FieldName, cursor))
 		},
