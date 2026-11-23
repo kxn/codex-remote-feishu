@@ -45,7 +45,20 @@ func (s *Store) LoadInventory() ([]byte, error) {
 
 func (s *Store) PendingNativeInputs(owner agentproto.ExecutionBinding) (int, error) {
 	var count int
-	err := s.db.QueryRow(`SELECT count(*) FROM frames f JOIN commands c ON c.id=f.command_id WHERE json_extract(c.binding,'$.workerSessionId')=? AND json_extract(c.binding,'$.sessionGeneration')=? AND json_extract(c.binding,'$.controllerGeneration')=? AND f.native_method IN ('user','turn/start','turn/steer','session/prompt') AND NOT EXISTS (SELECT 1 FROM events e WHERE e.incarnation=c.incarnation AND json_extract(e.payload,'$.kind')='native.input.receipt' AND json_extract(e.payload,'$.requestId')=f.native_id AND json_extract(e.payload,'$.status') IN ('started','completed','cancelled','accepted','rejected')) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.incarnation=c.incarnation AND json_extract(e.payload,'$.kind')='turn.completed' AND json_extract(e.payload,'$.commandId')=c.id AND json_extract(e.payload,'$.turnCompletionOrigin')='runtime')`, owner.WorkerSessionID, owner.SessionGeneration, owner.ControllerGeneration).Scan(&count)
+	err := s.db.QueryRow(`SELECT count(*) FROM frames f JOIN commands c ON c.id=f.command_id
+WHERE json_extract(c.binding,'$.workerSessionId')=? AND json_extract(c.binding,'$.sessionGeneration')=? AND json_extract(c.binding,'$.controllerGeneration')=?
+AND f.native_method IN ('user','turn/start','turn/steer','session/prompt','thread/shellCommand') AND (
+ (f.native_method='thread/shellCommand'
+  AND NOT EXISTS(SELECT 1 FROM events e WHERE e.incarnation=c.incarnation AND json_extract(e.payload,'$.kind')='native.shell.item.observed' AND json_extract(e.payload,'$.commandId')=c.id AND json_extract(e.payload,'$.threadId')=json_extract(c.payload,'$.target.threadId') AND json_extract(e.payload,'$.action')='completed' AND coalesce(json_extract(e.payload,'$.itemId'),'')<>'')
+  AND NOT (
+   EXISTS(SELECT 1 FROM events e WHERE e.incarnation=c.incarnation AND json_extract(e.payload,'$.commandId')=c.id AND json_extract(e.payload,'$.requestId')=f.native_id AND ((json_extract(e.payload,'$.kind')='native.shell.rpc.result' AND json_extract(e.payload,'$.status')='failed') OR (json_extract(e.payload,'$.kind')='native.input.receipt' AND json_extract(e.payload,'$.status')='rejected')))
+   AND NOT EXISTS(SELECT 1 FROM events e WHERE e.incarnation=c.incarnation AND json_extract(e.payload,'$.kind')='native.shell.item.observed' AND json_extract(e.payload,'$.commandId')=c.id AND json_extract(e.payload,'$.action')='started')
+  )
+ ) OR
+ (f.native_method<>'thread/shellCommand'
+  AND NOT EXISTS(SELECT 1 FROM events e WHERE e.incarnation=c.incarnation AND json_extract(e.payload,'$.kind')='native.input.receipt' AND json_extract(e.payload,'$.commandId')=c.id AND json_extract(e.payload,'$.requestId')=f.native_id AND json_extract(e.payload,'$.status') IN ('started','completed','cancelled','accepted','rejected'))
+  AND NOT EXISTS(SELECT 1 FROM events e WHERE e.incarnation=c.incarnation AND json_extract(e.payload,'$.kind')='turn.completed' AND json_extract(e.payload,'$.commandId')=c.id AND json_extract(e.payload,'$.turnCompletionOrigin')='runtime')
+ ))`, owner.WorkerSessionID, owner.SessionGeneration, owner.ControllerGeneration).Scan(&count)
 	return count, err
 }
 

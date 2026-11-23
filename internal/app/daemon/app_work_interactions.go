@@ -79,6 +79,7 @@ func (a *App) receiveTeamInteraction(ctx context.Context, raw work.HumanInteract
 	if err != nil {
 		return "", err
 	}
+	r.wakeLane("human-actions")
 	if rejection != "" {
 		return rejection, nil
 	}

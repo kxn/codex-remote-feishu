@@ -49,5 +49,5 @@ func composeLaunchInstructions(settings LaunchSettings, platform agentproto.Inst
 }
 
 func sameRuntimePolicy(record LaunchRecord, settings LaunchSettings) bool {
-	return record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.ReadOnly == settings.ReadOnly && record.PreferencesRevision == settings.PreferencesRevision && reflect.DeepEqual(record.Overrides, settings.Overrides) && reflect.DeepEqual(record.CodexResume, settings.CodexResume)
+	return record.ConnectionIdentity == settings.ConnectionIdentity && record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.ReadOnly == settings.ReadOnly && record.PreferencesRevision == settings.PreferencesRevision && reflect.DeepEqual(record.Overrides, settings.Overrides) && reflect.DeepEqual(record.CodexResume, settings.CodexResume)
 }

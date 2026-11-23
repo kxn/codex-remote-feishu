@@ -192,12 +192,29 @@ func (t *Tx) claimAttempt(request ClaimRequest) error {
 	if err = t.record("attempts", attempt.ID, attempt.Revision, 0, attempt); err != nil {
 		return err
 	}
+	if scope.Kind == work.ScopePersonal {
+		var mediaInputs []work.Inbox
+		for _, id := range attempt.InputIDs {
+			input, e := t.GetInbox(id)
+			if e != nil {
+				return e
+			}
+			mediaInputs = append(mediaInputs, input)
+		}
+		mediaReady, mediaErr := t.MediaBatchHasHumanInstruction(mediaInputs)
+		if mediaErr != nil {
+			return mediaErr
+		}
+		if !mediaReady {
+			return fmt.Errorf("standalone private attachment waits for a subsequent human instruction")
+		}
+	}
 	for _, id := range attempt.InputIDs {
 		input, e := t.GetInbox(id)
 		if e != nil {
 			return e
 		}
-		if input.ContentState == work.InputContentPending || input.TaskID != attempt.TaskID || input.State != work.InboxPending || input.ScopeID != attempt.ScopeID || input.RecipientRoleID != worker.RoleID || input.RecipientContextID != "" && input.RecipientContextID != worker.ContextID {
+		if input.ShellOperationID != "" || input.ContentState == work.InputContentPending || input.TaskID != attempt.TaskID || input.State != work.InboxPending || input.ScopeID != attempt.ScopeID || input.RecipientRoleID != worker.RoleID || input.RecipientContextID != "" && input.RecipientContextID != worker.ContextID {
 			return fmt.Errorf("input is not claimable by worker")
 		}
 		if revision, ok := request.ExpectedInputRevisions[id]; ok && revision != input.Revision {

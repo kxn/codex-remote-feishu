@@ -308,12 +308,12 @@ func TestTeamOpenCodeLaunchUsesContextAccessAndCurrentProfile(t *testing.T) {
 			}
 		}
 		if !strings.Contains(material, "new-model") || strings.Contains(material, "old-model") ||
-			strings.Contains(material, `"*":"ask"`) != wantAsk || strings.Contains(material, `"*":"allow"`) ||
-			launch.Overrides.AccessMode != want || launch.Overrides.PlanMode != "" || launch.PreferencesRevision != wantRevision {
+			strings.Contains(material, `"*":"ask"`) != wantAsk || strings.Contains(material, `"*":"allow"`) != (want == agentproto.AccessModeFullAccess) ||
+			launch.Overrides.AccessMode != want || launch.Overrides.PlanMode != "on" || launch.PreferencesRevision != wantRevision {
 			t.Fatalf("effective launch did not match the authoritative profile and WorkContext access/plan: overrides=%+v revision=%d", launch.Overrides, launch.PreferencesRevision)
 		}
 	}
-	assertAccess("", false, 0)
+	assertAccess(agentproto.AccessModeFullAccess, false, 0)
 	settings, err := app.teamPreferencesService()
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +326,7 @@ func TestTeamOpenCodeLaunchUsesContextAccessAndCurrentProfile(t *testing.T) {
 	if _, err = settings.UpdateContext(ctx, source.PrincipalID, source.Authority, worksettings.ContextUpdateRequest{Key: "reset", ContextID: wc.ID, ExpectedRevision: 1, Reset: []string{"access"}}); err != nil {
 		t.Fatal(err)
 	}
-	assertAccess("", false, 2)
+	assertAccess(agentproto.AccessModeFullAccess, false, 2)
 }
 
 func TestAdminCannotDeleteSelectedTeamClaudeProfile(t *testing.T) {

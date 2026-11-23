@@ -26,12 +26,12 @@
    - 点击“保存并申请开通”
 6. 打开“机器人菜单”，创建以下菜单 key：
    - `menu`
-   - `status`
+   - `stop`
    - `steerall`
-   - `projects`
-   - `resources`
-   - `history`
-   - `settings`
+   - `new`
+   - `reasoning`
+   - `model`
+   - `access`
 
 按 WebSetup 的推荐菜单配置机器人。私聊中 `/menu` 和 `/help` 会打开工作入口；项目群由负责人协调工作。文本命令无需在飞书控制台注册，详见 [飞书使用说明书](../../docs/general/user-guide.md)。
 

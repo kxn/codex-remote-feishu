@@ -40,7 +40,7 @@ func TestWorkSteerRequiresExactOwnedActiveTurn(t *testing.T) {
 			case "duplicate-input":
 				metadata.InputIDs = []string{"late-input", "late-input"}
 			case "other-backend":
-				backend = agentproto.BackendClaude
+				backend = agentproto.BackendOpenCode
 			}
 			app.work.inspection.turns[nativeTurnKey("session", "turn")] = proof
 			if err := app.work.validateNativeSteer(changed, backend); err == nil {

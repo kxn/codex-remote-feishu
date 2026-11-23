@@ -77,7 +77,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 }
 
 func (t *Translator) translateTurnSteer(command agentproto.Command) ([][]byte, error) {
-	if t.activeTurn == nil {
+	if t.activeTurn == nil || t.activeTurn.NativeInputClosed {
 		return nil, agentproto.ErrorInfo{
 			Code:             "claude_steer_requires_active_turn",
 			Layer:            "wrapper",

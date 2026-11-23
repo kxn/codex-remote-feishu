@@ -79,7 +79,7 @@ var schemaV1 = []string{
  state TEXT GENERATED ALWAYS AS (json_extract(payload,'$.state')) STORED NOT NULL,
  claimed_attempt_id TEXT GENERATED ALWAYS AS (nullif(json_extract(payload,'$.claimed_attempt_id'),'')) STORED REFERENCES attempts(id) DEFERRABLE INITIALLY DEFERRED,
  CHECK(state IN ('pending','claimed','processed','cancelled')),
- CHECK(state NOT IN ('claimed','processed') OR claimed_attempt_id IS NOT NULL))`,
+ CHECK(state NOT IN ('claimed','processed') OR claimed_attempt_id IS NOT NULL OR (state='processed' AND coalesce(json_extract(payload,'$.shell_operation_id'),'')<>'')))`,
 	`CREATE UNIQUE INDEX inbox_event_target ON inbox(scope_id,role_id,coalesce(context_id,''),event_id)`,
 	`CREATE INDEX inbox_ready ON inbox(role_id,context_id,state)`,
 	`CREATE TABLE attempts (

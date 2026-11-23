@@ -168,12 +168,12 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 		text("当前模型：" + effectiveModel + "\n当前推理强度：" + effectiveEffort)
 		initial = currentEffort
 	case "access":
-		text("当前执行权限：" + local(pref.AccessMode))
+		text("当前执行权限：" + teamPrivateAccessSummary(snapshot, pref))
 		if pref.AccessMode != nil {
 			initial = *pref.AccessMode
 		}
 	case "plan":
-		text("当前计划模式：" + local(pref.PlanMode))
+		text("当前计划模式：" + teamPrivatePlanSummary(snapshot, pref))
 		if pref.PlanMode != nil {
 			initial = *pref.PlanMode
 		}
@@ -297,14 +297,14 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 				}
 			}
 		case "access":
-			add("跟随当前工作的默认权限", "clear")
+			add("跟随个人默认权限："+agentproto.EffectiveAccessMode(snapshot.Settings.PromptOverride.AccessMode), "clear")
 			add("需要确认", "confirm")
 			add("完全访问", "full_access")
 			if snapshot.Settings.Backend != agentproto.BackendOpenCode {
 				add("允许文件编辑", "accept_edits")
 			}
 		case "plan":
-			add("跟随当前工作的默认计划模式", "clear")
+			add("跟随个人默认计划模式："+teamPrivatePlanSummary(snapshot, work.ContextPreferences{}), "clear")
 			add("开启计划模式", "on")
 			add("关闭计划模式", "off")
 		case "verbose":

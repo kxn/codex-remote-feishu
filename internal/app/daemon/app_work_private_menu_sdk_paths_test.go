@@ -81,9 +81,9 @@ func exercisePrivateMenuSDKPages(t *testing.T, home, fixedProfile string, follow
 func exercisePrivateMenuSDKShortcuts(t *testing.T, event func(string, string, map[string]any) string, runMenus func() error, publish func() string) {
 	t.Helper()
 	for _, tt := range []struct{ key, title string }{
-		{"status", "当前工作状态"}, {"workspace", "选择执行目录"}, {"list", "已有会话"}, {"project", "返回工作区与会话"},
+		{"status", "当前工作状态"}, {"workspace", "选择执行目录"}, {"list", "已有会话"}, {"history", "会话历史"}, {"project", "返回工作区与会话"},
 		{"settings", "参数设置"}, {"model", "模型"}, {"reasoning", "推理强度"}, {"mode", "执行后端"},
-		{"access", "执行权限"}, {"plan", "计划模式"}, {"verbose", "消息详细程度"},
+		{"access", "执行权限"}, {"plan", "计划模式"}, {"verbose", "消息详细程度"}, {"reasoning_high", "推理强度"},
 		{"codexprofile", "Codex 配置"}, {"claudeprofile", "Claude 配置"}, {"opencodeprofile", "OpenCode 配置"},
 		{"autowhip_status", "自动检查未完成工作"}, {"autocontinue_status", "断线后自动继续"}, {"attach", "这个菜单入口已不可用"},
 	} {

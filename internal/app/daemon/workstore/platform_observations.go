@@ -60,6 +60,7 @@ func (t *Tx) AcceptPlatformObservation(v PlatformObservation) (string, bool, err
 		v.ID = "platform:" + hex.EncodeToString(digest[:])
 		canonical := v
 		canonical.ReceivedAt = time.Time{}
+		canonical.Facts = platformObservationFactsForHash(canonical.Facts)
 		raw, e := json.Marshal(canonical)
 		if e != nil {
 			return e
@@ -70,7 +71,22 @@ func (t *Tx) AcceptPlatformObservation(v PlatformObservation) (string, bool, err
 		e = t.tx.QueryRowContext(t.ctx, "SELECT payload_hash FROM team_platform_observations WHERE id=?", v.ID).Scan(&previous)
 		if e == nil {
 			if previous != sum {
-				return ErrIdempotencyConflict
+				// Older daemons included transport receive time inside Facts.
+				// Compare the full remaining immutable event before accepting
+				// a replay of that pre-normalization receipt.
+				old, e := t.GetPlatformObservation(v.ID)
+				if e != nil {
+					return e
+				}
+				old.ReceivedAt = time.Time{}
+				old.Facts = platformObservationFactsForHash(old.Facts)
+				normalized, e := json.Marshal(old)
+				if e != nil {
+					return e
+				}
+				if string(normalized) != string(raw) {
+					return ErrIdempotencyConflict
+				}
 			}
 			replay = true
 			return nil
@@ -179,4 +195,17 @@ func (t *Tx) invalidateRecalledMessageMemory(message work.Message) error {
 		}
 	}
 	return nil
+}
+
+func platformObservationFactsForHash(raw json.RawMessage) json.RawMessage {
+	var facts map[string]json.RawMessage
+	if json.Unmarshal(raw, &facts) != nil {
+		return raw
+	}
+	delete(facts, "received_at")
+	normalized, err := json.Marshal(facts)
+	if err != nil {
+		return raw
+	}
+	return normalized
 }

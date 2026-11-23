@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workdisplay"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
@@ -55,6 +56,16 @@ func (c *Coordinator) HandleAck(ctx context.Context, currentTransportInstance st
 		hash := sha256.Sum256(raw)
 		if hex.EncodeToString(hash[:]) != ack.RuntimeReceipt.PayloadHash {
 			return fmt.Errorf("command ACK payload hash mismatch")
+		}
+		if canonical.Kind == agentproto.CommandThreadShellCommand && canonical.ShellCommand.OperationID != "" && canonical.IsOwnerOnlyRuntimeCommand() {
+			if err := tx.ApplyPrivateShellAck(ack, c.options.Clock()); err != nil {
+				return err
+			}
+			saved, err := tx.GetPrivateShellOperation(ack.CommandID)
+			if err != nil {
+				return err
+			}
+			return workdisplay.ProjectPrivateShellStatus(tx, saved, c.options.Clock())
 		}
 		if err := tx.RecordNativeAck(command.CommandID, ack); err != nil {
 			return err

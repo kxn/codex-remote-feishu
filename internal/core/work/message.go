@@ -99,6 +99,10 @@ const (
 )
 
 type Inbox struct {
+	ShellOperationID string `json:"shell_operation_id,omitempty"`
+	// AwaitingText records standalone private media; it remains true after claim
+	// so delivery feedback can identify the original attachment messages.
+	AwaitingText               bool              `json:"awaiting_text,omitempty"`
 	DirectedReplyIngressID     string            `json:"directed_reply_ingress_id,omitempty"`
 	DirectedReplyBotGeneration int64             `json:"directed_reply_bot_generation,omitempty"`
 	AutomationEpisodeID        string            `json:"automation_episode_id,omitempty"`
@@ -139,8 +143,11 @@ func (v Inbox) Validate() error {
 	if err := positive("inbox revision", v.Revision); err != nil {
 		return err
 	}
-	if oneOf(v.State, InboxClaimed, InboxProcessed) && v.ClaimedAttemptID == "" {
+	if (v.State == InboxClaimed || v.State == InboxProcessed && v.ShellOperationID == "") && v.ClaimedAttemptID == "" {
 		return fmt.Errorf("claimed input needs exact attempt")
+	}
+	if v.ShellOperationID != "" && (v.ClaimedAttemptID != "" || v.State == InboxClaimed) {
+		return fmt.Errorf("independent shell input cannot belong to model attempt")
 	}
 	if v.State == InboxProcessed && (v.ProcessedAt == nil || v.ProcessingOutcomeRef == "") {
 		return fmt.Errorf("processed input requires timestamp and durable outcome")

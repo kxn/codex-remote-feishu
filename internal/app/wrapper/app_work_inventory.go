@@ -28,6 +28,7 @@ type workInspectionState struct {
 	sessionIDs           map[string]bool
 	persistMu            sync.Mutex
 	activeNativeCommands map[string]bool
+	shellItemsStarted    map[string]bool
 	inputRPCMethods      map[string]string
 	receiptEvents        []agentproto.Event
 	nativeReady          bool
@@ -46,7 +47,7 @@ type workInspectionState struct {
 }
 
 func newWorkInspectionState() *workInspectionState {
-	return &workInspectionState{turns: make(map[string]inspectedTurn), pendingInputs: make(map[string]string), activeTools: make(map[string]bool), tasks: make(map[string]bool), uncertainties: make(map[string]bool), waiters: make(map[string]chan []byte), taskInventoryKnown: true, goalKnown: make(map[string]bool), rpcMethods: make(map[string]string), rpcSessions: make(map[string]string), sessionIDs: make(map[string]bool), activeNativeCommands: make(map[string]bool), inputRPCMethods: make(map[string]string), goalActive: make(map[string]bool)}
+	return &workInspectionState{turns: make(map[string]inspectedTurn), pendingInputs: make(map[string]string), activeTools: make(map[string]bool), tasks: make(map[string]bool), uncertainties: make(map[string]bool), waiters: make(map[string]chan []byte), taskInventoryKnown: true, goalKnown: make(map[string]bool), rpcMethods: make(map[string]string), rpcSessions: make(map[string]string), sessionIDs: make(map[string]bool), activeNativeCommands: make(map[string]bool), shellItemsStarted: make(map[string]bool), inputRPCMethods: make(map[string]string), goalActive: make(map[string]bool)}
 }
 func nativeTurnKey(session, turn string) string { return session + "\x00" + turn }
 
@@ -74,7 +75,7 @@ func (s *workInspectionState) outbound(commandID string, frame []byte) {
 			s.rpcSessions[key] = session
 		}
 	}
-	if method == "turn/start" || method == "turn/steer" || method == "session/prompt" {
+	if method == "turn/start" || method == "turn/steer" || method == "session/prompt" || method == "thread/shellCommand" {
 		if id, exists := message["id"]; exists {
 			s.pendingInputs["rpc:"+fmt.Sprint(id)] = commandID
 			s.inputRPCMethods[fmt.Sprint(id)] = method
@@ -104,9 +105,21 @@ func (s *workInspectionState) events(events []agentproto.Event) {
 			}
 			s.turns[key] = proof
 		}
+		if event.Kind == agentproto.EventNativeShellItemObserved && event.CommandID != "" {
+			s.dirty = true
+			if event.Action == "started" {
+				s.shellItemsStarted[event.CommandID] = true
+			}
+			if event.Action == "completed" {
+				s.clearPrivateShellInput(event.CommandID)
+			}
+		}
+		if event.Kind == agentproto.EventNativeShellRPCResult && event.Status == "failed" && !s.shellItemsStarted[event.CommandID] {
+			s.clearPrivateShellInput(event.CommandID)
+		}
 		if event.Kind == agentproto.EventTurnStarted || event.Kind == agentproto.EventTurnCompleted {
 			for key, commandID := range s.pendingInputs {
-				if commandID == event.CommandID && commandID != "" {
+				if commandID == event.CommandID && commandID != "" && s.inputRPCMethods[strings.TrimPrefix(key, "rpc:")] != "thread/shellCommand" {
 					delete(s.pendingInputs, key)
 				}
 			}
@@ -198,16 +211,26 @@ func (s *workInspectionState) raw(frame []byte) bool {
 		if commandID, known := s.pendingInputs["rpc:"+requestID]; known {
 			method := s.inputRPCMethods[requestID]
 			status := "accepted"
+			if method == "thread/shellCommand" {
+				status = "acknowledged"
+			}
 			if _, failed := message["error"]; failed {
 				status = "rejected"
 			} else if method == "turn/start" {
 				s.activeNativeCommands[commandID] = true
 			}
-			s.receiptEvents = append(s.receiptEvents, agentproto.Event{Kind: agentproto.EventNativeInputReceipt, CommandID: commandID, RequestID: requestID, Status: status, Action: "native." + method})
+			if method != "thread/shellCommand" {
+				s.receiptEvents = append(s.receiptEvents, agentproto.Event{Kind: agentproto.EventNativeInputReceipt, CommandID: commandID, RequestID: requestID, Status: status, Action: "native." + method})
+			}
 			s.dirty = true
-			delete(s.inputRPCMethods, requestID)
+			if method != "thread/shellCommand" || status == "rejected" && !s.shellItemsStarted[commandID] {
+				delete(s.inputRPCMethods, requestID)
+				delete(s.pendingInputs, "rpc:"+requestID)
+			}
 		}
-		delete(s.pendingInputs, "rpc:"+requestID)
+		if s.inputRPCMethods[requestID] != "thread/shellCommand" {
+			delete(s.pendingInputs, "rpc:"+requestID)
+		}
 		if wait, ok := s.waiters[requestID]; ok {
 			select {
 			case wait <- append([]byte(nil), frame...):
@@ -438,4 +461,21 @@ func (s *workInspectionState) drainReceipts() []agentproto.Event {
 	events := s.receiptEvents
 	s.receiptEvents = nil
 	return events
+}
+
+// The native shell request remains in the same inventory ledger through the
+// ACK-to-item window. Only its real item completion or definite rejection clears it.
+func (s *workInspectionState) clearPrivateShellInput(commandID string) {
+	for key, owner := range s.pendingInputs {
+		if owner != commandID || commandID == "" {
+			continue
+		}
+		requestID := strings.TrimPrefix(key, "rpc:")
+		if s.inputRPCMethods[requestID] == "thread/shellCommand" {
+			delete(s.pendingInputs, key)
+			delete(s.inputRPCMethods, requestID)
+		}
+	}
+	delete(s.shellItemsStarted, commandID)
+	s.dirty = true
 }

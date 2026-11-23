@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,16 @@ func assertMissingPoolResumeRebuildsOnce(t *testing.T, host *Host, store *workst
 		}
 	}
 	tick()
+	var rejectedInputs []string
+	if err := store.Within(t.Context(), func(tx *workstore.Tx) error {
+		attempt, err := tx.GetAttempt(scheduled[0].Execution.AttemptID)
+		if err == nil {
+			rejectedInputs = append(rejectedInputs, attempt.InputIDs...)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := host.Prepare(t.Context(), need); err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +72,20 @@ func assertMissingPoolResumeRebuildsOnce(t *testing.T, host *Host, store *workst
 	}
 	tick()
 	fresh := scheduled[1]
+	if err := store.Within(t.Context(), func(tx *workstore.Tx) error {
+		attempt, err := tx.GetAttempt(fresh.Execution.AttemptID)
+		if err != nil {
+			return err
+		}
+		for _, original := range rejectedInputs {
+			if !slices.Contains(attempt.InputIDs, original) {
+				t.Fatalf("fresh attempt lost rejected input %q: %v", original, attempt.InputIDs)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if fresh.Target.EffectivePromptExecutionMode() != agentproto.PromptExecutionModeStartNew || fresh.Target.ThreadID != "" || fresh.Execution.RunRef == scheduled[0].Execution.RunRef {
 		t.Fatalf("recovery repeated the unavailable resume: %+v", fresh)
 	}

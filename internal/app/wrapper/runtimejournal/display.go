@@ -55,6 +55,8 @@ func (s *Store) foldDisplayEvidence(event agentproto.Event) agentproto.Event {
 			}
 			index := xutil.LookupIntFromAny(event.Metadata["summaryIndex"])
 			if summary != nil && index >= 0 && index < maxUnfinishedDisplayItems && len(summary.parts[index])+len(event.Delta) <= maxUnfinishedDisplayBytes/maxUnfinishedDisplayItems {
+				event.Metadata = maps.Clone(event.Metadata)
+				event.Metadata["publicSummaryOffset"] = len(summary.parts[index])
 				summary.parts[index] += event.Delta
 			}
 		}
@@ -165,7 +167,7 @@ func (s *Store) publicSummaryEvents(event *agentproto.Event, now time.Time) ([]a
 				Kind: agentproto.EventItemReasoningSummaryPartAdded, ItemKind: "reasoning_summary", ItemID: event.ItemID,
 				ThreadID: event.ThreadID, TurnID: event.TurnID, CommandID: event.CommandID, Execution: event.Execution,
 				TrafficClass: event.TrafficClass, Initiator: event.Initiator, Delta: trailing,
-				Metadata: map[string]any{"publicReasoningSummary": true, "summaryIndex": i},
+				Metadata: map[string]any{"publicReasoningSummary": true, "summaryIndex": i, "publicSummaryOffset": oldSent[i]},
 			})
 		}
 	}

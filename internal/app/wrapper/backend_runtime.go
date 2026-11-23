@@ -306,7 +306,7 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 	if err != nil {
 		return runtimeObserveResult{}, err
 	}
-	r.shellCommand.observeEvents(result.Events)
+	result.Events = r.shellCommand.observeEvents(result.Events)
 	return runtimeObserveResult{
 		Events:           result.Events,
 		OutboundToChild:  result.OutboundToCodex,

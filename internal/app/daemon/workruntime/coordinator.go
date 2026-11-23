@@ -235,8 +235,18 @@ func (c *Coordinator) RegisterCommand(ctx context.Context, incarnation string, c
 		if command.IsOwnerOnlyRuntimeCommand() && (command.Kind == agentproto.CommandThreadGoalGet || command.Kind == agentproto.CommandThreadGoalClear) && (worker.NativeSessionID == "" || command.Target.ThreadID != worker.NativeSessionID) {
 			return fmt.Errorf("idle Goal command requires the exact current native session")
 		}
+		if command.Kind == agentproto.CommandThreadShellCommand {
+			if err := tx.ValidatePrivateShellCommand(command, carrier.Incarnation); err != nil {
+				return err
+			}
+		}
 		if command.Kind == agentproto.CommandTurnSteer {
 			if err := tx.ValidateAttemptInputAdmissionCommand(command); err != nil {
+				return err
+			}
+		}
+		if command.Kind == agentproto.CommandRequestRespond {
+			if err := tx.ValidateNativeResponseRegistration(command, carrier.Incarnation); err != nil {
 				return err
 			}
 		}

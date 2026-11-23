@@ -38,10 +38,16 @@ type shellCommandRuntime struct {
 }
 
 type shellCommandPayload struct {
-	path     string
-	threadID string
-	turnID   string
-	itemID   string
+	operationID    string
+	execution      *agentproto.ExecutionBinding
+	actualThreadID string
+	actualTurnID   string
+	commandID      string
+	nativeCommand  string
+	path           string
+	threadID       string
+	turnID         string
+	itemID         string
 }
 
 func newShellCommandRuntime(stateDir, runtimeID string) *shellCommandRuntime {
@@ -72,11 +78,6 @@ func (r *shellCommandRuntime) prepare(command agentproto.Command) (agentproto.Co
 	if err != nil {
 		return agentproto.Command{}, nil, err
 	}
-	r.trackPayload(&shellCommandPayload{
-		path:     payloadPath,
-		threadID: strings.TrimSpace(command.Target.ThreadID),
-		turnID:   strings.TrimSpace(command.Target.TurnID),
-	})
 	cleanup := func(accepted bool) {
 		// A successful thread/shellCommand response only acknowledges that the
 		// UserShell item was accepted. observeEvents removes the payload after
@@ -90,6 +91,7 @@ func (r *shellCommandRuntime) prepare(command agentproto.Command) (agentproto.Co
 		cleanup(false)
 		return agentproto.Command{}, nil, err
 	}
+	r.trackPayload(&shellCommandPayload{path: payloadPath, threadID: strings.TrimSpace(command.Target.ThreadID), turnID: strings.TrimSpace(command.Target.TurnID), commandID: command.CommandID, nativeCommand: shellCommand, operationID: command.ShellCommand.OperationID, execution: agentproto.CloneExecutionBinding(command.Execution)})
 	command.ShellCommand.Command = shellCommand
 	return command, cleanup, nil
 }
@@ -128,43 +130,6 @@ func (r *shellCommandRuntime) removePayloadLocked(path string) {
 			delete(r.payloads, key)
 		} else {
 			r.payloads[key] = remaining
-		}
-	}
-}
-
-func (r *shellCommandRuntime) observeEvents(events []agentproto.Event) {
-	if r == nil || len(events) == 0 {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, event := range events {
-		if !isUserShellEvent(event) {
-			continue
-		}
-		key := shellPayloadKey(event.ThreadID, event.TurnID)
-		payloads := r.payloads[key]
-		if len(payloads) == 0 {
-			continue
-		}
-		if event.Kind == agentproto.EventItemStarted {
-			for _, payload := range payloads {
-				if payload != nil && payload.itemID == "" {
-					payload.itemID = strings.TrimSpace(event.ItemID)
-					break
-				}
-			}
-			continue
-		}
-		if event.Kind != agentproto.EventItemCompleted {
-			continue
-		}
-		for _, payload := range payloads {
-			if payload == nil || (payload.itemID != "" && payload.itemID != strings.TrimSpace(event.ItemID)) {
-				continue
-			}
-			r.removePayloadLocked(payload.path)
-			break
 		}
 	}
 }

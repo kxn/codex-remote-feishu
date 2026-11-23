@@ -13,7 +13,7 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
-func TestCorrectedMemoryRebuildsNativeHistoryAndRetainsWork(t *testing.T) {
+func TestCorrectedPrivateMemoryRefreshesCarrierAndRetainsNativeHistory(t *testing.T) {
 	h, store := hostFixture(t, func(relayruntime.HeadlessLaunchOptions) (int, error) { return 1234, nil })
 	h.config.Runtime = &rebuildDriver{stopped: true}
 	h.config.StopCarrier = func(context.Context, work.WorkerSession) error { return nil }
@@ -49,8 +49,8 @@ func TestCorrectedMemoryRebuildsNativeHistoryAndRetainsWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	current := readyLifecycleCandidate(t, store, old.ContextID)
-	if current.Worker.Generation != old.Generation+1 || current.Worker.NativeSessionID != "" || current.Worker.CarrierIncarnation == old.CarrierIncarnation {
-		t.Fatal("corrected memory reused obsolete native history")
+	if current.Worker.Generation != old.Generation+1 || current.Worker.NativeSessionID != old.NativeSessionID || current.Worker.CarrierIncarnation == old.CarrierIncarnation {
+		t.Fatal("corrected private memory lost native history or failed to refresh carrier")
 	}
 	var launch LaunchRecord
 	if err := store.Within(t.Context(), func(tx *workstore.Tx) error { var e error; launch, e = h.readLaunch(tx, current.Worker); return e }); err != nil {
@@ -62,14 +62,14 @@ func TestCorrectedMemoryRebuildsNativeHistoryAndRetainsWork(t *testing.T) {
 		}
 	}
 	if strings.Contains(launch.Snapshot.InstructionBundle.Text, "previous design rule") {
-		t.Fatal("obsolete memory leaked into fresh native history")
+		t.Fatal("obsolete memory leaked into refreshed instructions")
 	}
 	plan, err := h.Plan(t.Context(), current)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(plan.Command.Prompt.Inputs[0].Text, "completed original prompt") {
-		t.Fatal("fresh native history discarded durable work checkpoint")
+		t.Fatal("resumed private session discarded durable work checkpoint")
 	}
 	if err := store.Within(t.Context(), func(tx *workstore.Tx) error {
 		inputs, e := tx.ListPendingInputs("scope", "role")

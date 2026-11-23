@@ -213,6 +213,11 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		if err != nil {
 			return err
 		}
+		if pending, e := tx.HasPendingPrivateShellTurns(request.Carrier.Incarnation); e != nil {
+			return e
+		} else if pending {
+			return nil
+		}
 		count, err := tx.CountOpenNativeTurns(attemptID)
 		if err != nil {
 			return err

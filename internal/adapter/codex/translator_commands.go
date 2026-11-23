@@ -130,6 +130,10 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 				"command":  shellCommand,
 			},
 		}
+		if command.ShellCommand.OperationID != "" {
+			requestID := fmt.Sprint(payload["id"])
+			t.pendingSuppressedResponse[requestID] = suppressedResponseContext{ShellOperationID: command.ShellCommand.OperationID, CommandID: command.CommandID, Action: "thread/shellCommand", ThreadID: threadID, Initiator: commandFailureInitiator(command)}
+		}
 		bytes, err := json.Marshal(payload)
 		if err != nil {
 			return nil, err

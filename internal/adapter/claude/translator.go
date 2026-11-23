@@ -50,6 +50,7 @@ type Translator struct {
 }
 
 type turnState struct {
+	NativeInputClosed        bool
 	UserCommandUUID          string
 	UserCommandUUIDObserved  bool
 	CommandID                string

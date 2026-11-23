@@ -17,6 +17,38 @@ func (t *Tx) authorizePrivateInputAdmission(source PrivateActionSource, attempt 
 	}
 	contextID := ""
 	switch {
+	case source.IngressID != "":
+		raw, e := t.GetIngress(source.IngressID)
+		if e != nil {
+			return scope, proof, e
+		}
+		contextID = raw.Route.ContextID
+		matched := false
+		for _, id := range attempt.InputIDs {
+			input, e := t.GetInbox(id)
+			if e != nil {
+				return scope, proof, e
+			}
+			if input.State != work.InboxClaimed || input.ClaimedAttemptID != attempt.ID {
+				continue
+			}
+			message, e := t.GetMessage(input.MessageID)
+			if e != nil {
+				return scope, proof, e
+			}
+			if message.PlatformKey != nil && message.PlatformKey.Tenant == raw.Envelope.Tenant && message.PlatformKey.ChatID == raw.Envelope.ChatID && message.PlatformKey.MessageID == raw.Envelope.ParentID && message.Source == (work.Actor{Kind: work.ActorPrincipal, ID: scope.PrincipalID}) && message.RecalledEvidenceRef == "" {
+				matched = true
+			}
+		}
+		if !matched {
+			return scope, proof, ErrScopeDenied
+		}
+	case source.ReactionID != "":
+		action, e := t.GetPrivateReactionAction(source.ReactionID)
+		if e != nil {
+			return scope, proof, e
+		}
+		contextID = action.ContextID
 	case source.CommandID != "":
 		command, e := t.GetPrivateCommand(source.CommandID)
 		if e != nil {
@@ -70,4 +102,14 @@ func (t *Tx) authorizePrivateInputAdmission(source PrivateActionSource, attempt 
 		return scope, proof, err
 	}
 	return scope, proof, nil
+}
+
+// ValidatePrivateReplyAdmission checks the exact active parent before prompt materialization.
+// BeginAttemptInputAdmission repeats the check atomically with the claim.
+func (t *Tx) ValidatePrivateReplyAdmission(source PrivateActionSource, attempt work.ExecutionAttempt, now time.Time) error {
+	if source.IngressID == "" {
+		return ErrScopeDenied
+	}
+	_, _, err := t.authorizePrivateInputAdmission(source, attempt, now)
+	return err
 }

@@ -20,17 +20,17 @@ import (
 // Images remain typed inputs. Other files are referenced by actual local path;
 // their bytes are not silently interpreted as instructions or memory.
 func (s *Service) BuildWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string) ([]agentproto.Input, error) {
-	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, false)
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, false, "")
 }
 
 // BuildPlannedWorkPrompt prepares a pure candidate before ClaimAttempt exists.
 // It never persists an attempt or consumes input. The engine rechecks all input
 // revisions under the actual claim transaction before sending any prompt.
 func (s *Service) BuildPlannedWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string) ([]agentproto.Input, error) {
-	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, true, false)
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, true, false, "")
 }
-func (s *Service) buildWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string, planned, steering bool) ([]agentproto.Input, error) {
-	text, err := s.BuildWorkInput(ctx, attempt)
+func (s *Service) buildWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string, planned, steering bool, replyMessageID string) ([]agentproto.Input, error) {
+	text, err := s.buildWorkInput(ctx, attempt, replyMessageID)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +111,9 @@ func (s *Service) buildWorkPrompt(ctx context.Context, attempt work.ExecutionAtt
 				return workstore.ErrScopeDenied
 			}
 			for _, attachment := range message.Attachments {
+				if replyMessageID != "" && attachment.SourceMessageID != replyMessageID {
+					continue
+				}
 				if seen[attachment.ContentRef] {
 					continue
 				}
@@ -230,5 +233,16 @@ func (s *Service) BuildSteerWorkPrompt(ctx context.Context, attemptID string, in
 		return nil, err
 	}
 	attempt.InputIDs = append([]string(nil), inputIDs...)
-	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true)
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true, "")
+}
+
+// BuildPrivateReplySteerPrompt preserves only the reply's own content; quoted
+// material remains available in the durable ordinary message for later turns.
+func (s *Service) BuildPrivateReplySteerPrompt(ctx context.Context, attemptID, inputID, messageID, attachmentRoot string) ([]agentproto.Input, error) {
+	var attempt work.ExecutionAttempt
+	if err := s.store.Within(ctx, func(tx *workstore.Tx) error { var e error; attempt, e = tx.GetAttempt(attemptID); return e }); err != nil {
+		return nil, err
+	}
+	attempt.InputIDs = []string{inputID}
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true, messageID)
 }

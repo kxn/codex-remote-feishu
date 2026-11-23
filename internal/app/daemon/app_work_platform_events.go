@@ -22,8 +22,11 @@ func (a *App) receiveTeamPlatformEvent(ctx context.Context, event feishu.Platfor
 	if err != nil {
 		return err
 	}
-	return a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		id, replay, e := tx.AcceptPlatformObservation(workstore.PlatformObservation{Gateway: gateway, EventID: event.EventID, Tenant: event.Tenant, ChatID: event.ChatID, MessageID: event.MessageID, Kind: event.Kind, Facts: raw, ReceivedAt: event.ReceivedAt})
+		if e == nil && !replay && event.Kind == "reaction.created" {
+			return tx.RegisterPrivateReactionAction(id)
+		}
 		if e != nil || replay || (event.Kind != "bot.removed" && event.Kind != "chat.deleted") {
 			return e
 		}
@@ -47,4 +50,8 @@ func (a *App) receiveTeamPlatformEvent(ctx context.Context, event feishu.Platfor
 			Source: work.SourceRef{Kind: "platform_observation", ID: id, Version: "1", EvidenceRef: id},
 		})
 	})
+	if err == nil && event.Kind == "reaction.created" {
+		a.teamRuntime.wakeLane("private-reactions")
+	}
+	return err
 }

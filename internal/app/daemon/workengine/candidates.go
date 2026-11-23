@@ -50,7 +50,7 @@ func (e *Engine) snapshot(ctx context.Context) (candidates []Candidate, deferred
 				if len(groups[key]) == 0 {
 					order = append(order, key)
 				}
-				if len(groups[key]) < e.config.MaxInputsPerAttempt {
+				if scope.Kind == work.ScopePersonal || len(groups[key]) < e.config.MaxInputsPerAttempt {
 					groups[key] = append(groups[key], input)
 				}
 			}
@@ -67,6 +67,16 @@ func (e *Engine) snapshot(ctx context.Context) (candidates []Candidate, deferred
 				contextByID[context.ID] = context
 			}
 			for _, group := range order {
+				if scope.Kind == work.ScopePersonal {
+					batch, e := nextPrivateInputBatch(tx, groups[group])
+					if e != nil {
+						return e
+					}
+					if len(batch) == 0 {
+						continue
+					}
+					groups[group] = batch
+				}
 				need := WorkerNeed{ScopeID: scope.ID, RoleID: target.RoleID, TaskID: group.taskID, ContextID: group.contextID}
 				if err := readyScopeForContext(tx, scope, target.RoleID, group.taskID, contextByID[group.contextID]); err != nil {
 					deferred = append(deferred, Deferral{Need: need, Reason: err.Error()})
@@ -243,6 +253,9 @@ func readyScope(tx *workstore.Tx, scope work.WorkScope, roleID, taskID string) e
 }
 
 func readyScopeForContext(tx *workstore.Tx, scope work.WorkScope, roleID, taskID string, context work.WorkContext) error {
+	if scope.Kind == work.ScopePersonal && context.Purpose == work.PurposeControl {
+		return fmt.Errorf("private chat no longer dispatches management copies")
+	}
 	if context.Purpose != work.PurposeControl {
 		return readyScope(tx, scope, roleID, taskID)
 	}

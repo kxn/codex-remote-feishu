@@ -519,6 +519,9 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 }
 
 func (t *Translator) observeUserMessage(message map[string]any) Result {
+	if result, handled := t.observeAdmittedUserEcho(message); handled {
+		return result
+	}
 	if t.activeTurn == nil {
 		return Result{}
 	}

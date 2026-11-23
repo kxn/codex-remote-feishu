@@ -214,6 +214,12 @@ func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.Work
 		return result, resolved.err
 	}
 	result = workhost.LaunchSettings{Backend: work.Backend(record.Backend), Location: location, Environment: append([]string{}, a.headlessRuntime.BaseEnv...), LaunchArgs: append([]string{}, a.headlessRuntime.LaunchArgs...), Overrides: agentproto.PromptOverrides{Model: record.PromptOverride.Model, ReasoningEffort: record.PromptOverride.ReasoningEffort}}
+	// Preserve the old effective private default explicitly. An empty native
+	// override otherwise inherits the backend's potentially stricter policy.
+	// Project and read-only review authority is configured independently.
+	result.Overrides.AccessMode = teamPrivateDefaultAccess(scope, wc, record)
+	result.Overrides.PlanMode = teamPrivateDefaultPlan(scope, wc, record)
+
 	err = r.store.Within(ctx, func(tx *workstore.Tx) error {
 		if e := tx.CheckRoleSettingsReference(role.ID, resolved.fingerprint, role.SettingsRevision); e != nil {
 			return e
@@ -240,6 +246,10 @@ func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.Work
 	result.ProfileID = teamSettingsProfile(record)
 	switch record.Backend {
 	case agentproto.BackendClaude:
+		result.ConnectionIdentity, err = teamClaudeConnectionIdentity(result.Environment, resolved.claude, location.Cwd)
+		if err != nil {
+			return result, err
+		}
 		var settings config.ClaudeRuntimeSettings
 		result.Environment, settings, err = applyResolvedClaudeLaunchProfile(result.Environment, resolved.claude)
 		if err == nil && !settings.Empty() {
@@ -341,4 +351,18 @@ func (r teamSettingsResolver) scratch(wc work.WorkContext) (work.ExecutionLocati
 		return selected, err
 	}
 	return work.ExecutionLocation{ID: teamID("scratch", wc.ID), HostID: r.hostID, Cwd: path, Generation: 1, Revision: 1, IsolatedContextID: wc.ID}, nil
+}
+
+func teamPrivateDefaultAccess(scope work.WorkScope, wc work.WorkContext, record state.BotCapabilitySettingsRecord) string {
+	if scope.Kind == work.ScopePersonal && wc.Purpose != work.PurposeReview {
+		return agentproto.EffectiveAccessMode(record.PromptOverride.AccessMode)
+	}
+	return ""
+}
+
+func teamPrivateDefaultPlan(scope work.WorkScope, wc work.WorkContext, record state.BotCapabilitySettingsRecord) string {
+	if scope.Kind == work.ScopePersonal && wc.Purpose != work.PurposeReview && record.PlanModeOverrideSet {
+		return string(state.NormalizePlanModeSetting(record.PlanMode))
+	}
+	return ""
 }

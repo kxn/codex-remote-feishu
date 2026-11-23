@@ -60,50 +60,75 @@ func TestActiveProjectRuntimeGateStillCreatesRestrictedManagementInput(t *testin
 		return nil
 	})
 }
-func TestPausedPersonalFrontGetsItsOwnControlContextWithoutOpeningGate(t *testing.T) {
+func TestBlockedPersonalMessageStaysInOriginalConversation(t *testing.T) {
 	i, s, _ := ingressFixture(t, false)
 	_, nav := privateCommandSource(t, i, s, "command")
 	txRun(t, s, func(tx *workstore.Tx) error {
 		return tx.PutPauseGate(work.PauseGate{ID: "personal-pause", ScopeID: nav.PersonalScopeID, ContextID: nav.FrontContextID, Source: work.GateContext, SourceID: nav.PrincipalID, State: work.GateClosed, Revision: 1}, 0)
 	})
-	receive(t, i, rawMessage("leader", "question", "dm", "p2p", "open-person", "person", "为什么没继续"))
+	receive(t, i, rawMessage("leader", "question", "dm", "p2p", "open-person", "person", "hi"))
 	process(t, i)
 	txRun(t, s, func(tx *workstore.Tx) error {
 		inputs, e := tx.ListInbox(nav.PersonalScopeID)
 		if e != nil {
 			return e
 		}
-		var control *work.Inbox
-		for _, input := range inputs {
-			if input.ControlOfInputID != "" {
-				copy := input
-				control = &copy
-			}
+		if len(inputs) != 1 {
+			t.Fatalf("ordinary private input spawned extra conversation: %+v", inputs)
 		}
-		if control == nil {
-			t.Fatal("personal stop stranded natural language input")
-		}
-		context, e := tx.GetContext(control.RecipientContextID)
-		if e != nil {
-			return e
-		}
-		if context.ScopeID != nav.PersonalScopeID || context.ControlTargetContextID != nav.FrontContextID || context.Purpose != work.PurposeControl {
-			t.Fatal("management borrowed another front")
+		input := inputs[0]
+		if input.ControlOfInputID != "" || input.RecipientContextID != nav.FrontContextID || input.State != work.InboxPending {
+			t.Fatalf("private input changed owner: %+v", input)
 		}
 		gate, e := tx.GetPauseGate("personal-pause")
-		if e != nil {
-			return e
+		if e == nil && gate.State != work.GateClosed {
+			t.Fatal("input fabricated recovery")
 		}
-		if gate.State != work.GateClosed {
-			t.Fatal("explanation automatically resumed work")
+		return e
+	})
+}
+
+func TestLegacyPrivateManagementCopyRetiresWithoutConsumingOriginal(t *testing.T) {
+	i, s, _ := ingressFixture(t, false)
+	_, nav := privateCommandSource(t, i, s, "command")
+	receive(t, i, rawMessage("leader", "hi", "dm", "p2p", "open-person", "person", "hi"))
+	process(t, i)
+	txRun(t, s, func(tx *workstore.Tx) error {
+		inputs, err := tx.ListInbox(nav.PersonalScopeID)
+		if err != nil {
+			return err
 		}
-		allowed, e := work.GatesAllowRunForContext(context.ScopeID, "", context.ID, []work.PauseGate{gate})
-		if e != nil {
-			return e
+		if len(inputs) != 1 {
+			t.Fatalf("inputs=%+v", inputs)
 		}
-		if !allowed {
-			t.Fatal("paused business context blocked isolated explanation")
+		original := inputs[0]
+		control := work.WorkContext{ID: "legacy-private-control", ScopeID: nav.PersonalScopeID, RoleID: original.RecipientRoleID, Purpose: work.PurposeControl, ControlTargetContextID: nav.FrontContextID, Workstream: "legacy-control", Revision: 1}
+		if err = tx.PutContext(control, 0); err != nil {
+			return err
 		}
-		return nil
+		copy := original
+		copy.ID, copy.EventID = "legacy-copy", "legacy-copy-event"
+		copy.RecipientContextID, copy.ControlOfInputID = control.ID, original.ID
+		if err = tx.PutInbox(copy, 0); err != nil {
+			return err
+		}
+		if err = tx.CancelObsoletePrivateControlInputs(); err != nil {
+			return err
+		}
+		if err = tx.CancelObsoletePrivateControlInputs(); err != nil {
+			return err
+		}
+		retired, err := tx.GetInbox(copy.ID)
+		if err != nil {
+			return err
+		}
+		if retired.State != work.InboxCancelled || retired.Revision != 2 {
+			t.Fatalf("retirement=%+v", retired)
+		}
+		kept, err := tx.GetInbox(original.ID)
+		if err == nil && (kept.State != work.InboxPending || kept.Revision != original.Revision || kept.RecipientContextID != nav.FrontContextID) {
+			t.Fatalf("original changed: %+v", kept)
+		}
+		return err
 	})
 }

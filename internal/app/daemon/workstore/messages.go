@@ -167,6 +167,9 @@ func (t *Tx) findInbox(scope, role, context, event string) (work.Inbox, error) {
 	return t.GetInbox(id)
 }
 func (t *Tx) PutInbox(v work.Inbox, expected int64) error {
+	if err := t.validatePrivateShellInput(v, expected); err != nil {
+		return err
+	}
 	if v.State == work.InboxProcessed {
 		if err := t.ValidateSessionGoalInputConsumption(v); err != nil {
 			return err
@@ -245,7 +248,7 @@ func (t *Tx) PutInbox(v work.Inbox, expected int64) error {
 			return err
 		}
 	}
-	if v.State == work.InboxClaimed || v.State == work.InboxProcessed {
+	if v.State == work.InboxClaimed || v.State == work.InboxProcessed && v.ShellOperationID == "" {
 		attempt, err := t.GetAttempt(v.ClaimedAttemptID)
 		if err != nil {
 			return err
@@ -292,14 +295,19 @@ func (t *Tx) PutInbox(v work.Inbox, expected int64) error {
 		if old.RecipientContextID != v.RecipientContextID && (old.RecipientContextID != "" || old.State != work.InboxPending) {
 			return fmt.Errorf("cannot change assigned inbox context")
 		}
-		if err = work.ValidateInboxTransition(old.State, v.State); err != nil {
+		if err = work.ValidateInboxTransition(old.State, v.State); err != nil && !(old.State == work.InboxPending && v.State == work.InboxProcessed && v.ShellOperationID != "" && old.ShellOperationID == v.ShellOperationID) {
 			return err
 		}
 		if old.State == work.InboxProcessed && old.ProcessingOutcomeRef != v.ProcessingOutcomeRef {
 			return fmt.Errorf("processed outcome immutable")
 		}
 	}
-	return t.record("inbox", v.ID, v.Revision, expected, v)
+	return t.atomic(func() error {
+		if err := t.record("inbox", v.ID, v.Revision, expected, v); err != nil {
+			return err
+		}
+		return t.registerPrivateInputReaction(v)
+	})
 }
 func (t *Tx) GetInbox(id string) (work.Inbox, error) {
 	var v work.Inbox

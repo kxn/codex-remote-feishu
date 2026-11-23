@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
@@ -24,6 +25,12 @@ func (p *projection) progressStatus(label, text, status string) error {
 
 func (p *projection) item() error {
 	event := p.event
+	if event.Kind == agentproto.EventItemDelta {
+		public, _ := event.Metadata["publicReasoningSummary"].(bool)
+		if !public || event.ItemKind != "reasoning_summary" {
+			return nil
+		}
+	}
 	if event.ItemID == "" {
 		return nil
 	}
@@ -56,8 +63,29 @@ func (p *projection) item() error {
 		if complete {
 			entry.Summary = "已完成分析"
 		}
-		if event.Kind == agentproto.EventItemReasoningSummaryPartAdded {
+		if event.Kind == agentproto.EventItemDelta || event.Kind == agentproto.EventItemReasoningSummaryPartAdded {
+			offsetValue, hasOffset := event.Metadata["publicSummaryOffset"]
+			if event.Kind == agentproto.EventItemDelta && !hasOffset {
+				return nil
+			}
+			if hasOffset {
+				offset := xutil.LookupIntFromAny(offsetValue)
+				key := fmt.Sprintf("%s:%d", event.ItemID, xutil.LookupIntFromAny(event.Metadata["summaryIndex"]))
+				if p.display.PublicSummaryOffsets == nil {
+					p.display.PublicSummaryOffsets = map[string]int{}
+				}
+				seen := p.display.PublicSummaryOffsets[key]
+				end := offset + len(event.Delta)
+				if offset < 0 || offset > seen || end <= seen {
+					return nil
+				}
+				event.Delta = event.Delta[seen-offset:]
+				p.display.PublicSummaryOffsets[key] = end
+			}
 			execprogress.UpsertReasoning(&p.display.Progress, event, agentproto.BackendCodex, p.now)
+			if !p.display.Progress.LastEmittedAt.IsZero() && p.now.Before(p.display.Progress.LastEmittedAt.Add(time.Second)) {
+				return nil
+			}
 			return p.publishProgress()
 		}
 		streamed, _ := event.Metadata["publicSummaryStreamed"].(bool)
@@ -252,6 +280,7 @@ func (p *projection) publishProgress() error {
 	}
 	hash := workCardHash(card)
 	if hash == v.ProgressHash && !rollover {
+		p.markReasoningPublished()
 		return nil
 	}
 	anchor := v.ProgressAnchorID
@@ -271,9 +300,17 @@ func (p *projection) publishProgress() error {
 		v.Progress.Segments = []state.ExecCommandProgressSegmentRecord{{SegmentID: id, MessageID: id, StartSeq: startSeq}}
 	}
 	v.ProgressFenceID, v.ProgressHash = id, hash
+	p.markReasoningPublished()
 	return nil
 }
 
 func workCardHash(card []byte) string {
 	return stableID("card", string(card))
+}
+
+func (p *projection) markReasoningPublished() {
+	p.display.Progress.LastEmittedAt = p.now
+	if r := p.display.Progress.Reasoning; r != nil {
+		r.LastEmittedRevision = r.Revision
+	}
 }

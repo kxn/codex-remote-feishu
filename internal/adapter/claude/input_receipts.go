@@ -28,6 +28,9 @@ func (t *Translator) observeCommandLifecycle(message map[string]any) Result {
 	if !known {
 		return Result{}
 	}
+	if command.Kind == agentproto.CommandTurnSteer && command.NativeInputAdmission != nil {
+		return t.observeAdmittedSteerLifecycle(uuid, command, message)
+	}
 	state := strings.TrimSpace(xutil.LookupStringFromAny(message["state"]))
 	for _, turn := range t.pendingTurns {
 		if turn.CommandID == command.CommandID {
@@ -62,6 +65,12 @@ func (t *Translator) observeCommandLifecycle(message map[string]any) Result {
 		}
 	}
 	if state == "cancelled" || state == "completed" {
+		// Lifecycle termination closes native input eligibility immediately.
+		// Keep the turn for its delayed result and final display, but never
+		// interpret a later command's UUID as acceptance into this old turn.
+		if t.activeTurn != nil && t.activeTurn.UserCommandUUID == uuid {
+			t.activeTurn.NativeInputClosed = true
+		}
 		for index, turn := range t.pendingTurns {
 			if turn.CommandID == command.CommandID {
 				terminal = turn

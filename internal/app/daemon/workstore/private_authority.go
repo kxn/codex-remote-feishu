@@ -10,6 +10,8 @@ import (
 // decoded wholesale from a role tool request. Model paths use MessageID+RunRef;
 // SDK Slash/card paths use the independently persisted command/interaction ID.
 type PrivateActionSource struct {
+	IngressID         string `json:",omitempty"`
+	ReactionID        string `json:",omitempty"`
 	MenuInteractionID string
 	PersonalScopeID   string
 	CommandID         string
@@ -27,7 +29,7 @@ func (t *Tx) ValidatePrivateAction(source PrivateActionSource) (work.WorkScope, 
 		return scope, work.SourceRef{}, ErrScopeDenied
 	}
 	count := 0
-	for _, id := range []string{source.CommandID, source.InteractionID, source.MessageID, source.MenuInteractionID} {
+	for _, id := range []string{source.CommandID, source.InteractionID, source.MessageID, source.MenuInteractionID, source.ReactionID, source.IngressID} {
 		if id != "" {
 			count++
 		}
@@ -36,6 +38,47 @@ func (t *Tx) ValidatePrivateAction(source PrivateActionSource) (work.WorkScope, 
 		return scope, work.SourceRef{}, fmt.Errorf("one actual human action source required")
 	}
 
+	if source.IngressID != "" {
+		raw, e := t.GetIngress(source.IngressID)
+		if e != nil {
+			return scope, work.SourceRef{}, e
+		}
+		if raw.State != work.IngressProcessed || raw.Route.ScopeID != scope.ID || raw.Envelope.ChatType != "p2p" || raw.Envelope.SenderType != "user" || raw.Envelope.ParentID == "" || raw.MessageID == "" || raw.Gateway.RoleID != scope.RoleID {
+			return scope, work.SourceRef{}, ErrScopeDenied
+		}
+		binding, e := t.GetRoleBotBinding(scope.RoleID)
+		if e != nil {
+			return scope, work.SourceRef{}, e
+		}
+		if binding.GatewayRef != raw.Gateway.GatewayRef || binding.AppID != raw.Gateway.AppID || binding.IdentityGeneration != raw.Gateway.BotGeneration {
+			return scope, work.SourceRef{}, ErrScopeDenied
+		}
+		message, e := t.GetMessage(raw.MessageID)
+		if e != nil {
+			return scope, work.SourceRef{}, e
+		}
+		if message.ScopeID != scope.ID || message.Source != (work.Actor{Kind: work.ActorPrincipal, ID: scope.PrincipalID}) || message.RecalledEvidenceRef != "" {
+			return scope, work.SourceRef{}, ErrScopeDenied
+		}
+		recalled, e := t.IsPlatformMessageRecalled(raw.Envelope.Tenant, raw.Envelope.ChatID, raw.Envelope.MessageID)
+		if e != nil {
+			return scope, work.SourceRef{}, e
+		}
+		if recalled {
+			return scope, work.SourceRef{}, ErrScopeDenied
+		}
+		return scope, work.SourceRef{Kind: "private_reply", ID: raw.ID, Version: strconv.FormatInt(raw.Revision, 10), EvidenceRef: raw.ID}, nil
+	}
+	if source.ReactionID != "" {
+		actual, proof, e := t.ValidatePrivateReactionAction(source.ReactionID)
+		if e != nil {
+			return scope, proof, e
+		}
+		if actual.ID != scope.ID {
+			return scope, proof, ErrScopeDenied
+		}
+		return scope, proof, nil
+	}
 	if source.MenuInteractionID != "" {
 		menu, e := t.GetMenuInteraction(source.MenuInteractionID)
 		if e != nil {

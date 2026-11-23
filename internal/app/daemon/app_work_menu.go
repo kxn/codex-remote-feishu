@@ -24,7 +24,11 @@ func (a *App) receiveTeamMenu(ctx context.Context, raw feishu.MenuIngressEvent) 
 		return err
 	}
 	envelope := work.MenuInteractionEnvelope{GatewayRef: raw.GatewayRef, AppID: raw.AppID, EventID: raw.EventID, Tenant: raw.Tenant, SenderIDs: raw.SenderIDs, EventKey: raw.EventKey, ClickedAt: raw.ClickedAt, ReceivedAt: raw.ReceivedAt}
-	return a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error { _, _, e := tx.AcceptMenuInteraction(envelope, gateway); return e })
+	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error { _, _, e := tx.AcceptMenuInteraction(envelope, gateway); return e })
+	if err == nil {
+		a.teamRuntime.wakeLane("menus")
+	}
+	return err
 }
 func (a *App) runTeamMenus(ctx context.Context) error {
 	var pending []workstore.MenuInteraction
@@ -134,6 +138,8 @@ func (a *App) advanceTeamMenu(ctx context.Context, menu workstore.MenuInteractio
 	case feishuapp.TeamMenuResources:
 		result, err = a.queueTeamResourcePicker(ctx, source)
 	case feishuapp.TeamMenuHistory:
+		result, err = a.queueTeamCurrentHistory(ctx, source)
+	case feishuapp.TeamMenuContexts:
 		result, err = a.queuePrivatePanel(ctx, source, "contexts", "")
 	case feishuapp.TeamMenuStatus:
 		result, err = a.queuePrivatePanel(ctx, source, "status", "")
@@ -145,7 +151,16 @@ func (a *App) advanceTeamMenu(ctx context.Context, menu workstore.MenuInteractio
 			result, err = a.queuePrivatePanel(ctx, source, "menu", "已新建私人会话。下一条消息会进入新会话。")
 		}
 	case feishuapp.TeamMenuHome:
-		result, err = a.queuePrivatePanel(ctx, source, "menu", route.Note)
+		if action, ok := control.ParseFeishuMenuActionWithoutCatalog(menu.Envelope.EventKey); ok && route.Note != "" {
+			switch action.Kind {
+			case control.ActionModelCommand, control.ActionReasoningCommand, control.ActionModeCommand, control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand, control.ActionAccessCommand, control.ActionPlanCommand, control.ActionVerboseCommand:
+				result, err = a.handleTeamSettingsCommand(ctx, source, action)
+			default:
+				result, err = a.queuePrivatePanel(ctx, source, "menu", route.Note)
+			}
+		} else {
+			result, err = a.queuePrivatePanel(ctx, source, "menu", route.Note)
+		}
 	default:
 		return fmt.Errorf("unsupported team menu action %q", route.Action)
 	}

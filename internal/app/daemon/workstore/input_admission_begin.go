@@ -64,7 +64,7 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 		if e != nil {
 			return e
 		}
-		if worker.Revision != req.ExpectedWorkerRevision || attempt.RunRef != req.RunRef || attempt.State != work.AttemptRunning || worker.State != work.WorkerBusy || worker.Controller != work.ControllerAutomatic || worker.Backend != work.BackendCodex {
+		if worker.Revision != req.ExpectedWorkerRevision || attempt.RunRef != req.RunRef || attempt.State != work.AttemptRunning || worker.State != work.WorkerBusy || worker.Controller != work.ControllerAutomatic || (worker.Backend != work.BackendCodex && worker.Backend != work.BackendClaude) {
 			return ErrConflict
 		}
 		if e = work.ValidateAttemptBinding(attempt, worker); e != nil {
@@ -139,8 +139,14 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 			return ErrConflict
 		}
 		command := req.Command
-		if command.Kind != agentproto.CommandTurnSteer || command.CommandID == "" || command.Execution == nil || command.Execution.AttemptID != attempt.ID || command.Execution.RunRef != attempt.RunRef.RunID || !command.Execution.SameOwner(carrier.Owner) || command.Target.ThreadID != worker.NativeSessionID || command.Target.TurnID == "" || len(command.Prompt.Inputs) == 0 {
+		if command.Kind == agentproto.CommandThreadShellCommand {
 			return ErrScopeDenied
+		}
+		if command.Kind != agentproto.CommandTurnSteer || command.CommandID == "" || command.Execution == nil || command.Execution.AttemptID != attempt.ID || command.Execution.RunRef != attempt.RunRef.RunID || !command.Execution.SameOwner(carrier.Owner) || command.Target.ThreadID != worker.NativeSessionID || command.Target.TurnID == "" || (len(command.Prompt.Inputs) == 0 && command.Kind == agentproto.CommandTurnSteer) {
+			return ErrScopeDenied
+		}
+		if e = t.validateReactionAdmission(req.Source, command, req.InputIDs); e != nil {
+			return e
 		}
 		binding, e := t.GetRoleBotBinding(worker.RoleID)
 		if e != nil {
@@ -167,6 +173,22 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 		if !turn.Started || turn.TerminalStatus != "" || turn.Binding != *command.Execution {
 			return ErrConflict
 		}
+		if req.Source.IngressID != "" {
+			raw, e := t.GetIngress(req.Source.IngressID)
+			if e != nil {
+				return e
+			}
+			if len(req.InputIDs) != 1 {
+				return ErrScopeDenied
+			}
+			input, e := t.GetInbox(req.InputIDs[0])
+			if e != nil {
+				return e
+			}
+			if input.MessageID != raw.MessageID {
+				return ErrScopeDenied
+			}
+		}
 		seen := map[string]bool{}
 		for _, id := range attempt.InputIDs {
 			seen[id] = true
@@ -180,7 +202,7 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 			if e != nil {
 				return e
 			}
-			if input.State != work.InboxPending || input.ScopeID != scope.ID || input.RecipientRoleID != worker.RoleID || input.RecipientContextID != wc.ID || input.TaskID != attempt.TaskID || input.AvailableAt.After(req.Now) || input.ControlOfInputID != "" || input.SessionGoalIntentID != "" {
+			if input.ShellOperationID != "" || input.State != work.InboxPending || input.ScopeID != scope.ID || input.RecipientRoleID != worker.RoleID || input.RecipientContextID != wc.ID || input.TaskID != attempt.TaskID || input.AvailableAt.After(req.Now) || input.ControlOfInputID != "" || input.SessionGoalIntentID != "" {
 				return ErrScopeDenied
 			}
 		}
@@ -217,6 +239,11 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 			input.State = work.InboxClaimed
 			input.ClaimedAttemptID = attempt.ID
 			if e = t.PutInbox(input, before); e != nil {
+				return e
+			}
+		}
+		if req.Source.ReactionID != "" {
+			if e = t.FinishPrivateReactionAction(req.Source.ReactionID, ""); e != nil {
 				return e
 			}
 		}

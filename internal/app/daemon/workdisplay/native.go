@@ -20,9 +20,11 @@ import (
 
 func IsOutput(event agentproto.Event) bool {
 	switch event.Kind {
-	case agentproto.EventItemReasoningSummaryPartAdded:
+	case agentproto.EventItemDelta, agentproto.EventItemReasoningSummaryPartAdded:
 		public, _ := event.Metadata["publicReasoningSummary"].(bool)
 		return public && event.ItemKind == "reasoning_summary" && event.Delta != ""
+	case agentproto.EventThreadTokenUsageUpdated:
+		return event.TokenUsage != nil
 	case agentproto.EventTurnPlanUpdated, agentproto.EventTurnDiffUpdated, agentproto.EventItemFileChangePatchUpdated, agentproto.EventSystemError:
 		return true
 	case agentproto.EventItemStarted, agentproto.EventItemCompleted:
@@ -156,6 +158,9 @@ func (p *projection) apply() error {
 		p.collectFiles()
 	}
 	switch event.Kind {
+	case agentproto.EventThreadTokenUsageUpdated:
+		p.display.LatestTokenUsage = agentproto.CloneThreadTokenUsage(event.TokenUsage)
+		return nil
 	case agentproto.EventTurnStarted:
 		if !p.display.StartedAt.IsZero() {
 			return nil
@@ -199,7 +204,7 @@ func (p *projection) apply() error {
 		return p.notice("执行遇到问题", failureMessage(event, "若本轮停止，可以在当前私聊重新发送需要继续的要求。"))
 	case agentproto.EventRequestStarted:
 		return nil // Workrequests owns the interactive question and its lifecycle.
-	case agentproto.EventItemStarted, agentproto.EventItemCompleted, agentproto.EventItemFileChangePatchUpdated, agentproto.EventItemReasoningSummaryPartAdded:
+	case agentproto.EventItemDelta, agentproto.EventItemStarted, agentproto.EventItemCompleted, agentproto.EventItemFileChangePatchUpdated, agentproto.EventItemReasoningSummaryPartAdded:
 		return p.item()
 	default:
 		return nil
@@ -319,5 +324,8 @@ func stableID(parts ...string) string {
 
 func (p *projection) outputID() string {
 	p.ordinal++
+	if p.event.Journal == nil {
+		return fmt.Sprintf("private-display-live-%020d-%05d-%s", p.display.Revision, p.ordinal, p.display.ID)
+	}
 	return fmt.Sprintf("private-display-%020d-%05d-%s", p.event.Journal.Sequence, p.ordinal, p.display.ID)
 }

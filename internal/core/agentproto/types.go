@@ -265,8 +265,9 @@ type Command struct {
 // thread/shellCommand endpoint. Payload is consumed by the local wrapper and
 // never placed in the shell command string.
 type ShellCommand struct {
-	Payload string `json:"payload,omitempty"`
-	Command string `json:"command,omitempty"`
+	OperationID string `json:"operationId,omitempty"`
+	Payload     string `json:"payload,omitempty"`
+	Command     string `json:"command,omitempty"`
 }
 
 type GoalPrecondition struct {

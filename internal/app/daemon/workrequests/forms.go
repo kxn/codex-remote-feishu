@@ -27,11 +27,24 @@ func readForm(tx *workstore.Tx, request workstore.NativeRequest) (orchestrator.R
 }
 
 func queueForm(tx *workstore.Tx, request workstore.NativeRequest, form orchestrator.RequestFormState, interactionIDs ...string) error {
-	view, err := workui.Destination(tx, request.ScopeID, request.Binding.RoleID, request.Binding.AttemptID)
-	if err != nil {
+	viewID := workui.ID(request.ID, strconv.FormatInt(request.Revision, 10))
+	var response work.Operation
+	if request.State == "response_pending" && request.ResponseOperationID != "" {
+		var err error
+		response, err = tx.GetOperation(request.ResponseOperationID)
+		if err != nil {
+			return err
+		}
+		viewID = workui.ID(request.ID, strconv.FormatInt(request.Revision, 10), "response", response.ID, strconv.FormatInt(response.Revision, 10))
+	}
+	view, blocked, err := requestPresentationDestination(tx, request, viewID)
+	if err != nil || blocked {
 		return err
 	}
-	view.ID = workui.ID(request.ID, strconv.FormatInt(request.Revision, 10))
+	view.ID = viewID
+	if view.ReplacesViewID == view.ID {
+		return nil
+	}
 	view.SurfaceKey = "request:" + request.ID
 	view.Kind = "native.request"
 	view.TargetID = request.ID
@@ -42,11 +55,36 @@ func queueForm(tx *workstore.Tx, request workstore.NativeRequest, form orchestra
 		card, err = workui.RequestFormCard(view.ID, form)
 	} else {
 		text := "答复正在交给 Agent，收到原生确认后会更新。"
+		if request.State == "response_pending" {
+			switch response.State {
+			case work.OperationRetryable:
+				text = "已保存你的选择，但尚未送到后端，系统会自动重试。"
+				if response.LastError != "" {
+					detail := []rune(response.LastError)
+					if len(detail) > 400 {
+						detail = detail[:400]
+					}
+					text += "\n原因：" + string(detail)
+				}
+			case work.OperationUnknown:
+				text = "已保存你的选择，尚未确认是否送达。系统正在核对，不会重复发送。"
+			}
+		}
 		if request.State == "resolved" {
 			text = "这项请求已结束。"
 		} else if request.State == "stale" {
 			text = "这项请求对应的执行或内容已变化，旧答复不会再被采用。"
 		}
+		if request.ResolvedEvidenceRef != "" {
+			evidence, e := tx.GetContent(request.ScopeID, request.ResolvedEvidenceRef)
+			if e != nil {
+				return e
+			}
+			if evidence.MediaType == workstore.NativeRequestTerminalEvidenceType {
+				text = "执行已结束，这项原生请求不再等待答复。已有选择和发送记录已保留。"
+			}
+		}
+
 		card, err = workui.Card(view.ID, workui.Panel{Title: form.Title, Paragraphs: []string{text}})
 	}
 	if err != nil {
@@ -67,6 +105,7 @@ func queueForm(tx *workstore.Tx, request workstore.NativeRequest, form orchestra
 }
 
 func (s *Service) ProjectForms(ctx context.Context) error {
+	recoveryErr := s.RecoverUnsentResponses(ctx, 32)
 	var ids []string
 	err := s.store.Within(ctx, func(tx *workstore.Tx) error {
 		scopes, e := tx.ListScopes()
@@ -90,6 +129,9 @@ func (s *Service) ProjectForms(ctx context.Context) error {
 		return err
 	}
 	var failures []error
+	if recoveryErr != nil {
+		failures = append(failures, recoveryErr)
+	}
 	for _, id := range ids {
 		if err := s.projectForm(ctx, id); err != nil {
 			failures = append(failures, err)
@@ -102,6 +144,14 @@ func (s *Service) projectForm(ctx context.Context, id string) error {
 		request, err := tx.GetNativeRequest(id)
 		if err != nil {
 			return err
+		}
+		if ended, e := tx.CloseNativeRequestForTerminalTurn(id, time.Now().UTC()); e != nil {
+			return e
+		} else if ended {
+			request, e = tx.GetNativeRequest(id)
+			if e != nil {
+				return e
+			}
 		}
 		if request.State == "open" || request.State == "response_pending" {
 			worker, e := tx.GetWorker(request.Binding.WorkerSessionID)

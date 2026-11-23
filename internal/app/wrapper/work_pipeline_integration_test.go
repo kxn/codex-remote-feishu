@@ -158,7 +158,17 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 		}
 		return nil
 	})
-	ingress, err := workingress.New(store, workingress.Config{Directory: pipelineDirectory{}})
+	var ingress *workingress.Ingress
+	ingressConfig := workingress.Config{Directory: pipelineDirectory{}}
+	var steerCommands pipelineSteerCommandHandler
+	if os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" {
+		ingressConfig.PrivateCommands = &steerCommands
+	}
+	var sendMediaSDK func(work.RawIngressEnvelope)
+	if os.Getenv("FSC_NATIVE_PIPELINE_IMAGES") == "true" || os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" {
+		ingressConfig.Expander, sendMediaSDK = pipelineMediaSDK(t, ctx, func(c context.Context, r work.RawIngressEnvelope) error { _, e := ingress.Receive(c, r); return e })
+	}
+	ingress, err = workingress.New(store, ingressConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +180,42 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 	if collaboration {
 		raw.RawContent = `{"text":"Add CSV and Excel export. Ask the reviewer to check the result."}`
 	}
-	if _, err = ingress.Receive(ctx, raw); err != nil {
+	if sendMediaSDK != nil && os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" {
+		sendMediaSDK(raw)
+	} else if sendMediaSDK != nil {
+		mode := os.Getenv("FSC_NATIVE_PIPELINE_MEDIA_POST")
+		if mode == "captioned-post" || mode == "image-only-post" {
+			post := raw
+			post.MessageType = "post"
+			post.EventID = "sdk-post"
+			post.MessageID = "sdk-post"
+			caption := ""
+			if mode == "captioned-post" {
+				caption = `{"tag":"text","text":"Complete my authorized work and reply here."},`
+			}
+			post.RawContent = `{"zh_cn":{"title":"","content":[[` + caption + `{"tag":"img","image_key":"image-one"},{"tag":"img","image_key":"image-two"}]]}}`
+			sendMediaSDK(post)
+			if mode == "image-only-post" {
+				sendMediaSDK(raw)
+			}
+		} else {
+			for i, name := range []string{"image-one", "image-two"} {
+				picture := raw
+				picture.EventID = name
+				picture.MessageID = name
+				picture.MessageType = "image"
+				picture.RawContent = fmt.Sprintf(`{"image_key":%q}`, name)
+				picture.ReceivedAt = raw.ReceivedAt.Add(time.Duration(i) * time.Millisecond)
+				sendMediaSDK(picture)
+				if i == 0 {
+					redelivery := picture
+					redelivery.EventID += "-redelivery"
+					sendMediaSDK(redelivery)
+				}
+			}
+			sendMediaSDK(raw)
+		}
+	} else if _, err = ingress.Receive(ctx, raw); err != nil {
 		t.Fatal(err)
 	}
 	processed, err := ingress.ProcessPending(ctx, 16)
@@ -193,10 +238,25 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 		if e != nil {
 			return e
 		}
-		if len(inputs) != 1 {
-			return fmt.Errorf("SDK produced %d inputs", len(inputs))
+		wantInputs := 1
+		if sendMediaSDK != nil && os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") != "true" {
+			wantInputs = 3
+			if os.Getenv("FSC_NATIVE_PIPELINE_MEDIA_POST") == "captioned-post" {
+				wantInputs = 1
+			}
+			if os.Getenv("FSC_NATIVE_PIPELINE_MEDIA_POST") == "image-only-post" {
+				wantInputs = 2
+			}
+		}
+		if len(inputs) != wantInputs {
+			return fmt.Errorf("SDK produced %d inputs, need %d", len(inputs), wantInputs)
 		}
 		original = inputs[0]
+		for _, input := range inputs {
+			if !input.AwaitingText {
+				original = input
+			}
+		}
 		return nil
 	})
 	principalID := scope.PrincipalID
@@ -376,6 +436,7 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 		t.Fatal(err)
 	}
 	journey := pipelineCollaborationJourney{store: store, scopeID: scope.ID, ingress: ingress, original: raw}
+	steerSent := false
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
 		tick, e := engine.Tick(ctx)
@@ -397,6 +458,13 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 		case id := <-reconcile:
 			report(coordinator.Reconcile(ctx, id))
 		default:
+		}
+		if os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" && !steerSent {
+			var e error
+			steerSent, e = pipelineInjectClaudeSteer(t, ctx, store, service, actualDriver, ingress, sendMediaSDK, raw, scope, original, root, &steerCommands)
+			if e != nil {
+				t.Fatal(e)
+			}
 		}
 		complete := false
 		if collaboration {
@@ -444,6 +512,16 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 	}
 	if attempt.ID == "" {
 		t.Fatal("actual engine never admitted the SDK input")
+	}
+	if os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" {
+		if !steerSent {
+			t.Fatal("running turn never received queued images")
+		}
+		if os.Getenv("FSC_NATIVE_PIPELINE_PRIVATE_SHELL") != "" {
+			verifyPipelinePrivateShellSettled(t, store, scope, original)
+		} else {
+			verifyPipelineClaudeSteerSettled(t, store, scope)
+		}
 	}
 	tx(func(tx *workstore.Tx) error {
 		saved, e := tx.GetAttempt(attempt.ID)

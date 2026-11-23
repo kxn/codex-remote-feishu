@@ -137,7 +137,11 @@ func (p *projection) finalSummary() *control.FinalTurnSummary {
 	if !p.display.StartedAt.IsZero() && !p.now.Before(p.display.StartedAt) {
 		summary.Elapsed = p.now.Sub(p.display.StartedAt)
 	}
-	if usage := p.event.TokenUsage; usage != nil {
+	usage := p.event.TokenUsage
+	if usage == nil {
+		usage = p.display.LatestTokenUsage
+	}
+	if usage != nil {
 		summary.Usage = usageBreakdown(usage.Last)
 		if p.backend != work.BackendClaude {
 			summary.UsageLabel = "最近一次模型请求"

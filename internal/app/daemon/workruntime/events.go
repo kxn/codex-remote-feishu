@@ -14,7 +14,7 @@ import (
 func (c *Coordinator) HandleEvent(ctx context.Context, currentTransportInstance string, event agentproto.Event) error {
 	if event.Journal == nil {
 		if event.Kind == agentproto.EventItemDelta || event.Kind == agentproto.EventThreadTokenUsageUpdated {
-			return nil
+			return c.applyLivePrivateOutput(ctx, currentTransportInstance, event)
 		}
 		return fmt.Errorf("critical worker event requires durable journal identity")
 	}
@@ -117,6 +117,20 @@ func (c *Coordinator) resolveBinding(tx *workstore.Tx, carrier workstore.Carrier
 }
 
 func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegistration, event agentproto.Event, drain bool) (string, error) {
+	if handled, attempt, e := c.applyPrivateShellBoundary(tx, carrier, event); handled || e != nil {
+		return attempt, e
+	}
+	if event.Kind == agentproto.EventNativeShellRPCResult || event.Kind == agentproto.EventNativeShellItemObserved {
+		operation, err := tx.ApplyPrivateShellEvent(event, c.options.Clock())
+		if err != nil {
+			return "", err
+		}
+		if e := workdisplay.ProjectPrivateShellResult(tx, operation, event, c.options.Clock()); e != nil {
+			return "", fmt.Errorf("project private shell: %w", e)
+		}
+		return c.resolvePrivateShellBoundaries(tx, carrier, operation)
+	}
+
 	if event.Kind == agentproto.EventRuntimeMCPResult || event.Kind == agentproto.EventMCPOAuthLoginURLReady || event.Kind == agentproto.EventMCPOAuthLoginCompleted {
 		return "", c.applyMCPReceipt(tx, carrier, event)
 	}
@@ -341,6 +355,11 @@ func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegi
 				return "", e
 			}
 			return "", c.gate(tx, carrier, binding.AttemptID, "native_session_binding_conflict")
+		}
+	}
+	if drain && event.Kind == agentproto.EventNativeTurnBindingObserved {
+		if err := c.replayPrivateShellBoundariesForModel(tx, carrier, event); err != nil {
+			return "", err
 		}
 	}
 	if current && event.Kind == agentproto.EventTurnStarted {

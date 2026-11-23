@@ -54,7 +54,7 @@ func New(store *workstore.Store, transport Transport) (*Driver, error) {
 
 func (d *Driver) SendCommand(ctx context.Context, instanceID string, command agentproto.Command) error {
 	if d.registrar == nil || command.Execution == nil {
-		return fmt.Errorf("registered worker command required")
+		return &PreSendError{Err: fmt.Errorf("registered worker command required")}
 	}
 	var incarnation string
 	err := d.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -69,13 +69,13 @@ func (d *Driver) SendCommand(ctx context.Context, instanceID string, command age
 		return nil
 	})
 	if err != nil {
-		return err
+		return &PreSendError{Err: err}
 	}
 	if err = d.registrar.RegisterCommand(ctx, incarnation, command); err != nil {
-		return err
+		return &PreSendError{Err: err}
 	}
 	if err = ctx.Err(); err != nil {
-		return err
+		return &PreSendError{Err: err}
 	}
 	return d.transport.SendCommand(instanceID, command)
 }

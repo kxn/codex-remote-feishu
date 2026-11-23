@@ -35,7 +35,11 @@ func (a *App) teamIngressHook() *feishu.RawIngressHook {
 			if err != nil {
 				return err
 			}
-			return a.adoptTeamLegacyHistory(ctx, receipt.IngressID)
+			if err = a.adoptTeamLegacyHistory(ctx, receipt.IngressID); err != nil {
+				return err
+			}
+			r.wakeLane("ingress")
+			return nil
 		},
 		ReceiveInteraction:   a.receiveTeamInteraction,
 		ReceiveMenu:          a.receiveTeamMenu,

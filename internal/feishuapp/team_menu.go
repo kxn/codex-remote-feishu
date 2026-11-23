@@ -13,6 +13,7 @@ const (
 	TeamMenuProjects     TeamMenuAction = "projects"
 	TeamMenuResources    TeamMenuAction = "resources"
 	TeamMenuHistory      TeamMenuAction = "history"
+	TeamMenuContexts     TeamMenuAction = "contexts"
 	TeamMenuSettings     TeamMenuAction = "settings"
 	TeamMenuReview       TeamMenuAction = "review"
 	TeamMenuAutoWhip     TeamMenuAction = "autowhip"
@@ -20,13 +21,13 @@ const (
 )
 
 var teamMenus = [...]MenuRequirement{
-	{Key: string(TeamMenuHome), Name: "工作菜单", Description: "打开私人工作入口。"},
-	{Key: string(TeamMenuStatus), Name: "工作状态", Description: "查看当前工作及执行状态。"},
-	{Key: string(TeamMenuSteer), Name: "追加待办", Description: "当前 Codex 执行支持时，将可追加的待办并入本轮。"},
-	{Key: string(TeamMenuProjects), Name: "项目", Description: "打开有权访问的项目列表。"},
-	{Key: string(TeamMenuResources), Name: "工作资料", Description: "查看当前工作的资料和目录。"},
-	{Key: string(TeamMenuHistory), Name: "历史工作", Description: "回看已有的私人工作。"},
-	{Key: string(TeamMenuSettings), Name: "执行设置", Description: "查看和调整当前工作的执行设置。"},
+	{Key: string(TeamMenuHome), Name: "命令菜单", Description: "打开私人工作菜单。"},
+	{Key: string(TeamMenuStop), Name: "停止推理", Description: "中断当前执行，并取消此前排队的输入。"},
+	{Key: string(TeamMenuSteer), Name: "全部加速", Description: "当前 Codex 执行支持时，将可追加的待办并入本轮。"},
+	{Key: string(TeamMenuNew), Name: "新建会话", Description: "准备一个新会话。"},
+	{Key: "reasoning", Name: "推理强度", Description: "打开推理强度参数卡。"},
+	{Key: "model", Name: "使用模型", Description: "打开模型参数卡。"},
+	{Key: "access", Name: "执行权限", Description: "打开执行权限参数卡。"},
 }
 
 type TeamMenuRoute struct {
@@ -37,22 +38,18 @@ type TeamMenuRoute struct {
 
 func ResolveTeamMenu(key string) TeamMenuRoute {
 	key = strings.ToLower(strings.TrimSpace(key))
-	for _, menu := range teamMenus {
-		if key == menu.Key {
-			return TeamMenuRoute{Action: TeamMenuAction(menu.Key)}
-		}
-	}
-
 	// Already published app menus can still send their previous event keys.
 	switch key {
-	case "steer_all":
+	case "menu", "status", "settings", "projects", "resources", "history":
+		return TeamMenuRoute{Action: TeamMenuAction(key)}
+	case "steerall", "steer_all":
 		return TeamMenuRoute{Action: TeamMenuSteer}
 	case "project":
 		return TeamMenuRoute{Action: TeamMenuProjects}
 	case "workspace":
 		return TeamMenuRoute{Action: TeamMenuResources}
 	case "list", "use", "useall":
-		return TeamMenuRoute{Action: TeamMenuHistory}
+		return TeamMenuRoute{Action: TeamMenuContexts}
 	case "model", "reasoning", "access", "plan", "verbose":
 		return TeamMenuRoute{Action: TeamMenuSettings, Argument: key}
 	case "mode":
@@ -69,7 +66,7 @@ func ResolveTeamMenu(key string) TeamMenuRoute {
 		return TeamMenuRoute{Action: TeamMenuAutoContinue, Argument: mode}
 	case string(TeamMenuStop):
 		return TeamMenuRoute{Action: TeamMenuStop}
-	case string(TeamMenuNew):
+	case string(TeamMenuNew), "newthread":
 		return TeamMenuRoute{Action: TeamMenuNew}
 	default:
 		return TeamMenuRoute{Action: TeamMenuHome, Note: "这个菜单入口已不可用。请从工作菜单选择当前可用的操作。"}

@@ -343,6 +343,43 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 		t.Fatalf("literal /menu reused an old topic or destination entry: creates=%d entries=%d card=%s", creates.Load(), entrySends.Load(), literal)
 	}
 	exercisePrivateMenuSDKShortcuts(t, event, func() error { return a.runTeamMenus(ctx) }, publish)
+	// A published parameter shortcut must persist the choice, not merely open
+	// a settings page with the same title.
+	event("shortcut-plan-on", "application.bot.menu_v6", map[string]any{"event_key": "plan_on", "operator": map[string]any{"operator_id": map[string]string{"open_id": "ou_human"}}})
+	if err := a.runTeamMenus(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if card := publish(); !strings.Contains(card, "已保存") {
+		t.Fatalf("parameter shortcut did not report saved: %s", card)
+	}
+	frontID := readFront().FrontContextID
+	pickerTx(t, a, func(tx *workstore.Tx) error {
+		prefs, err := tx.GetContextPreferences(frontID)
+		if err != nil {
+			return err
+		}
+		if prefs.PlanMode == nil || *prefs.PlanMode != "on" {
+			t.Fatalf("parameter shortcut did not persist plan mode: %+v", prefs)
+		}
+		return nil
+	})
+	setTestWorkBotSettings(t, a, state.BotCapabilitySettingsRecord{GatewayID: gatewayID, Backend: agentproto.BackendCodex, CodexProfileID: state.NativeCodexProfileID})
+	event("shortcut-reasoning-high-persist", "application.bot.menu_v6", map[string]any{"event_key": "reasoning_high", "operator": map[string]any{"operator_id": map[string]string{"open_id": "ou_human"}}})
+	if err := a.runTeamMenus(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if card := publish(); !strings.Contains(card, "已保存") {
+		t.Fatalf("reasoning shortcut did not report saved: %s", card)
+	}
+	settingsFound := false
+	for _, saved := range a.botCapabilitySettingsState.store.Entries() {
+		if saved.GatewayID == gatewayID && saved.PromptOverride.ReasoningEffort == "high" {
+			settingsFound = true
+		}
+	}
+	if !settingsFound {
+		t.Fatal("reasoning_high did not persist the selected reasoning effort")
+	}
 }
 
 func menuSDKAction(t *testing.T, card, action, setting string) map[string]any {

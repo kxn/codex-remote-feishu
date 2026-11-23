@@ -85,9 +85,12 @@ func TestDeployTemplateStaysInSyncWithManifest(t *testing.T) {
 
 	for _, menu := range manifest.Menus {
 		route := ResolveTeamMenu(menu.Key)
-		if string(route.Action) != menu.Key || route.Note != "" {
+		if route.Note != "" {
 			t.Fatalf("advertised menu %q does not route directly: %#v", menu.Key, route)
 		}
+	}
+	if !reflect.DeepEqual(gotMenus, []string{"menu", "stop", "steerall", "new", "reasoning", "model", "access"}) {
+		t.Fatalf("recommended menu changed: %#v", gotMenus)
 	}
 
 	for index, item := range parsed.Bot.Menus {
@@ -221,7 +224,7 @@ func TestResolveTeamMenuPublishedCompatibility(t *testing.T) {
 	if got := ResolveTeamMenu("unknown"); got.Action != TeamMenuHome || got.Note == "" {
 		t.Errorf("unknown key must explain the fallback: %#v", got)
 	}
-	for key, action := range map[string]TeamMenuAction{"stop": TeamMenuStop, "new": TeamMenuNew, "list": TeamMenuHistory} {
+	for key, action := range map[string]TeamMenuAction{"stop": TeamMenuStop, "new": TeamMenuNew, "newthread": TeamMenuNew, "history": TeamMenuHistory, "list": TeamMenuContexts} {
 		if got := ResolveTeamMenu(key); got.Action != action || got.Note != "" {
 			t.Errorf("key %q must use its live private operation: %#v", key, got)
 		}

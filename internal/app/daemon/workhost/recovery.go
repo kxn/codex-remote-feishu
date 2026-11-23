@@ -45,8 +45,31 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 	var operation work.Operation
 	var rebuilt work.Operation
 	var carrier workstore.CarrierRegistration
+	var personal bool
+	var rejectedResume bool
 	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
-		var err error
+		scope, err := tx.GetScope(previous.ScopeID)
+		if err != nil {
+			return err
+		}
+		personal = scope.Kind == work.ScopePersonal
+		if gate, e := tx.GetRuntimeGate(previous.ID); e == nil && gate.Reason == "snapshot_rebuild_required" && gate.AttemptID != "" {
+			attempt, e := tx.GetAttempt(gate.AttemptID)
+			if e != nil {
+				return e
+			}
+			command, e := tx.GetNativeCommand(attempt.CommandID)
+			if e != nil {
+				return e
+			}
+			rejectedResume, e = tx.IsNativeResumeRejection(command)
+			if e != nil {
+				return e
+			}
+		} else if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+			return e
+		}
+
 		operation, err = tx.GetOperation(launchID(*previous))
 		if err != nil {
 			return err
@@ -76,19 +99,19 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 	if err != nil {
 		return existingPreparation{}, err
 	}
-	same := record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.HostID == h.config.HostID && sameRuntimePolicy(record, settings) && record.Snapshot.NativeMemoryPolicyVersion == agentproto.NativeMemoryPolicyVersion && record.SettingsRevision == role.SettingsRevision && record.RoleDescriptionVersion == role.DescriptionVersion && record.Snapshot.Owner.BotGeneration == binding.IdentityGeneration && record.Snapshot.Owner.ControllerGeneration == previous.ControllerGeneration && record.Snapshot.InstructionBundle.Revision == bundle.Revision && record.ProfileID == settings.ProfileID && record.Backend == settings.Backend && record.Snapshot.CWD == settings.Location.Cwd && previous.LocationID == settings.Location.ID && previous.LocationGeneration == settings.Location.Generation
+	same := record.ConnectionIdentity == settings.ConnectionIdentity && record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.HostID == h.config.HostID && sameRuntimePolicy(record, settings) && record.Snapshot.NativeMemoryPolicyVersion == agentproto.NativeMemoryPolicyVersion && record.SettingsRevision == role.SettingsRevision && record.RoleDescriptionVersion == role.DescriptionVersion && record.Snapshot.Owner.BotGeneration == binding.IdentityGeneration && record.Snapshot.Owner.ControllerGeneration == previous.ControllerGeneration && record.Snapshot.InstructionBundle.Revision == bundle.Revision && record.ProfileID == settings.ProfileID && record.Backend == settings.Backend && record.Snapshot.CWD == settings.Location.Cwd && previous.LocationID == settings.Location.ID && previous.LocationGeneration == settings.Location.Generation
+	compatibleSnapshot := !rejectedResume && (same || (personal && privateHistoryCompatible(record, settings, *previous, role, binding, h.config.HostID)))
 	if rebuilt.State == work.OperationConfirmed && rebuilt.NextAttemptAt != nil {
 		if h.config.Now().Before(*rebuilt.NextAttemptAt) {
 			return existingPreparation{}, nil
 		}
-		return existingPreparation{replace: true, preserveNativeSession: same && previous.NativeSessionID != "" && ctx.Value(freshHistoryKey{}) == nil}, nil
+		return existingPreparation{replace: true, preserveNativeSession: compatibleSnapshot && previous.NativeSessionID != "" && ctx.Value(freshHistoryKey{}) == nil}, nil
 	}
 	if operation.State == work.OperationSending || operation.State == work.OperationUnknown {
 		if err = h.confirmObservedLaunch(ctx, *previous, &operation); err != nil {
 			return existingPreparation{}, err
 		}
 	}
-	compatibleSnapshot := same
 	switch operation.State {
 	case work.OperationPrepared:
 		if same {
@@ -129,7 +152,7 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 	if h.config.Runtime == nil || h.config.StopCarrier == nil {
 		return existingPreparation{}, fmt.Errorf("verified safe rebuild requires native inspector and exact carrier stop")
 	}
-	if err = h.rebuildCarrier(ctx, previous, carrier, false); err != nil {
+	if err = h.rebuildCarrier(ctx, previous, carrier, compatibleSnapshot && previous.NativeSessionID != "" && ctx.Value(freshHistoryKey{}) == nil); err != nil {
 		return existingPreparation{}, err
 	}
 	var preserve bool

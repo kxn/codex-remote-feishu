@@ -1,9 +1,11 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workingress"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workruntime"
@@ -12,6 +14,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worktransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,6 +34,17 @@ func (d steerSDKDirectory) ResolveMention(context.Context, work.IngressGateway, 
 	return "", fmt.Errorf("no mentions")
 }
 
+type realReplyExpander struct{ gateway *feishu.LiveGateway }
+
+func (e realReplyExpander) Expand(ctx context.Context, raw work.RawIngressEnvelope) (workingress.ExpandedMessage, error) {
+	v, err := e.gateway.ExpandTeamMessage(ctx, raw)
+	result := workingress.ExpandedMessage{Text: v.Text, Complete: v.Complete, Issues: v.Issues}
+	for _, a := range v.Attachments {
+		result.Attachments = append(result.Attachments, workingress.ExpandedAttachment{Kind: a.Kind, MediaType: a.MediaType, FileName: a.FileName, SourceMessageID: a.SourceMessageID, Data: a.Data})
+	}
+	return result, err
+}
+
 type steerOuterRelay struct {
 	send func(string, agentproto.Command) error
 }
@@ -37,17 +54,62 @@ func (r *steerOuterRelay) SendCommand(instance string, command agentproto.Comman
 }
 
 func TestPrivateSteerAllUsesDurableNativeAcceptanceAndEffectiveReport(t *testing.T) {
+	runPrivateSteerAll(t, false)
+}
+func TestPrivateSteerAllMixedQueuedImagesUseDurableNativeAcceptance(t *testing.T) {
+	runPrivateSteerAll(t, true)
+}
+func TestPrivateReplyAutoSteerUsesDurableNativeAcceptance(t *testing.T) {
+	runPrivateSteerAll(t, false, true)
+}
+func TestPrivateReplyImageAutoSteerUsesDurableNativeAcceptance(t *testing.T) {
+	runPrivateSteerAll(t, true, true)
+}
+func runPrivateSteerAll(t *testing.T, withImages bool, automatic ...bool) {
+	auto := len(automatic) != 0 && automatic[0]
+	var replyIngressID string
 	a, source := teamPickerFixture(t)
 	ctx := t.Context()
 	s := a.teamRuntime.store
-	ingress, e := workingress.New(s, workingress.Config{Directory: steerSDKDirectory{source.Gateway}, PrivateCommands: teamPrivateCommands{app: a}})
+	var expander workingress.Expander = steerMediaExpander{}
+	if auto {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.Contains(r.URL.Path, "auth/v3/tenant_access_token"):
+				fmt.Fprint(w, `{"code":0,"tenant_access_token":"fixture-token","expire":7200}`)
+			case strings.HasSuffix(r.URL.Path, "/messages/original-request"):
+				if withImages {
+					fmt.Fprintf(w, `{"code":0,"data":{"items":[{"message_id":"original-request","chat_id":%q,"msg_type":"image","body":{"content":"{\"image_key\":\"parent-fixture\"}"}}]}}`, source.ChatID)
+					return
+				}
+				fmt.Fprintf(w, `{"code":0,"data":{"items":[{"message_id":"original-request","chat_id":%q,"msg_type":"text","body":{"content":"{\"text\":\"Original authorized work\"}"}}]}}`, source.ChatID)
+			case strings.HasSuffix(r.URL.Path, "/resources/fixture"), strings.HasSuffix(r.URL.Path, "/resources/parent-fixture"):
+				w.Header().Set("Content-Type", "image/png")
+				_, _ = w.Write(steerImageBytes)
+			default:
+				t.Errorf("unexpected SDK request %s", r.URL.Path)
+				http.NotFound(w, r)
+			}
+		}))
+		t.Cleanup(server.Close)
+		expander = realReplyExpander{feishu.NewLiveGateway(feishu.LiveGatewayConfig{GatewayID: source.Gateway.GatewayRef, AppID: source.Gateway.AppID, AppSecret: "fixture", Domain: server.URL})}
+	}
+	ingress, e := workingress.New(s, workingress.Config{Directory: steerSDKDirectory{source.Gateway}, PrivateCommands: teamPrivateCommands{app: a}, Expander: expander})
 	if e != nil {
 		t.Fatal(e)
 	}
 	receive := func(id, text string) {
 		t.Helper()
 		raw, _ := json.Marshal(map[string]any{"text": text})
-		if _, e := ingress.Receive(ctx, work.RawIngressEnvelope{GatewayRef: source.Gateway.GatewayRef, AppID: source.Gateway.AppID, EventID: id, Tenant: source.Tenant, ChatID: source.ChatID, ChatType: "p2p", MessageID: id, SenderType: "user", SenderIDs: source.SenderIDs, MessageType: "text", RawContent: string(raw), ReceivedAt: time.Now().UTC()}); e != nil {
+		parent := ""
+		if auto && id == "late-request" {
+			parent = "original-request"
+		}
+		receipt, e := ingress.Receive(ctx, work.RawIngressEnvelope{GatewayRef: source.Gateway.GatewayRef, AppID: source.Gateway.AppID, EventID: id, Tenant: source.Tenant, ChatID: source.ChatID, ChatType: "p2p", MessageID: id, ParentID: parent, SenderType: "user", SenderIDs: source.SenderIDs, MessageType: "text", RawContent: string(raw), ReceivedAt: time.Now().UTC()})
+		if parent != "" {
+			replyIngressID = receipt.IngressID
+		}
+		if e != nil {
 			t.Fatal(e)
 		}
 		processed, e := ingress.ProcessPending(ctx, 16)
@@ -135,19 +197,56 @@ func TestPrivateSteerAllUsesDurableNativeAcceptanceAndEffectiveReport(t *testing
 	if e = event(agentproto.Event{Kind: agentproto.EventTurnStarted, CommandID: command.CommandID, RequestID: "native-start-rpc", ThreadID: "steer-session", TurnID: "steer-turn", Execution: &binding}); e != nil {
 		t.Fatal(e)
 	}
-	receive("late-request", "Late authorized work")
+	if withImages {
+		imageIDs := []string{"late-image-one", "late-image-two"}
+		if auto {
+			imageIDs = imageIDs[:1]
+		}
+		for _, id := range imageIDs {
+			parent := ""
+			if auto {
+				parent = "original-request"
+			}
+			receipt, e := ingress.Receive(ctx, work.RawIngressEnvelope{GatewayRef: source.Gateway.GatewayRef, AppID: source.Gateway.AppID, EventID: id, Tenant: source.Tenant, ChatID: source.ChatID, ChatType: "p2p", MessageID: id, ParentID: parent, SenderType: "user", SenderIDs: source.SenderIDs, MessageType: "image", RawContent: `{"image_key":"fixture"}`, ReceivedAt: time.Now().UTC()})
+			if auto {
+				replyIngressID = receipt.IngressID
+			}
+			if e != nil {
+				t.Fatal(e)
+			}
+		}
+		processed, e := ingress.ProcessPending(ctx, 16)
+		if e != nil || len(processed.Failures) > 0 {
+			t.Fatal("staged image ingress failed")
+		}
+	}
+	if !auto || !withImages {
+		receive("late-request", "Late authorized work")
+	}
 	var late work.Inbox
+	var lateIDs []string
 	pickerTx(t, a, func(tx *workstore.Tx) error {
 		inputs, e := tx.ListPendingInputs(front.ScopeID, front.RoleID)
 		if e != nil {
 			return e
 		}
-		if len(inputs) != 1 {
+		want := 1
+		if withImages && !auto {
+			want = 3
+		}
+		if len(inputs) != want {
 			return fmt.Errorf("late inputs=%d", len(inputs))
 		}
 		late = inputs[0]
+		for _, input := range inputs {
+			lateIDs = append(lateIDs, input.ID)
+			if !input.AwaitingText {
+				late = input
+			}
+		}
 		return nil
 	})
+	processedIDs := append([]string{originalInput.ID}, lateIDs...)
 	signer, e := workauth.New([]byte("0123456789abcdef0123456789abcdef"), nil)
 	if e != nil {
 		t.Fatal(e)
@@ -162,7 +261,30 @@ func TestPrivateSteerAllUsesDurableNativeAcceptanceAndEffectiveReport(t *testing
 			return fmt.Errorf("wrong carrier")
 		}
 		if cmd.Kind == agentproto.CommandTurnSteer {
+			if auto && strings.Contains(cmd.Prompt.Inputs[0].Text, "Original authorized work") {
+				return fmt.Errorf("quoted parent leaked into reply-only steer")
+			}
 			sent = true
+			if withImages {
+				images := 0
+				for _, input := range cmd.Prompt.Inputs {
+					if input.Type == agentproto.InputLocalImage {
+						images++
+						data, e := os.ReadFile(input.Path)
+						if e != nil || !bytes.Equal(data, steerImageBytes) {
+							t.Fatal("steer replaced durable image bytes with text")
+						}
+					}
+				}
+				wantImages := 2
+				if auto {
+					wantImages = 1
+				}
+				if images != wantImages {
+					t.Fatal("mixed steer lost images")
+				}
+			}
+
 			pickerTx(t, a, func(tx *workstore.Tx) error {
 				admission, e := tx.GetAttemptInputAdmissionByCommand(cmd.CommandID)
 				if e != nil {
@@ -177,7 +299,7 @@ func TestPrivateSteerAllUsesDurableNativeAcceptanceAndEffectiveReport(t *testing
 				}
 				return nil
 			})
-			if _, e := a.teamRuntime.service.ReportOutcome(ctx, token, binding.RunRef, workservice.ReportOutcomeRequest{Key: "premature", ProcessedInputIDs: []string{originalInput.ID, late.ID}, Summary: "must reject before actual RPC"}); e == nil {
+			if _, e := a.teamRuntime.service.ReportOutcome(ctx, token, binding.RunRef, workservice.ReportOutcomeRequest{Key: "premature", ProcessedInputIDs: processedIDs, Summary: "must reject before actual RPC"}); e == nil {
 				return fmt.Errorf("unaccepted input was reported processed")
 			}
 			return event(agentproto.Event{Kind: agentproto.EventNativeTurnInputAccepted, CommandID: cmd.CommandID, RequestID: "actual-steer-rpc", ThreadID: cmd.Target.ThreadID, TurnID: cmd.Target.TurnID, Execution: cmd.Execution, Status: "accepted"})
@@ -204,14 +326,20 @@ func TestPrivateSteerAllUsesDurableNativeAcceptanceAndEffectiveReport(t *testing
 		}
 		return fmt.Errorf("unexpected native command %s", cmd.Kind)
 	}
-	receive("steer-command-source", "/steerall")
-	if n, e := ingress.DispatchPrivateCommands(ctx, 16); e != nil || n != 1 {
-		t.Fatalf("actual private dispatcher: %d %v", n, e)
+	if auto {
+		if e := a.steerTeamPrivateReply(ctx, replyIngressID); e != nil {
+			t.Fatal(e)
+		}
+	} else {
+		receive("steer-command-source", "/steerall")
+		if n, e := ingress.DispatchPrivateCommands(ctx, 16); e != nil || n != 1 {
+			t.Fatalf("actual private dispatcher: %d %v", n, e)
+		}
 	}
 	if !sent {
 		t.Fatal("private steer command did not dispatch actual native request")
 	}
-	if _, e = a.teamRuntime.service.ReportOutcome(ctx, token, binding.RunRef, workservice.ReportOutcomeRequest{Key: "accepted-outcome", ProcessedInputIDs: []string{originalInput.ID, late.ID}, Summary: "both explicitly handled", WorkDisposition: "complete"}); e != nil {
+	if _, e = a.teamRuntime.service.ReportOutcome(ctx, token, binding.RunRef, workservice.ReportOutcomeRequest{Key: "accepted-outcome", ProcessedInputIDs: processedIDs, Summary: "both explicitly handled", WorkDisposition: "complete"}); e != nil {
 		t.Fatal(e)
 	}
 	if e = event(agentproto.Event{Kind: agentproto.EventTurnCompleted, CommandID: command.CommandID, RequestID: "native-start-rpc", ThreadID: "steer-session", TurnID: "steer-turn", Execution: &binding, Status: "completed", TurnCompletionOrigin: agentproto.TurnCompletionOriginRuntime}); e != nil {
@@ -228,7 +356,7 @@ func TestPrivateSteerAllUsesDurableNativeAcceptanceAndEffectiveReport(t *testing
 		if len(saved.InputIDs) != 1 || saved.InputIDs[0] != originalInput.ID {
 			t.Fatal("steer rewrote frozen initial prompt")
 		}
-		for _, id := range []string{originalInput.ID, late.ID} {
+		for _, id := range processedIDs {
 			input, e := tx.GetInbox(id)
 			if e != nil {
 				return e

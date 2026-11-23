@@ -19,8 +19,8 @@ func TestInstructionRevisionAndExactAttemptInput(t *testing.T) {
 	if strings.Contains(first.Text, token) {
 		t.Fatal("credential leaked into model instructions")
 	}
-	if !strings.Contains(first.Text, "--run-ref") || !strings.Contains(first.Text, "outcome.report") {
-		t.Fatal("missing bounded collaboration contract")
+	if !strings.Contains(first.Text, "--run-ref") || strings.Contains(first.Text, "outcome.report") || !strings.Contains(first.Text, "直接的私人对话") {
+		t.Fatal("private conversation inherited a team reporting ceremony")
 	}
 	err = s.store.Within(ctx, func(tx *workstore.Tx) error {
 		role, err := tx.GetRole("leader")

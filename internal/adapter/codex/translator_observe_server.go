@@ -27,6 +27,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, ok := t.pendingSuppressedResponse[requestID]; ok {
 			delete(t.pendingSuppressedResponse, requestID)
+			if pending.Action == "thread/shellCommand" {
+				return nativeShellInputResponse(pending, requestID, message), nil
+			}
 			if pending.Action == "turn/steer" {
 				return nativeSteerResponse(pending, requestID, message), nil
 			}

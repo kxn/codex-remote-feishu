@@ -47,6 +47,8 @@ func runPipelineNativeChild(backend string) error {
 	_ = json.Unmarshal([]byte(os.Getenv(config.WorkOwnerBindingEnv)), &owner)
 	sessionID := "pipeline-" + backend + "-session-" + fmt.Sprint(owner["workerSessionId"])
 	turnCounter := 0
+	claudeUserCount := 0
+	var heldNativeFrame map[string]any
 	turnID := ""
 	cwd, _ := os.Getwd()
 	scanner := bufio.NewScanner(os.Stdin)
@@ -66,7 +68,18 @@ func runPipelineNativeChild(backend string) error {
 			}
 			pipelineEmit(map[string]any{"type": "system", "subtype": "init", "session_id": sessionID, "cwd": cwd, "permissionMode": "default"})
 			pipelineEmit(map[string]any{"type": "user", "uuid": frame["uuid"], "session_id": sessionID, "message": frame["message"]})
-			pipelineEmit(map[string]any{"type": "assistant", "session_id": sessionID, "message": map[string]any{"id": "pipeline-progress", "role": "assistant", "content": []any{map[string]any{"type": "text", "text": "Starting the explicitly admitted work."}}}})
+			if os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") != "true" || claudeUserCount == 0 {
+				pipelineEmit(map[string]any{"type": "assistant", "session_id": sessionID, "message": map[string]any{"id": "pipeline-progress", "role": "assistant", "content": []any{map[string]any{"type": "text", "text": "Starting the explicitly admitted work."}}}})
+			}
+			if os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" {
+				claudeUserCount++
+				if claudeUserCount == 1 {
+					continue
+				}
+				if e := pipelineVerifyMediaFrame(frame); e != nil {
+					return e
+				}
+			}
 			if err := pipelineChildBusiness(frame); err != nil {
 				return err
 			}
@@ -86,11 +99,36 @@ func runPipelineNativeChild(backend string) error {
 			turnID = fmt.Sprintf("pipeline-native-turn-%d", turnCounter)
 			pipelineEmit(map[string]any{"id": id, "result": map[string]any{"turn": map[string]any{"id": turnID, "status": "inProgress"}}})
 			pipelineEmit(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": sessionID, "turn": map[string]any{"id": turnID, "status": "inProgress"}}})
+			if os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" {
+				heldNativeFrame = frame
+				continue
+			}
 			if err := pipelineChildBusiness(frame); err != nil {
 				return err
 			}
 			pipelineEmit(map[string]any{"method": "item/completed", "params": map[string]any{"threadId": sessionID, "turnId": turnID, "item": map[string]any{"id": "pipeline-final", "type": "agentMessage", "text": "pipeline native final"}}})
 			pipelineEmit(map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": sessionID, "turn": map[string]any{"id": turnID, "status": "completed"}}})
+		case "thread/shellCommand":
+			if err := pipelineNativePrivateShell(frame, sessionID); err != nil {
+				return err
+			}
+			if err := pipelineChildBusiness(heldNativeFrame); err != nil {
+				return err
+			}
+			pipelineEmit(map[string]any{"method": "item/completed", "params": map[string]any{"threadId": sessionID, "turnId": turnID, "item": map[string]any{"id": "pipeline-final", "type": "agentMessage", "text": "pipeline native final"}}})
+			pipelineEmit(map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": sessionID, "turn": map[string]any{"id": turnID, "status": "completed"}}})
+
+		case "turn/steer":
+			if e := pipelineVerifyMediaFrame(frame); e != nil {
+				return e
+			}
+			pipelineEmit(map[string]any{"id": id, "result": map[string]any{"turnId": turnID}})
+			if e := pipelineChildBusiness(frame); e != nil {
+				return e
+			}
+			pipelineEmit(map[string]any{"method": "item/completed", "params": map[string]any{"threadId": sessionID, "turnId": turnID, "item": map[string]any{"id": "pipeline-final", "type": "agentMessage", "text": "pipeline native final"}}})
+			pipelineEmit(map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": sessionID, "turn": map[string]any{"id": turnID, "status": "completed"}}})
+
 		case "thread/read":
 			pipelineEmit(map[string]any{"id": id, "result": map[string]any{"thread": map[string]any{"id": sessionID, "status": map[string]any{"type": "idle"}, "turns": []any{map[string]any{"id": turnID, "status": "completed", "items": []any{}}}}}})
 		case "thread/goal/get":
@@ -147,6 +185,11 @@ func pipelineFindEnvelope(value any) (pipelineWorkEnvelope, bool) {
 }
 
 func pipelineChildBusiness(frame map[string]any) error {
+	if os.Getenv("FSC_NATIVE_PIPELINE_IMAGES") == "true" {
+		if e := pipelineVerifyMediaFrame(frame); e != nil {
+			return e
+		}
+	}
 	envelope, ok := pipelineFindEnvelope(frame)
 	if !ok {
 		return fmt.Errorf("native prompt lacks the explicit admitted work envelope")

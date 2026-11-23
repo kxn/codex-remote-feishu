@@ -17,6 +17,10 @@ import (
 func teamPickerFixture(t *testing.T, appIDs ...string) (*App, teamHumanSource) {
 	t.Helper()
 	appID := "app"
+	roleID := "leader"
+	if len(appIDs) > 1 {
+		roleID = appIDs[1]
+	}
 	if len(appIDs) > 0 {
 		appID = appIDs[0]
 	}
@@ -37,10 +41,10 @@ func teamPickerFixture(t *testing.T, appIDs ...string) (*App, teamHumanSource) {
 	}
 	var source teamHumanSource
 	e = s.Within(t.Context(), func(tx *workstore.Tx) error {
-		if e := tx.PutRole(work.Role{ID: "leader", Name: "Leader", Description: "Coordinate", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); e != nil {
+		if e := tx.PutRole(work.Role{ID: roleID, Name: "Leader", Description: "Coordinate", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); e != nil {
 			return e
 		}
-		gateway := work.IngressGateway{GatewayRef: "gateway", AppID: appID, RoleID: "leader", BotGeneration: 1}
+		gateway := work.IngressGateway{GatewayRef: "gateway", AppID: appID, RoleID: roleID, BotGeneration: 1}
 		if e := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: gateway.RoleID, GatewayRef: gateway.GatewayRef, AppID: gateway.AppID, IdentityGeneration: 1}, 0); e != nil {
 			return e
 		}

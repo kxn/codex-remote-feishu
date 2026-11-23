@@ -11,6 +11,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workcontrol"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workdisplay"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workengine"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workhost"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workingress"
@@ -28,6 +29,8 @@ import (
 )
 
 type teamRuntime struct {
+	laneMu              sync.Mutex
+	laneWakes           map[string]chan struct{}
 	humanActionsMu      sync.Mutex
 	humanActionsPending map[string]bool
 	catalogMu           sync.Mutex
@@ -83,10 +86,22 @@ func (r *teamRuntime) run(ctx context.Context) {
 		if err != nil {
 			return err
 		}
-		if err = r.app.presentTeamSelections(ctx, result.Selections); err != nil {
-			return err
+		var laneErrors []error
+		for _, id := range result.AutoReplyIngressIDs {
+			if e := r.app.steerTeamPrivateReply(ctx, id); e != nil {
+				laneErrors = append(laneErrors, e)
+			}
 		}
-		return r.app.presentBlockedPrivateReplies(ctx, result.BlockedReplies)
+		r.wakeLane("private-commands")
+		r.wakeLane("scheduler")
+		r.wakeLane("private-reactions")
+		if e := r.app.presentTeamSelections(ctx, result.Selections); e != nil {
+			laneErrors = append(laneErrors, e)
+		}
+		if e := r.app.presentBlockedPrivateReplies(ctx, result.BlockedReplies); e != nil {
+			laneErrors = append(laneErrors, e)
+		}
+		return errors.Join(laneErrors...)
 	})
 	r.every(ctx, "private-commands", time.Second, func(ctx context.Context) error {
 		_, err := r.ingress.DispatchPrivateCommands(ctx, 32)
@@ -95,6 +110,7 @@ func (r *teamRuntime) run(ctx context.Context) {
 	r.every(ctx, "human-actions", time.Second, r.app.processTeamInteractions)
 	r.every(ctx, "menus", time.Second, r.app.runTeamMenus)
 	r.every(ctx, "system-host", time.Second, r.app.runTeamSystemHostJobs)
+	r.every(ctx, "private-reactions", time.Second, r.app.runTeamPrivateReactions)
 	r.every(ctx, "native-maintenance", time.Second, r.app.runTeamNativeCommands)
 	r.every(ctx, "codex-program-maintenance", time.Second, func(ctx context.Context) error {
 		if r.codexUpgrader == nil {
@@ -122,6 +138,9 @@ func (r *teamRuntime) run(ctx context.Context) {
 	r.every(ctx, "team-materials", 30*time.Second, r.teamMaterials.Run)
 	r.every(ctx, "native-goal-policy", time.Second, func(ctx context.Context) error { return r.coordinator.RunGoalPolicies(ctx, 32) })
 	r.every(ctx, "native-stop", time.Second, r.stops.RunOnce)
+	r.every(ctx, "private-reasoning", time.Second, func(ctx context.Context) error {
+		return workdisplay.FlushPublicReasoning(ctx, r.store, time.Now().UTC(), 32)
+	})
 	r.every(ctx, "publication", time.Second, func(ctx context.Context) error { _, err := r.publisher.RunOnce(ctx, 32); return err })
 	r.every(ctx, "provisioning", 5*time.Second, r.runProvisioning)
 	r.workers.Add(1)
@@ -130,6 +149,7 @@ func (r *teamRuntime) run(ctx context.Context) {
 }
 
 func (r *teamRuntime) every(ctx context.Context, name string, interval time.Duration, fn func(context.Context) error) {
+	wake := r.laneWake(name)
 	r.workers.Add(1)
 	go func() {
 		defer r.workers.Done()
@@ -149,6 +169,7 @@ func (r *teamRuntime) every(ctx context.Context, name string, interval time.Dura
 			case <-ctx.Done():
 				return
 			case <-timer.C:
+			case <-wake:
 			}
 		}
 	}()
@@ -241,6 +262,7 @@ func (r *teamRuntime) reconcileLoop(ctx context.Context) {
 				defer observations.Done()
 				defer func() { <-slots }()
 				_ = r.coordinator.Reconcile(ctx, attemptID)
+				r.wakeLane("scheduler")
 			}(id)
 		}
 		observations.Wait()
@@ -275,6 +297,8 @@ func (a *App) handleWorkHello(ctx context.Context, hello agentproto.Hello) bool 
 	}
 	if err := r.coordinator.HandleHello(ctx, hello); err != nil {
 		log.Printf("team hello rejected: instance=%s error=%v", hello.Instance.InstanceID, err)
+	} else {
+		r.wakeLane("scheduler")
 	}
 	return true
 }

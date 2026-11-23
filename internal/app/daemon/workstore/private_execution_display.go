@@ -11,34 +11,37 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-const SchemaPrivateExecutionDisplayV1 = `CREATE TABLE IF NOT EXISTS private_execution_display(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL CHECK(json_valid(payload)))`
+const SchemaPrivateExecutionDisplayV1 = `CREATE TABLE IF NOT EXISTS private_execution_display(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL CHECK(json_valid(payload)));
+CREATE TABLE IF NOT EXISTS native_thread_token_usage(incarnation TEXT NOT NULL REFERENCES carrier_registrations(incarnation),session_id TEXT NOT NULL,payload TEXT NOT NULL CHECK(json_valid(payload)),PRIMARY KEY(incarnation,session_id))`
 
 type PrivateExecutionDisplay struct {
-	ID                 string
-	Revision           int64
-	Binding            agentproto.ExecutionBinding
-	Incarnation        string
-	SessionID          string
-	TurnID             string
-	RejectionCommandID string
-	Tenant             string
-	ChatID             string
-	ReplyToMessageID   string
-	Bot                work.RoleBotBinding
-	StartedAt          time.Time
-	LastOutboxID       string
-	ProgressAnchorID   string
-	ProgressFenceID    string
-	ProgressHash       string
-	Progress           state.ExecCommandProgressRecord
-	Plan               *control.PlanUpdate
-	Files              map[string]control.FileChangeSummaryEntry
-	Pending            string
-	PendingItem        string
-	PendingFinal       bool
-	SeenMessages       map[string]bool
-	Terminated         bool
-	HadOutput          bool
+	ID                   string
+	Revision             int64
+	Binding              agentproto.ExecutionBinding
+	Incarnation          string
+	SessionID            string
+	TurnID               string
+	RejectionCommandID   string
+	Tenant               string
+	ChatID               string
+	ReplyToMessageID     string
+	Bot                  work.RoleBotBinding
+	LatestTokenUsage     *agentproto.ThreadTokenUsage
+	PublicSummaryOffsets map[string]int
+	StartedAt            time.Time
+	LastOutboxID         string
+	ProgressAnchorID     string
+	ProgressFenceID      string
+	ProgressHash         string
+	Progress             state.ExecCommandProgressRecord
+	Plan                 *control.PlanUpdate
+	Files                map[string]control.FileChangeSummaryEntry
+	Pending              string
+	PendingItem          string
+	PendingFinal         bool
+	SeenMessages         map[string]bool
+	Terminated           bool
+	HadOutput            bool
 }
 
 func (v PrivateExecutionDisplay) Validate() error {

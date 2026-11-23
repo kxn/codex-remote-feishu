@@ -6,38 +6,38 @@
     "menus": [
       {
         "key": "menu",
-        "name": "工作菜单",
-        "description": "打开私人工作入口。"
+        "name": "命令菜单",
+        "description": "打开私人工作菜单。"
       },
       {
-        "key": "status",
-        "name": "工作状态",
-        "description": "查看当前工作及执行状态。"
+        "key": "stop",
+        "name": "停止推理",
+        "description": "中断当前执行，并取消此前排队的输入。"
       },
       {
         "key": "steerall",
-        "name": "追加待办",
+        "name": "全部加速",
         "description": "当前 Codex 执行支持时，将可追加的待办并入本轮。"
       },
       {
-        "key": "projects",
-        "name": "项目",
-        "description": "打开有权访问的项目列表。"
+        "key": "new",
+        "name": "新建会话",
+        "description": "准备一个新会话。"
       },
       {
-        "key": "resources",
-        "name": "工作资料",
-        "description": "查看当前工作的资料和目录。"
+        "key": "reasoning",
+        "name": "推理强度",
+        "description": "打开推理强度参数卡。"
       },
       {
-        "key": "history",
-        "name": "历史工作",
-        "description": "回看已有的私人工作。"
+        "key": "model",
+        "name": "使用模型",
+        "description": "打开模型参数卡。"
       },
       {
-        "key": "settings",
-        "name": "执行设置",
-        "description": "查看和调整当前工作的执行设置。"
+        "key": "access",
+        "name": "执行权限",
+        "description": "打开执行权限参数卡。"
       }
     ]
   },

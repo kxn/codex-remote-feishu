@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
@@ -29,9 +30,11 @@ type Decision struct {
 
 type Authorizer func(context.Context, workstore.NativeRequest, Decision) error
 type Service struct {
-	store     *workstore.Store
-	driver    Driver
-	authorize Authorizer
+	store         *workstore.Store
+	driver        Driver
+	authorize     Authorizer
+	recoveryMu    sync.Mutex
+	recoveryAfter string
 }
 
 func New(store *workstore.Store, driver Driver, authorize Authorizer) (*Service, error) {
@@ -85,17 +88,50 @@ func (s *Service) Respond(ctx context.Context, decision Decision) (string, error
 			return e
 		}
 		content := work.NewContent(commandID+":body", fresh.ScopeID, "application/json", body, time.Now().UTC())
+		retryAccepted := false
 		if op, e := tx.GetOperation(commandID); e == nil {
 			if op.RequestHash != content.SHA256 || op.Actor.ID != decision.PrincipalID {
 				return workstore.ErrIdempotencyConflict
 			}
-			if op.State != work.OperationPrepared {
+			if op.State == work.OperationUnknown && op.TargetID == fresh.ID {
+				repaired, e := tx.RepairUnregisteredNativeResponseTarget(op.ID, fresh.ID, time.Now().UTC())
+				if e != nil {
+					return e
+				}
+				if !repaired {
+					return nil
+				}
+				op, e = tx.GetOperation(op.ID)
+				if e != nil {
+					return e
+				}
+			}
+			if op.State != work.OperationPrepared && op.State != work.OperationRetryable {
 				return nil
 			}
+			retryAccepted = fresh.State == "response_pending" && fresh.ResponseOperationID == op.ID
+			if retryAccepted {
+				if op.TargetID != fresh.Binding.WorkerSessionID {
+					return workstore.ErrScopeDenied
+				}
+				proven := false
+				for _, step := range op.Steps {
+					if step.State == work.OperationConfirmed && (step.ID == "native_response_unsent" || step.ID == "local_registration_target_repair") {
+						if _, e := tx.GetContent(op.ScopeID, step.Receipt); e != nil {
+							return e
+						}
+						proven = true
+					}
+				}
+				if !proven {
+					return workstore.ErrScopeDenied
+				}
+			}
+
 		} else if !errors.Is(e, workstore.ErrNotFound) {
 			return e
 		}
-		if fresh.Revision != decision.ExpectedRevision || fresh.State != "open" {
+		if !retryAccepted && (fresh.Revision != decision.ExpectedRevision || fresh.State != "open") {
 			return fmt.Errorf("request changed or no longer accepts a response")
 		}
 		carrier, e := tx.GetCarrier(fresh.CarrierIncarnation)
@@ -123,6 +159,14 @@ func (s *Service) Respond(ctx context.Context, decision Decision) (string, error
 		if attempt.State != work.AttemptRunning {
 			return fmt.Errorf("request execution is not running")
 		}
+		turn, e := tx.GetNativeTurn(fresh.CarrierIncarnation, fresh.NativeSessionID, fresh.NativeTurnID)
+		if e != nil {
+			return e
+		}
+		if turn.Binding != fresh.Binding || turn.TerminalStatus != "" {
+			return fmt.Errorf("request native turn has ended or changed")
+		}
+
 		gates, e := tx.ListPauseGates(fresh.ScopeID)
 		if e != nil {
 			return e
@@ -141,19 +185,34 @@ func (s *Service) Respond(ctx context.Context, decision Decision) (string, error
 		if e = tx.PutContent(content); e != nil {
 			return e
 		}
-		op := work.Operation{ID: commandID, ScopeID: fresh.ScopeID, ContextID: fresh.Binding.ContextID, Actor: work.Actor{Kind: work.ActorPrincipal, ID: decision.PrincipalID}, Kind: "native.request_response", TargetID: fresh.ID, TargetGeneration: fresh.Binding.SessionGeneration, IdempotencyKey: commandID, RequestRef: content.ID, RequestHash: content.SHA256, State: work.OperationSending, Revision: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-		if _, _, e = tx.PutOperation(op, 0); e != nil {
+		op := work.Operation{ID: commandID, ScopeID: fresh.ScopeID, ContextID: fresh.Binding.ContextID, Actor: work.Actor{Kind: work.ActorPrincipal, ID: decision.PrincipalID}, Kind: "native.request_response", TargetID: fresh.Binding.WorkerSessionID, TargetGeneration: fresh.Binding.SessionGeneration, IdempotencyKey: commandID, RequestRef: content.ID, RequestHash: content.SHA256, State: work.OperationSending, Revision: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		if retryAccepted {
+			op, e = tx.GetOperation(commandID)
+			if e != nil {
+				return e
+			}
+			previous := op.Revision
+			op.Revision++
+			op.State = work.OperationSending
+			op.UpdatedAt = time.Now().UTC()
+			op.NextAttemptAt = nil
+			if _, _, e = tx.PutOperation(op, previous); e != nil {
+				return e
+			}
+		} else if _, _, e = tx.PutOperation(op, 0); e != nil {
 			return e
 		}
-		previous := fresh.Revision
-		fresh.Revision++
-		fresh.State = "response_pending"
-		fresh.ResponseOperationID = commandID
-		fresh.UpdatedAt = time.Now().UTC()
-		if e = tx.PutNativeRequest(fresh, previous); e != nil {
-			return e
+		if !retryAccepted {
+			previous := fresh.Revision
+			fresh.Revision++
+			fresh.State = "response_pending"
+			fresh.ResponseOperationID = commandID
+			fresh.UpdatedAt = time.Now().UTC()
+			if e = tx.PutNativeRequest(fresh, previous); e != nil {
+				return e
+			}
 		}
-		if decision.FollowupHumanInput != "" {
+		if !retryAccepted && decision.FollowupHumanInput != "" {
 			interaction, e := tx.GetHumanInteraction(decision.EvidenceRef)
 			if e != nil {
 				return e
@@ -178,14 +237,37 @@ func (s *Service) Respond(ctx context.Context, decision Decision) (string, error
 			if e != nil {
 				return e
 			}
-			if op.State == work.OperationConfirmed {
+			if op.State == work.OperationConfirmed || op.State == work.OperationTerminal {
 				return nil
 			}
 			previous := op.Revision
 			op.Revision++
 			op.State = work.OperationUnknown
+			op.LastError = err.Error()
+			var unsent interface{ NativeCommandUnsent() bool }
+			if errors.As(err, &unsent) && unsent.NativeCommandUnsent() {
+				op.State = work.OperationRetryable
+				next := time.Now().UTC().Add(5 * time.Second)
+				op.NextAttemptAt = &next
+				proof := work.NewContent(fmt.Sprintf("%s:local-unsent:%d", op.ID, op.Revision), op.ScopeID, "text/plain", []byte("native transport was not called: "+err.Error()), time.Now().UTC())
+				if e = tx.PutContent(proof); e != nil {
+					return e
+				}
+				op.Steps = append(op.Steps, work.OperationStep{ID: "native_response_unsent", State: work.OperationConfirmed, Receipt: proof.ID})
+				fresh, e := tx.GetNativeRequest(request.ID)
+				if e != nil {
+					return e
+				}
+				if fresh.State == "stale" || fresh.State == "resolved" {
+					op.State = work.OperationTerminal
+					op.NextAttemptAt = nil
+				}
+			}
 			op.UpdatedAt = time.Now().UTC()
-			_, _, e = tx.PutOperation(op, previous)
+			if _, _, e = tx.PutOperation(op, previous); e != nil {
+				return e
+			}
+			_, e = tx.CloseNativeRequestForTerminalTurn(request.ID, time.Now().UTC())
 			return e
 		})
 		return commandID, errors.Join(err, persistErr)

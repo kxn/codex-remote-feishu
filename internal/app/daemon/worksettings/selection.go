@@ -142,11 +142,9 @@ func nextSettings(snapshot Snapshot, request UpdateRequest) (state.BotCapability
 	if backend == agentproto.BackendOpenCode && request.Model != nil && *request.Model != "" {
 		return next, fmt.Errorf("OpenCode model selection belongs to its explicit profile/session configuration")
 	}
-	// Access/Plan/Verbose belong to a context. Existing legacy fields are removed
-	// from this global desired record instead of leaking session preferences.
-	next.PromptOverride.AccessMode = ""
-	next.PlanMode = state.PlanModeSettingOff
-	next.PlanModeOverrideSet = false
+	// Explicit context permissions take precedence at execution. Preserve the
+	// existing Bot access value as the private default when changing a model or
+	// profile; clearing it would lose an explicit restrictive default.
 	normalized, ok := state.NormalizeBotCapabilitySettingsRecord(next)
 	if !ok {
 		return next, fmt.Errorf("invalid Bot settings selection")

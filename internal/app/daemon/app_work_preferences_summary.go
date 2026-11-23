@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worksettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
@@ -32,8 +33,8 @@ func teamSettingsSummary(snapshot worksettings.Snapshot, pref work.ContextPrefer
 		fmt.Sprintf("当前配置：%s · /%sprofile", profileName, snapshot.Settings.Backend),
 		"模型：" + model + " · /model",
 		"推理强度：" + effort + " · /reasoning",
-		"执行权限：" + local(pref.AccessMode) + " · /access",
-		"计划模式：" + local(pref.PlanMode) + " · /plan",
+		"执行权限：" + teamPrivateAccessSummary(snapshot, pref) + " · /access",
+		"计划模式：" + teamPrivatePlanSummary(snapshot, pref) + " · /plan",
 		"消息详细程度：" + local(pref.Verbose) + " · /verbose",
 	}
 }
@@ -112,4 +113,21 @@ func teamSettingsAutomationSummary(tx *workstore.Tx, contextID string, raw json.
 		}
 	}
 	return json.Marshal(card)
+}
+
+func teamPrivateAccessSummary(snapshot worksettings.Snapshot, pref work.ContextPreferences) string {
+	if pref.AccessMode != nil {
+		return *pref.AccessMode
+	}
+	return agentproto.EffectiveAccessMode(snapshot.Settings.PromptOverride.AccessMode) + "（个人默认）"
+}
+
+func teamPrivatePlanSummary(snapshot worksettings.Snapshot, pref work.ContextPreferences) string {
+	if pref.PlanMode != nil {
+		return *pref.PlanMode
+	}
+	if snapshot.Settings.PlanModeOverrideSet {
+		return string(snapshot.Settings.PlanMode) + "（个人默认）"
+	}
+	return "跟随后端默认"
 }

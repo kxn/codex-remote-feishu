@@ -120,6 +120,11 @@ func (c *Coordinator) replayGrantedSession(tx *workstore.Tx, carrier workstore.C
 		if event.Kind != agentproto.EventTurnStarted && event.Kind != agentproto.EventTurnCompleted {
 			continue
 		}
+		if deferBoundary, e := c.deferPrivateShellBoundary(tx, carrier, event); e != nil {
+			return e
+		} else if deferBoundary {
+			continue
+		}
 		resolved, e := c.resolveBinding(tx, carrier, event)
 		if e != nil || resolved != binding {
 			continue

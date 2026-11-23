@@ -82,6 +82,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err = store.initialize(ctx); err != nil {
 		return fail(err)
 	}
+	if err = store.migratePrivateShellInbox(ctx); err != nil {
+		return fail(err)
+	}
 	return store, nil
 }
 
@@ -112,7 +115,7 @@ func (s *Store) initialize(ctx context.Context) error {
 			return fmt.Errorf("work schema %d is newer than supported %d", version, SchemaVersion)
 		}
 		if version == SchemaVersion {
-			for _, statement := range []string{SchemaProfileModelCatalogV1, SchemaPrivateExecutionDisplayV1, SchemaPublicationBudgetV1, SchemaPublicationOutboxIndexV1} {
+			for _, statement := range []string{SchemaPrivateShellOperationsV1, SchemaPrivateReactionActionsV1, SchemaPrivateReactionsV1, SchemaProfileModelCatalogV1, SchemaPrivateExecutionDisplayV1, SchemaPublicationBudgetV1, SchemaPublicationOutboxIndexV1} {
 				if _, err := t.tx.ExecContext(ctx, statement); err != nil {
 					return err
 				}

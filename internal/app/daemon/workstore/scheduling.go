@@ -52,7 +52,7 @@ func (t *Tx) ListSchedulingTargets() ([]SchedulingTarget, error) {
 	return values, rows.Err()
 }
 func (t *Tx) ListPendingInputs(scopeID, roleID string) ([]work.Inbox, error) {
-	return listRecords[work.Inbox](t, "inbox", " WHERE scope_id=? AND role_id=? AND state='pending'", scopeID, roleID)
+	return listRecords[work.Inbox](t, "inbox", " WHERE scope_id=? AND role_id=? AND state='pending' AND coalesce(json_extract(payload,'$.shell_operation_id'),'')=''", scopeID, roleID)
 }
 func (t *Tx) ListPendingDispatchOperations() ([]work.Operation, error) {
 	return listRecords[work.Operation](t, "operations", " WHERE kind='native.dispatch' AND state IN ('prepared','sending','unknown','retryable')")

@@ -8,8 +8,8 @@ import (
 
 func (w *workExecutionState) validateNativeSteer(command agentproto.Command, backend agentproto.Backend) error {
 	admission := command.NativeInputAdmission
-	if backend != agentproto.BackendCodex || admission == nil || admission.Version != agentproto.NativeInputAdmissionProtocolVersion || admission.ID == "" || len(admission.InputIDs) == 0 || command.InstructionRevision != w.snapshot.InstructionBundle.Revision || command.Target.ThreadID == "" || command.Target.TurnID == "" {
-		return fmt.Errorf("native steering requires an explicit Codex input admission and frozen instructions")
+	if (backend != agentproto.BackendCodex && backend != agentproto.BackendClaude) || admission == nil || admission.Version != agentproto.NativeInputAdmissionProtocolVersion || admission.ID == "" || len(admission.InputIDs) == 0 || command.InstructionRevision != w.snapshot.InstructionBundle.Revision || command.Target.ThreadID == "" || command.Target.TurnID == "" {
+		return fmt.Errorf("native steering requires an explicit Codex/Claude input admission and frozen instructions")
 	}
 	seen := map[string]bool{}
 	for _, id := range admission.InputIDs {

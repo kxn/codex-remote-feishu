@@ -18,6 +18,18 @@ func FrozenContext(tx *workstore.Tx, source workstore.PrivateActionSource) (work
 	id := ""
 	navigation := int64(0)
 	switch {
+	case source.IngressID != "":
+		raw, err := tx.GetIngress(source.IngressID)
+		if err != nil {
+			return work.WorkContext{}, 0, err
+		}
+		id = raw.Route.ContextID
+	case source.ReactionID != "":
+		action, err := tx.GetPrivateReactionAction(source.ReactionID)
+		if err != nil {
+			return work.WorkContext{}, 0, err
+		}
+		id, navigation = action.ContextID, action.NavigationRevision
 	case source.MenuInteractionID != "":
 		menu, err := tx.GetMenuInteraction(source.MenuInteractionID)
 		if err != nil {

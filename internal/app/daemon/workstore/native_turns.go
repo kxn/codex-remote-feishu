@@ -147,7 +147,13 @@ func (t *Tx) RegisterNativeCommand(incarnation string, command agentproto.Comman
 	if err != nil {
 		return v, err
 	}
-	if ownerOnly && operation.Actor.Kind != work.ActorSystem {
+	privateShell := ownerOnly && command.Kind == agentproto.CommandThreadShellCommand && command.ShellCommand.OperationID != ""
+	if privateShell {
+		if err = t.ValidatePrivateShellCommand(command, incarnation); err != nil {
+			return v, err
+		}
+	}
+	if ownerOnly && operation.Actor.Kind != work.ActorSystem && !privateShell {
 		return v, fmt.Errorf("owner-only inspection requires trusted runtime actor")
 	}
 	if operation.RequestRef == "" || operation.ScopeID != command.Execution.ScopeID || operation.TargetID != command.Execution.WorkerSessionID || operation.TargetGeneration != command.Execution.SessionGeneration {

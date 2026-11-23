@@ -18,8 +18,8 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
-func TestRetiredControlContextRebuildUsesExactCommittedReceipt(t *testing.T) {
-	for _, kind := range []string{"exact-gate", "legacy-empty-gate", "still-alive", "late-native-write", "multi-turn-carrier"} {
+func TestRetiredPrivateContextRebuildUsesExactCommittedReceipt(t *testing.T) {
+	for _, kind := range []string{"exact-gate", "legacy-empty-gate", "still-alive", "late-native-write", "multi-turn-carrier", "idle-disconnect"} {
 		t.Run(kind, func(t *testing.T) {
 			var pipes []*retiredNativePipe
 			h, store := hostFixture(t, func(relayruntime.HeadlessLaunchOptions) (int, error) {
@@ -41,7 +41,7 @@ func TestRetiredControlContextRebuildUsesExactCommittedReceipt(t *testing.T) {
 				if err := tx.PutContext(work.WorkContext{ID: "business-front", ScopeID: "scope", RoleID: "role", Workstream: "business", Revision: 1}, 0); err != nil {
 					return err
 				}
-				context := work.WorkContext{ID: "management-front", ScopeID: "scope", RoleID: "role", Workstream: "management", Purpose: work.PurposeControl, ControlTargetContextID: "business-front", Revision: 1}
+				context := work.WorkContext{ID: "management-front", ScopeID: "scope", RoleID: "role", Workstream: "management", Purpose: work.PurposeBusiness, Revision: 1}
 				if kind == "multi-turn-carrier" {
 					context.Purpose, context.ControlTargetContextID = work.PurposeBusiness, ""
 				}
@@ -110,12 +110,12 @@ func TestRetiredControlContextRebuildUsesExactCommittedReceipt(t *testing.T) {
 					copy := original
 					copy.ID = id + ":control"
 					copy.RecipientContextID = need.ContextID
-					copy.ControlOfInputID = original.ID
+					copy.ControlOfInputID = ""
 					if kind == "multi-turn-carrier" {
 						copy.ControlOfInputID = ""
 					}
 					copy.EventID = id + ":control"
-					_, _, err := tx.AcceptMessage(message, []work.Inbox{original, copy})
+					_, _, err := tx.AcceptMessage(message, []work.Inbox{copy})
 					return err
 				}); err != nil {
 					t.Fatal(err)
@@ -201,7 +201,7 @@ func TestRetiredControlContextRebuildUsesExactCommittedReceipt(t *testing.T) {
 				t.Helper()
 				result, err := engine.Tick(t.Context())
 				if err != nil || len(result.Dispatched) != 1 || result.Dispatched[0].Err != nil {
-					t.Fatalf("real temporary management pipeline failed: %+v %v", result, err)
+					t.Fatalf("real private conversation pipeline failed: %+v %v", result, err)
 				}
 			}
 			// Two settled turns use one carrier/session. Only the receipt after the last
@@ -280,12 +280,23 @@ func TestRetiredControlContextRebuildUsesExactCommittedReceipt(t *testing.T) {
 					return err
 				}
 				attempt := ""
-				if kind != "legacy-empty-gate" {
+				if kind != "legacy-empty-gate" && kind != "idle-disconnect" {
 					attempt = latestAttempt
 				}
-				return tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, AttemptID: attempt, Reason: "snapshot_rebuild_required", CreatedAt: time.Now().UTC()})
+				reason := "snapshot_rebuild_required"
+				if kind == "idle-disconnect" {
+					reason = "carrier_disconnected_reconcile"
+				}
+				return tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, AttemptID: attempt, Reason: reason, CreatedAt: time.Now().UTC()})
 			}); err != nil {
 				t.Fatal(err)
+			}
+			if kind == "idle-disconnect" {
+				worker := hostWorker(t, store)
+				recovered, err := h.reconcileExitedIdleCarrier(t.Context(), worker)
+				if err != nil || !recovered {
+					t.Fatalf("idle disconnect recovery=%v err=%v", recovered, err)
+				}
 			}
 			beforeInspections := driver.inspections
 			err = h.Prepare(t.Context(), need)
@@ -301,12 +312,16 @@ func TestRetiredControlContextRebuildUsesExactCommittedReceipt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(pipes) != 2 || stops != 1 {
+			wantStops := 1
+			if kind == "idle-disconnect" {
+				wantStops = 0
+			}
+			if len(pipes) != 2 || stops != wantStops {
 				t.Fatalf("exact retired carrier did not rebuild once: starts=%d stops=%d", len(pipes), stops)
 			}
 			current := bindJournal()
 			if current.ContextID != old.ContextID || current.Generation != old.Generation+1 || current.CarrierIncarnation == old.CarrierIncarnation {
-				t.Fatalf("rebuild retargeted the private management context: %+v", current)
+				t.Fatalf("rebuild retargeted the private conversation: %+v", current)
 			}
 			dispatch()
 			if err := store.Within(t.Context(), func(tx *workstore.Tx) error {
@@ -315,14 +330,7 @@ func TestRetiredControlContextRebuildUsesExactCommittedReceipt(t *testing.T) {
 					return err
 				}
 				if input.State != work.InboxProcessed {
-					t.Fatalf("next real human management input remained blocked: %+v", input)
-				}
-				original, err := tx.GetInbox("human-management-3:original")
-				if err != nil {
-					return err
-				}
-				if original.State != work.InboxPending {
-					t.Fatal("management rebuild consumed original business input")
+					t.Fatalf("next real human input remained blocked: %+v", input)
 				}
 				return nil
 			}); err != nil {

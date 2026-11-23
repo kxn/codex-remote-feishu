@@ -10,6 +10,7 @@ import (
 )
 
 type persistedWorkInventory struct {
+	ShellItemsStarted    map[string]bool             `json:"shell_items_started,omitempty"`
 	ActiveNativeCommands map[string]bool             `json:"active_native_commands"`
 	InputRPCMethods      map[string]string           `json:"input_rpc_methods"`
 	GoalKnown            map[string]bool             `json:"goal_known"`
@@ -36,7 +37,7 @@ func (s *workInspectionState) persist(journal *runtimejournal.Store, owner agent
 		s.mu.Unlock()
 		return nil
 	}
-	state := persistedWorkInventory{ActiveNativeCommands: s.activeNativeCommands, InputRPCMethods: s.inputRPCMethods, GoalKnown: s.goalKnown, GoalActive: s.goalActive, SessionIDs: s.sessionIDs, Owner: owner, Turns: s.turns, PendingInputs: s.pendingInputs, ActiveTools: s.activeTools, Tasks: s.tasks, Uncertainties: s.uncertainties, TaskInventoryKnown: s.taskInventoryKnown}
+	state := persistedWorkInventory{ShellItemsStarted: s.shellItemsStarted, ActiveNativeCommands: s.activeNativeCommands, InputRPCMethods: s.inputRPCMethods, GoalKnown: s.goalKnown, GoalActive: s.goalActive, SessionIDs: s.sessionIDs, Owner: owner, Turns: s.turns, PendingInputs: s.pendingInputs, ActiveTools: s.activeTools, Tasks: s.tasks, Uncertainties: s.uncertainties, TaskInventoryKnown: s.taskInventoryKnown}
 	for _, scope := range s.scopes {
 		state.Scopes = append(state.Scopes, scope.Inspect())
 	}
@@ -68,6 +69,9 @@ func (s *workInspectionState) restore(journal *runtimejournal.Store, owner agent
 	}
 	if !state.Owner.SameOwner(owner) {
 		return fmt.Errorf("durable native inventory owner changed without new incarnation")
+	}
+	if state.ShellItemsStarted != nil {
+		s.shellItemsStarted = state.ShellItemsStarted
 	}
 	if state.ActiveNativeCommands != nil {
 		s.activeNativeCommands = state.ActiveNativeCommands

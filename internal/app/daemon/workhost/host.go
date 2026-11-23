@@ -23,6 +23,7 @@ import (
 )
 
 type LaunchSettings struct {
+	ConnectionIdentity  string
 	NativeBinaryPath    string
 	NativeBinaryVersion string
 	ReadOnly            bool
@@ -70,6 +71,7 @@ type Host struct {
 }
 
 type LaunchRecord struct {
+	ConnectionIdentity     string                           `json:"connection_identity,omitempty"`
 	PreferencesRevision    int64                            `json:"preferences_revision,omitempty"`
 	WorkerID               string                           `json:"worker_id"`
 	ScopeID                string                           `json:"scope_id"`

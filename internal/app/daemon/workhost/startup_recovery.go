@@ -32,7 +32,10 @@ func (h *Host) ReconcileStartupFailures(ctx context.Context) error {
 		if !acquired {
 			continue
 		}
-		err := h.reconcileStartupFailure(ctx, worker)
+		recovered, err := h.reconcileExitedIdleCarrier(ctx, worker)
+		if err == nil && !recovered {
+			err = h.reconcileStartupFailure(ctx, worker)
+		}
 		unlock()
 		result = errors.Join(result, err)
 	}

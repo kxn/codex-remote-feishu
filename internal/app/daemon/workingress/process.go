@@ -148,6 +148,7 @@ func (i *Ingress) process(ctx context.Context, record work.IngressRecord, expand
 		}
 		if scope.Kind == work.ScopePersonal {
 			input.RecipientContextID = record.Route.ContextID
+			input.AwaitingText = work.StandaloneMedia(record.Envelope)
 		}
 		if _, _, e = tx.AcceptMessage(message, []work.Inbox{input}); e != nil {
 			return e

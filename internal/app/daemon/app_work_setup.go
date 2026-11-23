@@ -50,6 +50,9 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 			store.Close()
 		}
 	}()
+	if err = store.Within(ctx, func(tx *workstore.Tx) error { return tx.CancelObsoletePrivateControlInputs() }); err != nil {
+		return err
+	}
 	signer, err := workauth.LoadOrCreate(filepath.Join(paths.StateDir, "team-work.key"), nil)
 	if err != nil {
 		return err
@@ -122,7 +125,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err != nil {
 		return err
 	}
-	r.ingress, err = workingress.New(store, workingress.Config{Directory: directory, Expander: teamMessageExpander{directory: directory}, PrivateCommands: commands, QueuePrivateExecution: workdisplay.QueueIfBusy})
+	r.ingress, err = workingress.New(store, workingress.Config{Directory: directory, Expander: teamMessageExpander{directory: directory}, PrivateCommands: commands, QueuePrivateExecution: workdisplay.QueuePrivateInputFeedback})
 	if err != nil {
 		return err
 	}

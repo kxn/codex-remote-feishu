@@ -136,13 +136,14 @@ type SelectionRequest struct {
 	Reason           string
 }
 type ProcessResult struct {
-	BlockedReplies []string
-	Selections     []SelectionRequest
-	Processed      int
-	Partial        int
-	Commands       int
-	Ignored        int
-	Failures       []ProcessFailure
+	AutoReplyIngressIDs []string
+	BlockedReplies      []string
+	Selections          []SelectionRequest
+	Processed           int
+	Partial             int
+	Commands            int
+	Ignored             int
+	Failures            []ProcessFailure
 }
 
 func (i *Ingress) ProcessPending(ctx context.Context, limit int) (ProcessResult, error) {
@@ -216,6 +217,9 @@ func (i *Ingress) ProcessPending(ctx context.Context, limit int) (ProcessResult,
 			result.Commands++
 		default:
 			result.Processed++
+			if record.Envelope.ChatType == "p2p" && record.Envelope.ParentID != "" && (record.Envelope.MessageType == "text" || record.Envelope.MessageType == "image") {
+				result.AutoReplyIngressIDs = append(result.AutoReplyIngressIDs, record.ID)
+			}
 		}
 		if partial {
 			result.Partial++
