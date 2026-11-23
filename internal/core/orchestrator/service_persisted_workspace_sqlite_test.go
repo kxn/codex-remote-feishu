@@ -9,9 +9,105 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
+
+func TestPersistedWorkspaceSQLiteUnrelatedParentDoesNotHideSavedChild(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		attached   bool
+		globalCopy bool
+	}{
+		{name: "parent-runtime"},
+		{name: "parent-runtime/global-copy", globalCopy: true},
+		{name: "parent-bot", attached: true},
+		{name: "parent-bot/global-copy", attached: true, globalCopy: true},
+	} {
+		for _, prewarmed := range []bool{false, true} {
+			name := tc.name
+			if prewarmed {
+				name += "/prewarmed"
+			}
+			t.Run(name, func(t *testing.T) {
+				now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
+				svc := newServiceForTest(&now)
+				parent, err := filepath.EvalSymlinks(t.TempDir())
+				if err != nil {
+					t.Fatal(err)
+				}
+				child := filepath.Join(parent, "child")
+				if err := os.MkdirAll(child, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				svc.SetPersistedThreadCatalog(sqliteWorkspaceCatalogForTest(t, child, now))
+				parentRuntime := &state.InstanceRecord{
+					InstanceID: "parent-runtime", WorkspaceRoot: parent, WorkspaceKey: parent,
+					Source: "headless", Backend: agentproto.BackendCodex, Managed: true, Online: true,
+					Threads: map[string]*state.ThreadRecord{"parent-thread": {
+						ThreadID: "parent-thread", CWD: parent, WorkspaceKey: parent, Loaded: true,
+					}},
+				}
+				if tc.globalCopy {
+					parentRuntime.Threads["thread"] = &state.ThreadRecord{
+						ThreadID: "thread", CWD: child, WorkspaceKey: parent,
+					}
+				}
+				svc.UpsertInstance(parentRuntime)
+				if prewarmed {
+					pool := t.TempDir()
+					svc.UpsertInstance(&state.InstanceRecord{
+						InstanceID: "pool", WorkspaceRoot: pool, WorkspaceKey: pool,
+						Source: "headless", Backend: agentproto.BackendCodex, Managed: true, Online: true,
+						Threads: map[string]*state.ThreadRecord{"thread": {
+							ThreadID: "thread", CWD: child, WorkspaceKey: child, Loaded: true,
+						}},
+					})
+				}
+				if tc.attached {
+					svc.MaterializeSurfaceResume("parent-bot", "parent-app", "parent-chat", "user", state.ProductModeNormal, agentproto.BackendCodex, "", "", "")
+					owner := svc.root.Surfaces["parent-bot"]
+					owner.AttachedInstanceID = "parent-runtime"
+					owner.ClaimedWorkspaceKey = parent
+					owner.SelectedThreadID = "parent-thread"
+					svc.bindInstanceClaim(owner, owner.AttachedInstanceID)
+				}
+				svc.MaterializeSurfaceResume("child-bot", "child-app", "child-chat", "user", state.ProductModeNormal, agentproto.BackendCodex, "", "", "")
+				surface := svc.root.Surfaces["child-bot"]
+				views := svc.mergedThreadViews(surface)
+				var listed *mergedThreadView
+				for _, view := range views {
+					if view.ThreadID == "thread" {
+						listed = view
+					}
+				}
+				for _, view := range []*mergedThreadView{listed, svc.mergedThreadView(surface, "thread"), svc.persistedThreadView(surface, "thread")} {
+					if view == nil || !testutil.SamePath(mergedThreadWorkspaceClaimKey(view), child) {
+						t.Fatalf("an unrelated parent must not absorb the saved child session: got %q, want %q", mergedThreadWorkspaceClaimKey(view), child)
+					}
+				}
+				options := svc.targetPickerSessionOptions(surface, workspaceSelectionEntry{workspaceKey: child}, control.TargetPickerRequestSourceList, true)
+				if !targetPickerHasSessionOption(options, targetPickerThreadValue("thread")) {
+					t.Fatalf("the child workspace must offer its saved session: %#v", options)
+				}
+				target := svc.resolveThreadTargetFromView(surface, listed)
+				if target.Mode == threadAttachUnavailable || (tc.attached && target.Instance != nil && target.Instance.InstanceID == "parent-runtime") {
+					t.Fatalf("the saved child must be recoverable without acquiring an occupied parent runtime: %#v", target)
+				}
+				if surface.AttachedInstanceID != "" || surface.SelectedThreadID != "" || surface.ClaimedWorkspaceKey != "" {
+					t.Fatal("listing must not attach the detached child bot")
+				}
+				if tc.attached {
+					owner := svc.root.Surfaces["parent-bot"]
+					if owner.AttachedInstanceID != "parent-runtime" || owner.SelectedThreadID != "parent-thread" || !testutil.SamePath(owner.ClaimedWorkspaceKey, parent) {
+						t.Fatal("listing must not retarget the parent bot")
+					}
+				}
+			})
+		}
+	}
+}
 
 func TestPersistedWorkspaceSQLiteCWDDoesNotReplaceExplicitRoot(t *testing.T) {
 	for _, source := range []string{"runtime", "restored-room", "cwd-only"} {

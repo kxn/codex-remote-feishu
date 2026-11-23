@@ -58,28 +58,39 @@ func (s *Service) mergePersistedThreadMetadata(current, persisted *state.ThreadR
 	}
 	cwd := normalizeWorkspaceClaimKey(persisted.CWD)
 	workspaceKey := ""
-	consider := func(key string) {
+	hasThreadWorkspace := false
+	nativeWorkspace := func(thread *state.ThreadRecord, key string) bool {
+		return thread != nil && (thread.Loaded || normalizeWorkspaceClaimKey(thread.CWD) == normalizeWorkspaceClaimKey(key))
+	}
+	consider := func(key string, threadWorkspace bool) {
 		key = normalizeWorkspaceClaimKey(key)
 		if key == "" || (cwd != key && !strings.HasPrefix(cwd, key+"/")) {
 			return
 		}
+		hasThreadWorkspace = hasThreadWorkspace || threadWorkspace
 		if len(key) > len(workspaceKey) {
 			workspaceKey = key
 		}
 	}
-	consider(merged.WorkspaceKey)
+	// Preserve a stable root for an ordinary cwd change within that workspace.
+	consider(merged.WorkspaceKey, nativeWorkspace(current, merged.WorkspaceKey))
 	// SQLite RecentWorkspaces contains raw CWD values, not explicit roots.
 	for _, inst := range s.root.Instances {
 		if inst != nil && state.EffectiveInstanceBackend(inst) == backend {
-			consider(instanceWorkspaceClaimKey(inst))
+			key := instanceWorkspaceClaimKey(inst)
+			thread := inst.Threads[persisted.ThreadID]
+			consider(key, threadBelongsToInstanceWorkspaceForTarget(inst, thread) && nativeWorkspace(thread, key))
 		}
 	}
 	for _, surface := range s.root.Surfaces {
 		if surface != nil && s.surfaceUsesWorkspaceClaims(surface) && s.surfaceBackend(surface) == backend {
-			consider(s.surfaceCurrentWorkspaceKey(surface))
+			consider(s.surfaceCurrentWorkspaceKey(surface), surface.SelectedThreadID == persisted.ThreadID || surfaceFeishuRoomID(surface) != "")
 		}
 	}
-	if workspaceKey == "" {
+	// An unrelated parent instance or a globally copied, unloaded thread may
+	// carry an inherited workspace label. Prefer the saved cwd without evidence
+	// that this thread belongs to one of the containing workspace roots.
+	if !hasThreadWorkspace {
 		workspaceKey = cwd
 	}
 	merged.WorkspaceKey = workspaceKey
