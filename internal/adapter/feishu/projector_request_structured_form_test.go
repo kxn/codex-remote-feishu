@@ -56,6 +56,11 @@ func TestRequestPromptStructuredFormRendersMultiSelectStatic(t *testing.T) {
 	if got := cardkit.StringValue(fields[1]["tag"]); got != "multi_select_static" {
 		t.Fatalf("expected second field to be multi_select_static, got %#v", fields[1])
 	}
+	for _, field := range fields[:2] {
+		if field["width"] != "fill" {
+			t.Errorf("structured dropdown must fill available width, got %#v", field)
+		}
+	}
 	if got := cardkit.StringValue(fields[2]["tag"]); got != "button" || cardButtonLabel(t, fields[2]) != "按以上授权继续" {
 		t.Fatalf("expected structured submit button, got %#v", fields[2])
 	}

@@ -412,6 +412,7 @@ func requestStructuredFormFieldElement(field control.RequestPromptFormField) map
 	case control.RequestPromptFormFieldSelectStatic:
 		element := map[string]any{
 			"tag":         "select_static",
+			"width":       "fill",
 			"name":        name,
 			"placeholder": cardkit.PlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
 		}
@@ -425,6 +426,7 @@ func requestStructuredFormFieldElement(field control.RequestPromptFormField) map
 	case control.RequestPromptFormFieldMultiSelectStatic:
 		element := map[string]any{
 			"tag":         "multi_select_static",
+			"width":       "fill",
 			"name":        name,
 			"placeholder": cardkit.PlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
 		}

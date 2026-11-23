@@ -151,6 +151,9 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 	if formElements[0]["tag"] != "select_static" {
 		t.Fatalf("expected select_static field, got %#v", formElements[0])
 	}
+	if formElements[0]["width"] != "fill" {
+		t.Fatalf("expected dropdown to fill available width, got %#v", formElements[0])
+	}
 	if _, ok := formElements[0]["label"]; ok {
 		t.Fatalf("expected select_static to omit unsupported label property, got %#v", formElements[0])
 	}
