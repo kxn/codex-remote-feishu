@@ -193,6 +193,7 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 			return
 		}
 		if s.bindPendingRemoteCommand(surface, commandID) {
+			s.bindPredictionSendCommand(surface, commandID)
 			return
 		}
 	}
@@ -217,7 +218,11 @@ func (s *Service) BindPendingReviewStartCommand(surfaceID, commandID string) {
 	s.bindPendingReviewStartCommand(surface, commandID)
 }
 
-func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err error) []eventcontract.Event {
+func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err error) (result []eventcontract.Event) {
+	defer func() { result = append(result, s.restorePredictionDraftAfterDispatchFailure(surfaceID, commandID)...) }()
+	if s.failPredictionDispatch(commandID) {
+		return nil
+	}
 	if events := s.failGoalUserCommand(surfaceID, commandID, err); len(events) != 0 {
 		return events
 	}
@@ -381,7 +386,7 @@ func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.Comman
 	}
 	notice := NoticeForProblem(commandAckProblem(surface.SurfaceSessionID, ack))
 	notice.Code = "command_rejected"
-	return s.failSurfaceActiveQueueItem(surface, item, &notice, true)
+	return append(s.failSurfaceActiveQueueItem(surface, item, &notice, true), s.restorePredictionDraftAfterDispatchFailure(surface.SurfaceSessionID, ack.CommandID)...)
 }
 
 func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRecord, commandID, noticeCode string) []eventcontract.Event {
@@ -778,6 +783,7 @@ func (s *Service) ApplyInstanceConnected(instanceID string) []eventcontract.Even
 }
 
 func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.Event {
+	s.forgetInstancePredictions(instanceID)
 	inst := s.root.Instances[instanceID]
 	if inst == nil {
 		return nil
@@ -858,6 +864,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	if inst == nil {
 		return nil
 	}
+	s.forgetInstancePredictions(instanceID)
 	inst.Online = false
 	inst.ActiveTurnID = ""
 	inst.ModelCatalog = nil
@@ -938,6 +945,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 }
 
 func (s *Service) RemoveInstance(instanceID string) {
+	s.forgetInstancePredictions(instanceID)
 	if strings.TrimSpace(instanceID) == "" {
 		return
 	}

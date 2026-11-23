@@ -1,8 +1,8 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-08-16`
-> Summary: 在既有 canonical 协议基础上补充 `thread.shell_command`、Codex capability 声明、payload-file UserShell 注入和 queued `APPLAUSE` ack/恢复边界（#901）。
+> Updated: `2026-11-23`
+> Summary: 补充 Codex 下一句建议的旁路采样、取消与超时合同。
 
 ## 1. 文档定位
 
@@ -649,6 +649,24 @@ daemon 通过 `thread/goal/set|get|clear` 与 `thread/read(includeTurns=false)` 
 - `thread.read(includeTurns=false)`：作为 pause 确认后的 live idle barrier，返回 `thread.runtime_status.updated`（`idle|active`）。
 
 queue interlock 状态机（`pause_pending -> quiescing -> draining -> resume_pending`）由 orchestrator 持有并持久化到 daemon state；普通队列在 active Goal thread 上先 pause Goal，等 `thread/read` 确认 idle 后才派发；Goal turn 完成后推进旧队列；队列排空且 fingerprint 一致才自动 resume。
+
+### 5.4.3.2 Predictions 旁路采样合同
+
+Predictions 使用独立 command/result，不产生普通代理 turn，也不与原生异步问题混用：
+
+- `thread.prediction.request`：`commandId` 唯一标识本次采样，`target.threadId` 是当前用户根线程，`prediction.sourceTurnId` 是已成功结束的源轮次；`origin.surface` / `origin.userId` 保留发起 surface 和用户。`prediction.instanceId` 冻结原实例，仅供 daemon 选路。若原生写队列未接收采样帧，wrapper 清理未发送请求的关联并回传空结果。
+- `thread.prediction.cancel`：同样保留原实例和 thread，`prediction.requestCommandId` 指向原采样 command；不能随 surface 后续切换改投另一个实例。wrapper 在内存中记住最近 128 个不同的取消 ID，覆盖取消先于请求到达的情况；命中时跳过该请求的原生准备。
+- `thread.prediction.result`：事件 `commandId` 回指原 request，`threadId` 与 `prediction.sourceTurnId` 保留源绑定。`prediction.suggestion` 是按桌面原生 schema 解析的单条建议，不另加长度或语言限制；无文本或空建议不展示，解析错误通过 `errorMessage` 返回。`prediction.unsupported=true` 表示采样 RPC 返回 `-32601`，或返回 `-32600` 且消息严格以 ``Invalid request: unknown variant `thread/sample`,`` 开头；源轮次过期、未加载或其他方法错误不能标为不支持。
+
+Codex wrapper 显式声明 `Capabilities.ThreadPrediction`（wire 字段 `threadPrediction`），仅证明 wrapper 能译码这些 command，不能证明其底层 CLI 支持采样。旧 wrapper 未显式声明时不发送新 command，也不把能力补入 legacy 默认值。底层 CLI 返回上述明确不支持错误后，orchestrator 在本次实例连接内停止自动采样，并只提示一次；断线后的新连接重新判定。其他采样失败不影响原会话的正常完成结果。
+
+wrapper 使用当前 native 的 `getAuthStatus`、`account/read` 与 `configRequirements/read` 取得同一账号的 backend auth/routing，在本机读取桌面使用的 `/wham/predictions/config`；凭据不进入 relay 或父客户端。配置按原生 principal 缓存 5 分钟；禁用、缺失或获取失败时不生成建议，没有自拟提示词或固定快照作为兜底。沿桌面逻辑恢复原 thread 读取当前模型与模式，排除 plan、非 openai provider 及官方 unsupported_models；模型继承原 thread，effort 采用官方 prediction_reasoning_effort，空值继承父轮次，不自行选模型或调强度。当前只接 live 完成触发，遵循官方 live_sample_rate。
+
+translator 把准备后的 request 译为 `thread/sample`，prompt 为官方正文追加桌面原样的 nullable suggestion JSON schema 后缀；携带 `threadId`、`expectedTurnId`、effort、`threadSource=turnTrigger=composer_predictions`、`disableMcp=true` 与原生 source/turn/trigger metadata。解析与桌面相同：suggestion 可为 string/null，字符串 trim，额外 JSON 属性忽略，不另加中文或 200 字限制。取消译为 `thread/sample/cancel {requestId: 原采样 RPC id}`。RPC id 与原 command 的关联只由 translator 自己的 pending map 持有；只消费自己拥有的采样和取消响应，取消后的迟到结果丢弃，其他原生请求/响应继续透传。这条路径不创建或切换会话，不发送普通 turn，也不改 translator 的 `currentThreadID` 或普通 turn 模板。
+
+采样要求 native source 已加载、是持久化根线程，且 `expectedTurnId` 仍为最新已结束轮次；不通过普通 fork/turn 或工具调用作兼容降级。`disableMcp` 不是“关闭所有工具”的承诺；无文本、工具尝试或无有效 suggestion 时不展示建议。wrapper 对齐桌面 `sampleThread`：原生请求发出后等待 30 秒，超时按原 RPC id 尽力取消并回传一次空 `thread.prediction.result`；orchestrator 不再从正文结束时间追加总期限，取消后的迟到结果仍被丢弃。准备阶段各次原生 RPC 分别沿用桌面默认的 30 秒响应上限，配置 HTTP 请求由当前取消上下文约束，不另加总期限；`interruptOnCancel` 仅在官方 `codex-app-cumberbatch-interrupt-on-cancel` 为 true 且 native CLI >= `0.167.0-alpha.1` 时开启。原生版本取自初始化响应的 `userAgent`，精确识别 `Codex Desktop/` 与 `Codex Remote Headless/`；未知客户端名称或缺失版本时不启用该参数。macOS wrapper 从已安装桌面读取版本、安装标识、语言等上下文，以当前 native 账号向桌面同源 `/wham/statsig/bootstrap` 获取开关与 `codex-app-cumberbatch-mod-policy`，校验返回的 user/account。开关与 policy 只按 principal 留在当前进程内存；进程重启后的首次预测重新获取，暂不添加运行期轮询；提示词的桌面 5 分钟缓存仍保留。取不到有效配置时不自行开启取消开关，也不添加本地过滤。
+
+translator 按桌面算法缓存源 `turn/moderationMetadata`（最多 64 个源 thread/turn），在采样完成时用当前官方 policy 检查源轮次的 prompt 分数/标签及 generation 标签；命中则返回空建议。只使用官方下发的 `st`、`ubl`、`abl`，不对建议文本另行分类或改写；无效 policy 或 metadata 不追加过滤。桌面 beta 偏好与企业策略未独立复刻，上下文请求省略无法证实的 beta 可选字段。这里是同源官方配置获取与 live 后台逻辑移植，不能据此声明桌面 SDK 内存配置逐时同步，catch-up/new-thread 入口仍未接入。
 
 ### 5.4.4 Capability / account / app / MCP status state
 

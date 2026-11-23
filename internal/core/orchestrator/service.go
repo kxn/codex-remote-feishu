@@ -75,6 +75,8 @@ type Service struct {
 	goalPauseNoticeAt         map[string]time.Time
 	goalUserCommands          map[string]goalUserCommand
 	pendingGoalFingerprints   map[string]pendingGoalFingerprint
+	predictions               map[string]*predictionRecord
+	predictionUnsupported     map[string]bool
 }
 
 type itemBuffer struct {
@@ -314,8 +316,10 @@ func (s *Service) SetPrimaryBotPermissionChecker(checker PrimaryBotPermissionChe
 	s.config.PrimaryBotPermissionChecker = checker
 }
 
-func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Event {
+func (s *Service) ApplySurfaceAction(action control.Action) (result []eventcontract.Event) {
 	surface := s.ensureSurface(action)
+	canceledPredictions := s.predictionActionPrelude(surface, action)
+	defer func() { result = append(canceledPredictions, result...) }()
 	if blocked := s.rejectInvalidBotCapabilitySettings(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
@@ -515,6 +519,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 				OptionID:         ownerFlow.OptionID,
 			},
 		}}
+	case control.ActionPredictionAccept, control.ActionPredictionSend:
+		events = s.handlePredictionAction(surface, action)
 	case control.ActionTextMessage:
 		events = s.handleText(surface, action)
 	case control.ActionImageMessage:
@@ -538,13 +544,19 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	return s.filterEventsForSurfaceVisibility(events)
 }
 
-func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []eventcontract.Event {
+func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) (result []eventcontract.Event) {
 	inst := s.root.Instances[instanceID]
 	if inst == nil {
 		return nil
 	}
 	if isInternalHelperEvent(event) {
 		return nil
+	}
+	if event.Kind == agentproto.EventThreadPredictionResult {
+		return s.filterEventsForSurfaceVisibility(s.applyPredictionResult(instanceID, event))
+	}
+	if canceled := s.predictionEventPrelude(instanceID, event); len(canceled) != 0 {
+		defer func() { result = append(canceled, result...) }()
 	}
 	preface := s.flushPendingTurnTextIfTurnContinues(instanceID, event)
 	s.observeRemoteTurnActivity(instanceID, event)
@@ -873,6 +885,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			events = append(events, s.pumpAndResumeGoalInterlock(instanceID, event.ThreadID)...)
 		}
 		events = append(events, compactEvents...)
+		events = append(events, s.maybeRequestPrediction(outcome)...)
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventItemStarted:
 		if s.maybeApplyReviewLifecycleItem(instanceID, event) {

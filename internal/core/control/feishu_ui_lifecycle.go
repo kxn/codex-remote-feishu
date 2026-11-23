@@ -63,7 +63,7 @@ func ResolveFeishuFrontstageActionContract(action Action) FeishuFrontstageAction
 	if _, ok := FeishuUIIntentFromAction(action); ok {
 		contract.RejectsUnstampedCallback = true
 	}
-	if action.Kind == ActionAsyncUserInput {
+	if action.Kind == ActionAsyncUserInput || action.Kind == ActionPredictionAccept || action.Kind == ActionPredictionSend {
 		contract.RejectsUnstampedCallback = true
 	}
 
@@ -175,7 +175,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		}
 	}
 	switch action.Kind {
-	case ActionPlanProposalDecision,
+	case ActionPredictionAccept, ActionPredictionSend, ActionPlanProposalDecision,
 		ActionRespondRequest,
 		ActionControlRequest:
 		if isSingleTokenSlashCommand(action.Text) {

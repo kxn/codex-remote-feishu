@@ -263,9 +263,11 @@ func mapOpenCodeResolvedCommandResponses(responses []acpadapter.ResolvedCommandR
 }
 
 type codexBackendRuntime struct {
-	mu           sync.Mutex
-	translator   *codex.Translator
-	shellCommand *shellCommandRuntime
+	mu              sync.Mutex
+	translator      *codex.Translator
+	shellCommand    *shellCommandRuntime
+	predictions     *predictionRuntime
+	nativeUserAgent string
 }
 
 func (r *codexBackendRuntime) Backend() agentproto.Backend {
@@ -275,6 +277,7 @@ func (r *codexBackendRuntime) Backend() agentproto.Backend {
 func (r *codexBackendRuntime) Capabilities() agentproto.Capabilities {
 	capabilities := agentproto.DefaultCapabilitiesForBackend(agentproto.BackendCodex)
 	capabilities.ModelCatalog = true
+	capabilities.ThreadPrediction = true
 	return capabilities
 }
 
@@ -302,11 +305,35 @@ func (r *codexBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, 
 func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	var notification struct {
+		Method string `json:"method"`
+	}
+	if json.Unmarshal(line, &notification) == nil && (notification.Method == "account/updated" || notification.Method == "account/login/completed" || notification.Method == "accountLoginCompleted") {
+		// Native account status notifications invalidate backend auth, not sample queries.
+		if r.predictions != nil {
+			for _, job := range r.predictions.jobs {
+				if job.authCancel != nil {
+					job.authCancel()
+				}
+			}
+		}
+	}
+	if r.observePredictionPreparationLocked(line) {
+		return runtimeObserveResult{Suppress: true}, nil
+	}
 	result, err := r.translator.ObserveServer(line)
 	if err != nil {
 		return runtimeObserveResult{}, err
 	}
 	r.shellCommand.observeEvents(result.Events)
+	for _, event := range result.Events {
+		if event.Kind == agentproto.EventThreadPredictionResult && r.predictions != nil {
+			if job := r.predictions.jobs[event.CommandID]; job != nil {
+				job.cancel()
+				delete(r.predictions.jobs, event.CommandID)
+			}
+		}
+	}
 	return runtimeObserveResult{
 		Events:           result.Events,
 		OutboundToChild:  result.OutboundToCodex,
@@ -354,6 +381,7 @@ func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runt
 }
 
 func (r *codexBackendRuntime) PrepareChildRestart(_ string, _ agentproto.PromptDispatchPlan, policy *agentproto.CodexResumePolicy) error {
+	r.CancelPredictions()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shellCommand.invalidateDetection()
@@ -365,6 +393,7 @@ func (r *codexBackendRuntime) Cleanup() {
 	if r == nil {
 		return
 	}
+	r.CancelPredictions()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shellCommand.cleanupCurrentRuntime()

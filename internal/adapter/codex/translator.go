@@ -46,6 +46,9 @@ type Translator struct {
 	pendingModelList          map[string]pendingModelList
 	pendingGoalRequests       map[string]pendingGoalRequest
 	pendingThreadReads        map[string]pendingThreadRead
+	pendingPredictions        map[string]pendingPrediction
+	pendingPredictionCancels  map[string]bool
+	predictionModeration      predictionModerationState
 	lastOwnedGoalMutations    map[string]ownedGoalMutation
 	reasoningSummaryIndexes   map[string]map[int]bool
 }
@@ -170,6 +173,8 @@ func NewTranslator(instanceID string) *Translator {
 		pendingModelList:           map[string]pendingModelList{},
 		pendingGoalRequests:        map[string]pendingGoalRequest{},
 		pendingThreadReads:         map[string]pendingThreadRead{},
+		pendingPredictions:         map[string]pendingPrediction{},
+		pendingPredictionCancels:   map[string]bool{},
 		lastOwnedGoalMutations:     map[string]ownedGoalMutation{},
 		reasoningSummaryIndexes:    map[string]map[int]bool{},
 	}

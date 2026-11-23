@@ -38,19 +38,13 @@ func (s *Service) maybeStartNewThreadForCodexModelGroupSwitch(surface *state.Sur
 	if threadID == "" {
 		return adjustment
 	}
-	thread := inst.Threads[threadID]
-	if !threadVisible(thread) {
-		return adjustment
-	}
-	sourceGroup := codexModelGroup(codexThreadModelForGroupSwitch(thread))
-	targetModel, targetSource := s.codexTargetModelForGroupSwitch(inst, surface, threadID, dispatchPlan.CWD, requestedOverride, threadPolicy)
-	targetGroup := codexModelGroup(targetModel)
-	if sourceGroup == "" || targetGroup == "" || sourceGroup == targetGroup {
+	targetSource := s.codexCrossModelGroupTargetSource(inst, surface, threadID, dispatchPlan.CWD, requestedOverride, threadPolicy)
+	if targetSource == "" {
 		return adjustment
 	}
 	cwd := strings.TrimSpace(dispatchPlan.CWD)
 	if cwd == "" {
-		cwd = strings.TrimSpace(thread.CWD)
+		cwd = strings.TrimSpace(inst.Threads[threadID].CWD)
 	}
 	if cwd == "" {
 		cwd = strings.TrimSpace(inst.WorkspaceRoot)
@@ -82,6 +76,20 @@ func (s *Service) maybeStartNewThreadForCodexModelGroupSwitch(surface *state.Sur
 	adjustment.Events = append(adjustment.Events, codexModelGroupNewThreadNoticeEvent(surface))
 	adjustment.Applied = true
 	return adjustment
+}
+
+func (s *Service) codexCrossModelGroupTargetSource(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string, requestedOverride state.ModelConfigRecord, threadPolicy *state.CodexThreadPolicy) string {
+	thread := inst.Threads[threadID]
+	if !threadVisible(thread) {
+		return ""
+	}
+	sourceGroup := codexModelGroup(codexThreadModelForGroupSwitch(thread))
+	targetModel, targetSource := s.codexTargetModelForGroupSwitch(inst, surface, threadID, cwd, requestedOverride, threadPolicy)
+	targetGroup := codexModelGroup(targetModel)
+	if sourceGroup == "" || targetGroup == "" || sourceGroup == targetGroup {
+		return ""
+	}
+	return targetSource
 }
 
 func codexThreadModelForGroupSwitch(thread *state.ThreadRecord) string {

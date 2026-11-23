@@ -43,6 +43,7 @@ const (
 	EventThreadLifecycleUpdated          EventKind = "thread.lifecycle.updated"
 	EventThreadGoalUpdated               EventKind = "thread.goal.updated"
 	EventThreadGoalCommandResult         EventKind = "thread.goal.command.result"
+	EventThreadPredictionResult          EventKind = "thread.prediction.result"
 	EventThreadSettingsUpdated           EventKind = "thread.settings.updated"
 	EventCapabilityStateUpdated          EventKind = "capability.state.updated"
 	EventProcessChildRestartUpdated      EventKind = "process.child.restart.updated"
@@ -139,6 +140,7 @@ type Event struct {
 	RuntimeStatus        *ThreadRuntimeStatus          `json:"runtimeStatus,omitempty"`
 	ThreadLifecycle      *ThreadLifecycleUpdate        `json:"threadLifecycle,omitempty"`
 	ThreadGoal           *ThreadGoalUpdate             `json:"threadGoal,omitempty"`
+	Prediction           *PredictionResult             `json:"prediction,omitempty"`
 	GoalCleared          bool                          `json:"goalCleared,omitempty"`
 	GoalMissing          bool                          `json:"goalMissing,omitempty"`
 	ThreadSettings       *ThreadSettingsUpdate         `json:"threadSettings,omitempty"`
@@ -199,23 +201,25 @@ type ThreadHistoryItemRecord struct {
 type CommandKind string
 
 const (
-	CommandPromptSend          CommandKind = "prompt.send"
-	CommandReviewStart         CommandKind = "review.start"
-	CommandThreadCompactStart  CommandKind = "thread.compact.start"
-	CommandTurnSteer           CommandKind = "turn.steer"
-	CommandThreadShellCommand  CommandKind = "thread.shell_command"
-	CommandTurnInterrupt       CommandKind = "turn.interrupt"
-	CommandRequestRespond      CommandKind = "request.respond"
-	CommandMCPOAuthLogin       CommandKind = "mcp.oauth_login.start"
-	CommandThreadsRefresh      CommandKind = "threads.refresh"
-	CommandThreadHistoryRead   CommandKind = "thread.history.read"
-	CommandModelList           CommandKind = "model.list"
-	CommandProcessChildRestart CommandKind = "process.child.restart"
-	CommandProcessExit         CommandKind = "process.exit"
-	CommandThreadGoalSet       CommandKind = "thread.goal.set"
-	CommandThreadGoalGet       CommandKind = "thread.goal.get"
-	CommandThreadGoalClear     CommandKind = "thread.goal.clear"
-	CommandThreadRead          CommandKind = "thread.read"
+	CommandPromptSend              CommandKind = "prompt.send"
+	CommandReviewStart             CommandKind = "review.start"
+	CommandThreadCompactStart      CommandKind = "thread.compact.start"
+	CommandTurnSteer               CommandKind = "turn.steer"
+	CommandThreadShellCommand      CommandKind = "thread.shell_command"
+	CommandTurnInterrupt           CommandKind = "turn.interrupt"
+	CommandRequestRespond          CommandKind = "request.respond"
+	CommandMCPOAuthLogin           CommandKind = "mcp.oauth_login.start"
+	CommandThreadsRefresh          CommandKind = "threads.refresh"
+	CommandThreadHistoryRead       CommandKind = "thread.history.read"
+	CommandModelList               CommandKind = "model.list"
+	CommandProcessChildRestart     CommandKind = "process.child.restart"
+	CommandProcessExit             CommandKind = "process.exit"
+	CommandThreadGoalSet           CommandKind = "thread.goal.set"
+	CommandThreadGoalGet           CommandKind = "thread.goal.get"
+	CommandThreadGoalClear         CommandKind = "thread.goal.clear"
+	CommandThreadRead              CommandKind = "thread.read"
+	CommandThreadPredictionRequest CommandKind = "thread.prediction.request"
+	CommandThreadPredictionCancel  CommandKind = "thread.prediction.cancel"
 )
 
 type InputKind string
@@ -248,6 +252,7 @@ type Command struct {
 	MCP          MCPCommand         `json:"mcp,omitempty"`
 	Review       ReviewRequest      `json:"review,omitempty"`
 	Goal         GoalCommand        `json:"goal,omitempty"`
+	Prediction   PredictionCommand  `json:"prediction,omitempty"`
 	ShellCommand ShellCommand       `json:"shellCommand,omitempty"`
 }
 

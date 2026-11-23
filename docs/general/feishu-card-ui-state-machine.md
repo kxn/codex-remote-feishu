@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-11-20`
-> Summary: 明确目标选择器的内存草稿导航与最终确认的实时校验边界。
+> Updated: `2026-11-23`
+> Summary: 补充下一句建议的展示、编辑、发送与卡片有效性。
 
 ## 1. 文档定位
 
@@ -848,6 +848,18 @@ MCP request 卡片当前新增的可视语义：
 `GatewayID` 是可复用配置槽位，不足以证明 callback 仍属于当前机器人。AppID 替换或配置删除时，controller 会先关闭旧 gateway generation 的 action gate、取消事件源，并等待已经进入统一 action handler 的 callback 排空；只有此后 daemon 才写入 pending identity transition、撤销旧 surface 与 UI/card runtime、提交新的 bot identity generation 并启动新 runtime。
 
 因此新 App 不会沿用同一 GatewayID 下旧机器人的 surface owner、card owner 或 callback runtime。旧 generation 在 gate 关闭后到达的 callback 会被拒绝进入业务 handler；已经进入的 callback 会先完成，再由 identity transition 统一清理其结果。pending transition 会在 durable 清理或 identity commit 失败时保留不可撤回的清理栅栏，后续即使配置改回旧 AppID，也必须先清掉旧 generation 的 card owner；`/bendtomywill` 的 turn patch flow/transaction 也属于这组 card runtime，不能在新 bot identity 下继续投递。这个边界与 `daemon_lifecycle_id` 互补：前者隔离同一 daemon 内的 bot identity 代次，后者隔离 daemon 重启代次。
+
+### 6.5 Predictions 建议与编辑草稿的 freshness
+
+Predictions 通过独立的“下一句建议”页面展示单条建议；“采用并编辑”使用 `page_local_action`，经同步 callback 原位替换为独立编辑表单；采用及可恢复的同步校验拒绝返回的 view 不带 `MessageID`，避免误投影成后台 patch 再与 callback 竞争，记录本身仍保留原卡 ID 供后续失败恢复使用；表单首次填入建议，使用 `multiline_text` 支持换行，输入框 `width=fill` 自适应卡片宽度且标签置于上方；用户可修改或清空，清空后不会重新填入建议，“发送”使用 `page_local_submit` 提交给原会话。两种动作都在 callback 的 `request_id` 携带原采样 command ID，gateway 还原为 `PredictionID`，仅用于关联建议及提交。
+
+daemon 的通用卡片 freshness 之外，orchestrator 还按原用户、surface、instance、thread、源 turn 与当前易失记录校验采用和发送。新输入、原生新轮次、焦点或选中目标变化、断线、采样超时都会使旧记录失效；跨用户、重复或旧上下文回调只能被拒绝，不能改投当前 thread。采样响应由 wrapper 从原生 `thread/sample` 发出后等待 30 秒，超时尽力取消并回传空结果；正文投递和准备阶段不挤占采样时间，orchestrator 不另加从正文结束起的总期限；建议与草稿不另加本地时间或长度策略，仍按原上下文重新验证；重启后旧卡没有可恢复的服务端记录。飞书聊天输入框不会被写入，也不依赖正在输入事件或原生 Tab 键。
+
+独立表单不覆盖普通草稿载体。编辑提交绑定原 queue item 与实际 command，排队或派发期间拒绝重复提交。空提交同步保留空表单并提示输入；提交前的可恢复校验错误直接显示在保留编辑内容的表单上。跨用户、过期或重复点击的拒绝提示独立追加，原共享卡保留。
+
+提交进入队列后，派发前先后台更新原卡为只读回执，保留完整编辑正文，移除输入框和发送按钮，显示“已提交，等待处理”；该成功路径不同时返回 callback 替换卡，避免覆盖后续失败恢复。只有原 instance/thread、queue item 与 command 对应的新 `TurnStarted` 才将原卡更新为“已发送，任务已开始处理”；旧源轮次、其他 command/surface、local turn 不能确认这次提交。此前收到 `RuntimeStatus=active` 仍可使建议失效，但保留已提交正文及原队列的 command 关联，供排队结束后真实开始时生成回执，不恢复旧建议的操作权。
+
+任务确认开始前的派发失败、wrapper 显式拒绝或对应的原生启动拒绝，会后台恢复原 `MessageID` 上的编辑内容供手动重试；执行开始后的失败或迟到拒绝不能恢复发送入口。其他命令失败及已因新输入、切换或过期而失效的记录不能复活草稿。回执更新失败沿用现有投递错误提示，不回滚或重复投递正文；后台重复提交保护仍独立生效。原生 `RuntimeStatus=active` 及 active 快照也会拦截旧建议，恢复 idle 不会恢复已失效记录。这些行为已有本地回归；内容来自官方动态提示词与原生 sample 结果，飞书侧只承接展示、编辑和显式发送；官方 moderation policy 命中时采样结果为空，不再展示建议，也不在飞书层补充分类或改写。核心生命周期见 [remote surface 4.19](./remote-surface-state-machine.md#419-predictions-是绑定原上下文的易失建议不是新的执行队列)。
 
 ## 7. 当前回归基线
 

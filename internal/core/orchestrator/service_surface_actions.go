@@ -288,10 +288,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		cwd, routeMode = freezeDetourRoute(inst, surface)
 		createThread = false
 	}
-	inputs, stagedMessageIDs, filePrompt := s.consumeStagedInputs(surface, action.ActorUserID)
-	if filePrompt != "" {
-		inputs = append(inputs, agentproto.Input{Type: agentproto.InputText, Text: filePrompt})
-	}
+	inputs, stagedMessageIDs := s.stagedPromptInputs(surface, action.ActorUserID)
 	messageInputs := append([]agentproto.Input{}, sanitizedAction.Inputs...)
 	if len(messageInputs) == 0 {
 		if text != "" {
@@ -339,6 +336,14 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	// being processed, so the old pending is stale.
 	s.clearPendingTextInput(surface)
 	return append(events, s.enqueueQueueItem(surface, action.MessageID, action.Text, stagedMessageIDs, inputs, threadID, cwd, routeMode, surface.PromptOverride, false)...)
+}
+
+func (s *Service) stagedPromptInputs(surface *state.SurfaceConsoleRecord, actorUserID string) ([]agentproto.Input, []string) {
+	inputs, stagedMessageIDs, filePrompt := s.consumeStagedInputs(surface, actorUserID)
+	if filePrompt != "" {
+		inputs = append(inputs, agentproto.Input{Type: agentproto.InputText, Text: filePrompt})
+	}
+	return inputs, stagedMessageIDs
 }
 
 func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {

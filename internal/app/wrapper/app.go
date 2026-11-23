@@ -277,6 +277,9 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			return nil
 		},
 		OnCommand: func(ctx context.Context, command agentproto.Command) error {
+			if runtime, ok := a.runtime.(*codexBackendRuntime); ok && runtime.HandlePrediction(ctx, command, writeCh, client) {
+				return nil
+			}
 			if command.Kind == agentproto.CommandProcessExit {
 				a.debugf("relay shutdown command received: command=%s", command.CommandID)
 				select {
@@ -450,7 +453,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	startChildSessionIO(ctx, activeChild, stdout, stderr, writeCh, a.runtime, client, commandResponses, turnTracker, &activeChildGeneration, 1, errCh, a.debugf, rawLogger, problems.Emit)
 
 	go func() {
-		if err := runRelayClient(ctx, a.config.RelayServerURL, client, manager, func() bool { return connectedOnce }); err != nil && err != context.Canceled {
+		if err := runRelayClient(ctx, a.config.RelayServerURL, client, manager, func() bool { return connectedOnce }, func() { cancelRuntimePredictions(a.runtime) }); err != nil && err != context.Canceled {
 			errCh <- err
 		}
 	}()

@@ -11,7 +11,7 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
-func runRelayClient(ctx context.Context, relayURL string, client *relayws.Client, manager *relayruntime.Manager, connectedOnce func() bool) error {
+func runRelayClient(ctx context.Context, relayURL string, client *relayws.Client, manager *relayruntime.Manager, connectedOnce func() bool, onDisconnect func()) error {
 	backoff := 200 * time.Millisecond
 	for {
 		if !connectedOnce() {
@@ -20,6 +20,7 @@ func runRelayClient(ctx context.Context, relayURL string, client *relayws.Client
 			}
 		}
 		err := client.RunOnce(ctx)
+		onDisconnect()
 		if err == nil || errors.Is(err, context.Canceled) {
 			return err
 		}
