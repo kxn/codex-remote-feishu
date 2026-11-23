@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ func (a *App) handleUIEvents(ctx context.Context, events []eventcontract.Event) 
 func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.Event) {
 	_ = ctx
 	turnAttention := a.planTurnAttentionAnnotationsLocked(events)
+	runtimeNoticesFlushed := make(map[string]bool)
 	for index, event := range events {
 		event = event.Normalized()
 		if event.DaemonCommand != nil {
@@ -125,7 +127,14 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 			}
 			continue
 		}
-		a.flushPendingGlobalRuntimeNoticesLocked(event.SurfaceSessionID)
+		surfaceID := strings.TrimSpace(event.SurfaceSessionID)
+		if _, seen := runtimeNoticesFlushed[surfaceID]; !seen {
+			pending := len(a.pendingGlobalRuntimeNotices[surfaceID]) > 0
+			runtimeNoticesFlushed[surfaceID] = pending
+			if pending {
+				a.flushPendingGlobalRuntimeNoticesLocked(surfaceID)
+			}
+		}
 		event, isGlobalRuntimeNotice := normalizeGlobalRuntimeNoticeEvent(event)
 		if isGlobalRuntimeNotice && a.shouldSuppressGlobalRuntimeNoticeLocked(event, time.Now()) {
 			continue
@@ -156,6 +165,13 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 		}
 		if requestKey != "" {
 			a.recordRequestAttentionPingLocked(requestKey, deliveredAt)
+		}
+	}
+	// Give a new failure notice one attempt in this batch. A failed notice stays
+	// queued for a later batch; never replay the original UI event or command.
+	for surfaceID, flushed := range runtimeNoticesFlushed {
+		if !flushed {
+			a.flushPendingGlobalRuntimeNoticesLocked(surfaceID)
 		}
 	}
 }
@@ -519,15 +535,26 @@ func (a *App) queueGatewayFailureNotice(event eventcontract.Event, err error) {
 	if event.Notice != nil && event.Notice.Code == "gateway_apply_failed" {
 		return
 	}
-	notice := orchestrator.GlobalRuntimeGatewayApplyFailureNotice(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+	problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 		Code:             "gateway_apply_failed",
 		Layer:            "daemon",
 		Stage:            "gateway_apply",
 		Operation:        string(event.Kind),
-		Message:          "服务无法把消息发送到飞书。",
+		Message:          "飞书回显投递失败。",
 		SurfaceSessionID: event.SurfaceSessionID,
 		Retryable:        true,
-	}))
+	})
+	var apiErr *feishu.APIError
+	if errors.As(err, &apiErr) && apiErr != nil &&
+		apiErr.API == "im.v1.message.patch" && apiErr.Code == 230001 {
+		message := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(apiErr.Msg), "."))
+		const notACard = "this message is not a card"
+		if message == notACard || strings.HasSuffix(message, ", ext="+notACard) {
+			problem.Retryable = false
+		}
+	}
+	problem.Message += "请先查询当前状态确认操作结果，勿重复提交原操作。"
+	notice := orchestrator.GlobalRuntimeGatewayApplyFailureNotice(problem)
 	a.queueGlobalRuntimeNoticeLocked(eventcontract.Event{
 		Kind:             eventcontract.KindNotice,
 		SurfaceSessionID: event.SurfaceSessionID,

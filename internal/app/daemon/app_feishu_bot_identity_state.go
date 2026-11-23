@@ -297,8 +297,7 @@ func (a *App) purgeFeishuGatewayRuntimeStateLocked(gatewayID string, surfaceIDs 
 		delete(a.surfaceResumeRuntime.groupOnDemandContinuations, surfaceID)
 		delete(a.surfaceResumeRuntime.vscodeMigrationFlows, surfaceID)
 		delete(a.surfaceResumeRuntime.vscodeResumeNotices, surfaceID)
-		delete(a.pendingGlobalRuntimeNotices, surfaceID)
-		delete(a.recentGlobalRuntimeNotices, surfaceID)
+		a.purgeGlobalRuntimeNoticesLocked(surfaceID)
 	}
 	for key, pending := range a.pendingThreadHistoryReads {
 		if surfaceSet[strings.TrimSpace(pending.SurfaceSessionID)] {

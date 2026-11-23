@@ -135,14 +135,14 @@ func TestHandleUIEventsRetriesRequestAttentionAfterAnchorDeliveryFailure(t *test
 
 	app.handleUIEvents(context.Background(), []eventcontract.Event{requestEvent})
 
-	if len(gateway.operations) != 0 {
-		t.Fatalf("expected failed request delivery not to emit orphan attention ping, got %#v", gateway.operations)
+	if len(gateway.operations) != 1 || gateway.operations[0].AttentionText != "需要你回来处理：飞书投递失败。" {
+		t.Fatalf("expected failure notice instead of an orphan request attention ping, got %#v", gateway.operations)
 	}
 	if got := len(app.feishuRuntime.attentionRequests); got != 0 {
 		t.Fatalf("expected failed request delivery not to consume dedupe state, got %#v", app.feishuRuntime.attentionRequests)
 	}
 
-	delete(app.pendingGlobalRuntimeNotices, "surface-1")
+	gateway.operations = nil
 	app.handleUIEvents(context.Background(), []eventcontract.Event{requestEvent})
 
 	if len(gateway.operations) != 1 {
