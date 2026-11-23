@@ -9,24 +9,26 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
-func PrivateExecutionProgress(progress control.ExecCommandProgress, plan *control.PlanUpdate, title string) (card json.RawMessage, startSeq int, rollover bool) {
-	ops := (&Projector{}).projectExecCommandProgress("", eventcontract.Event{}, progress)
+func PrivateExecutionProgress(progress control.ExecCommandProgress, plan *control.PlanUpdate) (card json.RawMessage, startSeq int, rollover bool) {
+	projector := &Projector{}
+	ops := projector.projectExecCommandProgress("", eventcontract.Event{}, progress)
 	if len(ops) == 0 {
-		return nil, 0, false
+		if plan == nil {
+			return nil, 0, false
+		}
+		ops = projector.ProjectEvent("", eventcontract.Event{Payload: eventcontract.PlanUpdatePayload{PlanUpdate: *plan}})
+		return executionCardJSON(ops[0]), 0, false
 	}
 	op := ops[0]
-	if title == "" {
-		title = op.CardTitle
-	}
 	baseElements := op.CardElements
 	elements := baseElements
 	if plan != nil {
 		elements = append(append([]map[string]any(nil), baseElements...), feishuprojector.PlanUpdateElements(*plan)...)
 	}
-	op.card = rawCardDocumentWithHeader(title, cardTextTagPlainText, op.CardSubtitle, op.CardSubtitleTag, "", op.CardThemeKey, elements)
+	op.card = rawCardDocumentWithHeader(op.CardTitle, cardTextTagPlainText, op.CardSubtitle, op.CardSubtitleTag, "", op.CardThemeKey, elements)
 	card = executionCardJSON(op)
 	if len(card) == 0 && plan != nil {
-		op.card = rawCardDocumentWithHeader(title, cardTextTagPlainText, op.CardSubtitle, op.CardSubtitleTag, "", op.CardThemeKey, baseElements)
+		op.card = rawCardDocumentWithHeader(op.CardTitle, cardTextTagPlainText, op.CardSubtitle, op.CardSubtitleTag, "", op.CardThemeKey, baseElements)
 		card = executionCardJSON(op)
 	}
 	return card, op.ProgressCardStartSeq, op.Kind != OperationUpdateCard && len(progress.Segments) != 0

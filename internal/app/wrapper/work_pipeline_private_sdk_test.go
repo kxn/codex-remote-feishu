@@ -76,12 +76,12 @@ func (p *pipelinePrivatePlatform) Resolve(_ context.Context, binding work.RoleBo
 
 func (p *pipelinePrivatePlatform) verify(t *testing.T, ctx context.Context, publisher *workpublish.Publisher, backend work.Backend) {
 	t.Helper()
-	want := 3
+	want := 1
 	if backend == work.BackendClaude {
 		want++ // The Claude fixture emits a distinct stage paragraph.
 	}
 	if count, err := publisher.RunOnce(ctx, 16); err != nil || count != want {
-		t.Fatalf("expected initial progress, same-card terminal update, then automatic reply: %d %v", count, err)
+		t.Fatalf("expected automatic reply: %d %v", count, err)
 	}
 	if count, err := publisher.RunOnce(ctx, 16); err != nil || count != 0 {
 		t.Fatalf("expected no repeated private publications: %d %v", count, err)
@@ -89,12 +89,10 @@ func (p *pipelinePrivatePlatform) verify(t *testing.T, ctx context.Context, publ
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	writes := p.commands
-	if len(writes) != want || !strings.HasPrefix(writes[0], "CREATE ") || !strings.Contains(writes[0], "正在处理请求") ||
-		!strings.HasPrefix(writes[want-2], "PATCH ") || !strings.Contains(writes[want-2], "执行完成") ||
-		!strings.HasPrefix(writes[want-1], "CREATE ") || !strings.Contains(writes[want-1], "pipeline native final") {
+	if len(writes) != want || !strings.HasPrefix(writes[want-1], "CREATE ") || !strings.Contains(writes[want-1], "pipeline native final") {
 		t.Fatalf("private native subprocess did not reach the same-card progress and final sequence: %s", writes)
 	}
-	if backend == work.BackendClaude && (!strings.HasPrefix(writes[1], "CREATE ") || !strings.Contains(writes[1], "Starting the explicitly admitted work.")) {
-		t.Fatalf("intermediate Claude text was lost or reordered: %s", writes[1])
+	if backend == work.BackendClaude && (!strings.HasPrefix(writes[0], "CREATE ") || !strings.Contains(writes[0], "Starting the explicitly admitted work.")) {
+		t.Fatalf("intermediate Claude text was lost or reordered: %s", writes[0])
 	}
 }

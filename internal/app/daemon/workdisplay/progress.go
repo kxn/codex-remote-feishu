@@ -16,13 +16,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
-func (p *projection) progressStatus(label, text, status string) error {
-	execprogress.UpsertEntry(&p.display.Progress, state.ExecCommandProgressEntryRecord{
-		ItemID: "turn-status", Kind: "turn_status", Label: label, Summary: text, Status: status,
-	})
-	return p.publishProgress()
-}
-
 func (p *projection) item() error {
 	event := p.event
 	if event.Kind == agentproto.EventItemDelta {
@@ -270,11 +263,7 @@ func (p *projection) publishProgress() error {
 			progress.Timeline[i].Summary = feishu.PrivatePublicSummary(progress.Timeline[i].Summary)
 		}
 	}
-	title := "工作中"
-	if v.Terminated {
-		title = map[string]string{"completed": "执行完成", "failed": "执行失败", "interrupted": "执行已停止"}[p.event.Status]
-	}
-	card, startSeq, rollover := feishu.PrivateExecutionProgress(*progress, v.Plan, title)
+	card, startSeq, rollover := feishu.PrivateExecutionProgress(*progress, v.Plan)
 	if len(card) == 0 {
 		return nil
 	}

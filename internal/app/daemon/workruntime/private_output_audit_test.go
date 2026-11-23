@@ -165,7 +165,7 @@ func TestPrivateNativeHelperOutputDoesNotReachSDK(t *testing.T) {
 	}
 	drainPrivatePublisher(t, publisher)
 	requests := sdk.requests()
-	if len(requests) != 3 || !strings.Contains(requests[len(requests)-1].body, "actual private answer") {
+	if len(requests) != 1 || !strings.Contains(requests[len(requests)-1].body, "actual private answer") {
 		t.Fatalf("helper changed ordinary private progress/final sequence: %+v", requests)
 	}
 	for _, request := range requests {

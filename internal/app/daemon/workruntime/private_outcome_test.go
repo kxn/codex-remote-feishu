@@ -37,7 +37,7 @@ func TestPrivatePlainFinalSettlesInputAndAllowsNextRequest(t *testing.T) {
 	}
 	drainPrivatePublisher(t, publisher)
 	requests := sdk.requests()
-	if len(requests) != 3 || !strings.Contains(requests[2].body, "Actual private answer") {
+	if len(requests) != 1 || !strings.Contains(requests[0].body, "Actual private answer") {
 		t.Fatalf("plain final did not reach the actual SDK: %+v", requests)
 	}
 	f.tx(func(tx *workstore.Tx) error {

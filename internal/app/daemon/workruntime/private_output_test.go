@@ -229,7 +229,13 @@ func assertPrivateSDKOutput(t *testing.T, f *fixture, sdk *privateSDK, backend w
 		if request.method == http.MethodPatch {
 			patch++
 			progressPatch += request.body
-			if i == 0 || request.path != "/open-apis/im/v1/messages/"+requests[0].messageID {
+			found := false
+			for _, previous := range requests[:i] {
+				if previous.messageID != "" && request.path == "/open-apis/im/v1/messages/"+previous.messageID && strings.Contains(previous.body, "Check the inputs") {
+					found = true
+				}
+			}
+			if !found {
 				t.Fatalf("progress did not patch the same card: %+v", request)
 			}
 		}
@@ -261,7 +267,7 @@ func assertPrivateSDKOutput(t *testing.T, f *fixture, sdk *privateSDK, backend w
 			})
 		}
 	}
-	if reply != 1 || patch == 0 {
+	if reply != 1 || (backend == work.BackendCodex && patch == 0) {
 		t.Fatalf("no single automatic final and shared progress updates: reply=%d patch=%d requests=%+v", reply, patch, requests)
 	}
 	if backend == work.BackendCodex && (images != 1 || !strings.Contains(progressPatch, "example.go") || !strings.Contains(progressPatch, "Check the inputs")) {

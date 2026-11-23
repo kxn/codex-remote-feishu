@@ -109,6 +109,9 @@ func TestPrivateUnknownProgressPatchDoesNotReplayOrLoseFinal(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.start()
+	if err := f.handle(agentproto.Event{Kind: agentproto.EventTurnPlanUpdated, ThreadID: "session", TurnID: "turn-1", PlanSnapshot: &agentproto.TurnPlanSnapshot{Explanation: "initial plan"}}); err != nil {
+		t.Fatal(err)
+	}
 	drainPrivatePublisher(t, pub)
 	if err := f.handle(agentproto.Event{Kind: agentproto.EventTurnPlanUpdated, ThreadID: "session", TurnID: "turn-1", PlanSnapshot: &agentproto.TurnPlanSnapshot{Explanation: "will fail PATCH"}}); err != nil {
 		t.Fatal(err)
@@ -182,5 +185,43 @@ func TestPrivateNativeModeChangeAppliesToFutureEvents(t *testing.T) {
 	if strings.Contains(shown, "git status") || strings.Contains(shown, "hidden-search") || !strings.Contains(shown, "go build") ||
 		!strings.Contains(requests[len(requests)-2].body, "go build") || !strings.Contains(requests[len(requests)-1].body, "still got the answer") {
 		t.Fatalf("verbosity change removed visible activity or exposed hidden future activity: %s", shown)
+	}
+}
+
+func TestPrivatePlanCreatesProgressBeforeToolAndFinishesIt(t *testing.T) {
+	f := newFixture(t, work.BackendCodex, false, true)
+	f.coordinator.options.EnqueueReconcile = func(string) {}
+	sdk := startPrivateSDK(t, false)
+	pub, err := workpublish.New(f.store, privateSDKResolver{sdk.api}, func() time.Time { return f.now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.start()
+	drainPrivatePublisher(t, pub)
+	if len(sdk.requests()) != 0 {
+		t.Fatal("turn start published an empty progress card")
+	}
+	for _, event := range []agentproto.Event{
+		{Kind: agentproto.EventTurnPlanUpdated, PlanSnapshot: &agentproto.TurnPlanSnapshot{Steps: []agentproto.TurnPlanStep{{Step: "inspect inputs", Status: agentproto.TurnPlanStepStatusInProgress}}}},
+		{Kind: agentproto.EventItemStarted, ItemKind: "mcp_tool_call", ItemID: "tool", Metadata: map[string]any{"server": "example", "tool": "read"}},
+	} {
+		event.ThreadID, event.TurnID = "session", "turn-1"
+		if err := f.handle(event); err != nil {
+			t.Fatal(err)
+		}
+		drainPrivatePublisher(t, pub)
+	}
+	requests := sdk.requests()
+	if len(requests) == 0 || !strings.Contains(requests[0].body, "inspect inputs") {
+		t.Fatalf("plan missing: %+v", requests)
+	}
+	privateFinalEvent(f, "final answer")
+	if err := completePrivateTurn(f); err != nil {
+		t.Fatal(err)
+	}
+	drainPrivatePublisher(t, pub)
+	requests = sdk.requests()
+	if len(requests) != 3 || !strings.Contains(requests[1].body, "example/read") || !strings.Contains(requests[2].body, "final answer") {
+		t.Fatalf("incorrect progress terminal state: %+v", requests)
 	}
 }

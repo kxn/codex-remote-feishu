@@ -37,7 +37,7 @@ func TestPrivateReactionShellSuccessDoesNotEchoPayloadOrBecomeModelFinal(t *test
 					cards = append(cards, string(raw))
 					if r.Method == http.MethodPatch {
 						patches++
-						if r.URL.Path != "/open-apis/im/v1/messages/shell-card-2" {
+						if r.URL.Path != "/open-apis/im/v1/messages/shell-card-1" {
 							t.Errorf("replacement escaped original notice: %s", r.URL.Path)
 						}
 					}
@@ -144,7 +144,7 @@ func TestPrivateReactionShellSuccessDoesNotEchoPayloadOrBecomeModelFinal(t *test
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			if mode == "published-unknown" && (len(cards) != 3 || patches != 1 || !strings.Contains(cards[2], "已确认追加")) {
+			if mode == "published-unknown" && (len(cards) != 2 || patches != 1 || !strings.Contains(cards[0], "尚未确认") || !strings.Contains(cards[1], "已确认追加")) {
 				t.Fatalf("notice did not converge on its original card: %v", cards)
 			}
 			for _, card := range cards {

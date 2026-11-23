@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -166,10 +167,7 @@ func (p *projection) apply() error {
 			return nil
 		}
 		p.display.StartedAt = p.now
-		if p.display.Progress.Verbosity == state.SurfaceVerbosityQuiet {
-			return nil
-		}
-		return p.progressStatus("已开始", "正在处理请求", "running")
+		return nil
 	case agentproto.EventTurnCompleted:
 		return p.finish()
 	case agentproto.EventItemCompleted:
@@ -267,14 +265,23 @@ func (p *projection) finish() error {
 	p.display.Pending = ""
 	p.display.Terminated = true
 	if p.display.ProgressAnchorID != "" {
-		label, summary := "已完成", "本轮执行结束"
-		switch p.event.Status {
-		case "interrupted":
-			label, summary = "已停止", "本轮执行已停止"
-		case "failed":
-			label, summary = "失败", "本轮未完成"
+		status := execprogress.NormalizeStatus(p.event.Status, true)
+		for i := range p.display.Progress.Entries {
+			entry := &p.display.Progress.Entries[i]
+			if entry.Status == "running" || entry.Status == "started" {
+				entry.Status = status
+				// An in-flight turn from an older daemon may already have sent a
+				// start card. Retire that existing row without creating another.
+				if entry.Kind == "turn_status" {
+					entry.Label, entry.Summary = "执行状态", "本轮已结束"
+				}
+			}
 		}
-		if err := p.progressStatus(label, summary, p.event.Status); err != nil {
+		if p.display.Progress.Reasoning != nil {
+			p.display.Progress.Reasoning.Active = false
+		}
+		execprogress.FinalizeExploration(&p.display.Progress, status)
+		if err := p.publishProgress(); err != nil {
 			return err
 		}
 	}
