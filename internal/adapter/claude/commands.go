@@ -178,8 +178,9 @@ func (t *Translator) translateInterrupt(command agentproto.Command) ([][]byte, e
 		return nil, err
 	}
 	t.pendingControlReplies[requestID] = pendingControlReply{
-		CommandID: strings.TrimSpace(command.CommandID),
-		Kind:      "interrupt",
+		CommandID:     strings.TrimSpace(command.CommandID),
+		PrivateNative: command.NativeBinding != nil, ThreadID: command.Target.ThreadID, TurnID: command.Target.TurnID,
+		Kind: "interrupt",
 	}
 	return [][]byte{frame}, nil
 }

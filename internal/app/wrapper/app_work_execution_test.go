@@ -242,6 +242,7 @@ func TestWorkLaunchSnapshotReadAndFreeze(t *testing.T) {
 func TestWorkLaunchInstructionsAndSecretRemainFrozen(t *testing.T) {
 	t.Setenv(config.ClaudeAppendSystemPromptEnv, "legacy profile")
 	t.Setenv(config.WorkSessionTokenEnv, "test-secret-never-in-hello")
+	t.Setenv(agentproto.TeamRelayCredentialEnv, "team-relay-secret")
 	t.Setenv(config.WorkLaunchSnapshotEnv, "/private/snapshot.json")
 	app := newTestWorkApp(t, agentproto.BackendClaude)
 	app.config.WorkLaunchSnapshot.InstructionBundle.Text = "caller mutation"
@@ -255,7 +256,7 @@ func TestWorkLaunchInstructionsAndSecretRemainFrozen(t *testing.T) {
 	}
 	_, env := app.buildClaudeChildLaunch(nil)
 	joined := strings.Join(env, "\n")
-	if !strings.Contains(joined, config.WorkSessionTokenEnv+"=test-secret-never-in-hello") || strings.Contains(joined, "later-token") || strings.Contains(joined, config.WorkLaunchSnapshotEnv+"=") {
+	if !strings.Contains(joined, config.WorkSessionTokenEnv+"=test-secret-never-in-hello") || strings.Contains(joined, "later-token") || strings.Contains(joined, config.WorkLaunchSnapshotEnv+"=") || strings.Contains(joined, "team-relay-secret") {
 		t.Fatal("child environment did not isolate frozen session credential")
 	}
 	_, codexEnv := app.buildCodexChildLaunch(nil)
@@ -266,7 +267,7 @@ func TestWorkLaunchInstructionsAndSecretRemainFrozen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(public), "test-secret") || strings.Contains(string(frame), "test-secret") {
+	if strings.Contains(string(public), "test-secret") || strings.Contains(string(frame), "test-secret") || strings.Contains(string(public), "team-relay-secret") {
 		t.Fatal("session credential leaked into public protocol or prompt")
 	}
 	legacyEnv := (&App{}).applyWorkChildEnv(env)

@@ -327,6 +327,11 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 }
 
 func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, opts dispatchNextOptions) []eventcontract.Event {
+	if surface != nil {
+		if _, held := s.privateRecoveryHolds[surface.SurfaceSessionID]; held {
+			return nil
+		}
+	}
 	if blocked, ok := s.invalidBotCapabilitySettingsDispatchGate(surface); ok {
 		return blocked
 	}

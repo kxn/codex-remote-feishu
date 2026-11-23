@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -653,4 +654,39 @@ func cloneAction(action control.Action) control.Action {
 
 func stringValueRef(value string) *string {
 	return &value
+}
+
+var ErrInboundStaging = errors.New("private inbound staging required")
+
+// ParsePlannedTextAction reuses the same SDK message planning and text parser
+// for an already durable private event. Replies requiring quote fetch and all
+// media must be staged before calling this local-only function.
+func ParsePlannedTextAction(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1) (control.Action, bool, error) {
+	plan, ok, err := PlanInboundMessageEvent(env, event)
+	if err != nil || !ok {
+		return control.Action{}, ok, err
+	}
+	if plan.Action != nil {
+		return *plan.Action, true, nil
+	}
+	if plan.Queue == nil || plan.Queue.messageType != "text" || plan.Queue.parentMessageID != "" || plan.Queue.rootMessageID != "" {
+		return control.Action{}, false, ErrInboundStaging
+	}
+	return plan.Queue.parseAction(ctx, env)
+}
+
+// ParsePlannedInboundAction executes legacy quote/media preparation. Call only
+// from the host's durable asynchronous staging worker, outside app locks.
+func ParsePlannedInboundAction(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1) (control.Action, bool, error) {
+	plan, ok, err := PlanInboundMessageEvent(env, event)
+	if err != nil || !ok {
+		return control.Action{}, ok, err
+	}
+	if plan.Action != nil {
+		return *plan.Action, true, nil
+	}
+	if plan.Queue == nil {
+		return control.Action{}, false, nil
+	}
+	return plan.Queue.parseAction(ctx, env)
 }

@@ -225,7 +225,7 @@ func (t *Translator) translateModelList(command agentproto.Command) (Result, err
 		sessionID = command.Target.ThreadID
 	}
 	session := t.sessions[sessionID]
-	if command.IsOwnerOnlyRuntimeCommand() && sessionID == "" {
+	if command.NativeBinding != nil && command.NativeBinding.ExecutionID == "" || command.IsOwnerOnlyRuntimeCommand() && sessionID == "" {
 		requestID := t.NextRequest("model-catalog-session")
 		t.pendingRPC[requestID] = pendingRPC{Kind: "session/new.catalog", Command: command}
 		frame, err := marshalLine(map[string]any{"jsonrpc": "2.0", "id": requestID, "method": "session/new", "params": map[string]any{"cwd": t.commandCWD(command), "mcpServers": t.mcpServersParam()}})

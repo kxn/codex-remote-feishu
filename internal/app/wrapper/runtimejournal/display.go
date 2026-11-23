@@ -165,7 +165,7 @@ func (s *Store) publicSummaryEvents(event *agentproto.Event, now time.Time) ([]a
 			summary.sent[i] = len(text)
 			frames = append(frames, agentproto.Event{
 				Kind: agentproto.EventItemReasoningSummaryPartAdded, ItemKind: "reasoning_summary", ItemID: event.ItemID,
-				ThreadID: event.ThreadID, TurnID: event.TurnID, CommandID: event.CommandID, Execution: event.Execution,
+				ThreadID: event.ThreadID, TurnID: event.TurnID, CommandID: event.CommandID, Execution: event.Execution, NativeBinding: event.NativeBinding,
 				TrafficClass: event.TrafficClass, Initiator: event.Initiator, Delta: trailing,
 				Metadata: map[string]any{"publicReasoningSummary": true, "summaryIndex": i, "publicSummaryOffset": oldSent[i]},
 			})

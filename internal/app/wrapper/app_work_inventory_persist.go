@@ -70,6 +70,9 @@ func (s *workInspectionState) restore(journal *runtimejournal.Store, owner agent
 	if !state.Owner.SameOwner(owner) {
 		return fmt.Errorf("durable native inventory owner changed without new incarnation")
 	}
+	return s.applyInventory(state)
+}
+func (s *workInspectionState) applyInventory(state persistedWorkInventory) error {
 	if state.ShellItemsStarted != nil {
 		s.shellItemsStarted = state.ShellItemsStarted
 	}
@@ -116,4 +119,84 @@ func (s *workInspectionState) restore(journal *runtimejournal.Store, owner agent
 		}
 	}
 	return nil
+}
+
+// Private inventory is versioned and owner-bound independently; its payload
+// deliberately excludes the team owner fields.
+type persistedPrivateInventory struct {
+	Version int                    `json:"version"`
+	Owner   agentproto.NativeOwner `json:"native_owner"`
+	State   json.RawMessage        `json:"state"`
+}
+
+func (s *workInspectionState) persistPrivate(journal *runtimejournal.Store, owner agentproto.NativeOwner) error {
+	if journal == nil {
+		return nil
+	}
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+	s.mu.Lock()
+	if !s.dirty {
+		s.mu.Unlock()
+		return nil
+	}
+	state := persistedWorkInventory{ShellItemsStarted: s.shellItemsStarted, ActiveNativeCommands: s.activeNativeCommands, InputRPCMethods: s.inputRPCMethods, GoalKnown: s.goalKnown, GoalActive: s.goalActive, SessionIDs: s.sessionIDs, Turns: s.turns, PendingInputs: s.pendingInputs, ActiveTools: s.activeTools, Tasks: s.tasks, Uncertainties: s.uncertainties, TaskInventoryKnown: s.taskInventoryKnown}
+	for _, scope := range s.scopes {
+		state.Scopes = append(state.Scopes, scope.Inspect())
+	}
+	raw, err := json.Marshal(state)
+	if err == nil {
+		var fields map[string]json.RawMessage
+		err = json.Unmarshal(raw, &fields)
+		if err == nil {
+			delete(fields, "owner")
+			var turns map[string]map[string]json.RawMessage
+			if turnsRaw, ok := fields["turns"]; ok && string(turnsRaw) != "null" {
+				err = json.Unmarshal(turnsRaw, &turns)
+				if err == nil {
+					for _, turn := range turns {
+						delete(turn, "Binding")
+					}
+					fields["turns"], err = json.Marshal(turns)
+				}
+			}
+			if err == nil {
+				raw, err = json.Marshal(fields)
+			}
+		}
+	}
+	if err == nil {
+		raw, err = json.Marshal(persistedPrivateInventory{Version: 1, Owner: owner, State: raw})
+	}
+	if err == nil {
+		s.dirty = false
+	}
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if err = journal.SaveInventory(raw); err != nil {
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
+	}
+	return err
+}
+func (s *workInspectionState) restorePrivate(journal *runtimejournal.Store, owner agentproto.NativeOwner) error {
+	raw, err := journal.LoadInventory()
+	if err != nil || len(raw) == 0 {
+		return err
+	}
+	var state persistedPrivateInventory
+	if err = json.Unmarshal(raw, &state); err != nil {
+		return err
+	}
+	if state.Version != 1 || state.Owner != owner {
+		return fmt.Errorf("durable private inventory owner mismatch")
+	}
+	var shared persistedWorkInventory
+	if err = json.Unmarshal(state.State, &shared); err != nil {
+		return err
+	}
+	return s.applyInventory(shared)
 }

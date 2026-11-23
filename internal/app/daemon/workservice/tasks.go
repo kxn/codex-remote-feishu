@@ -115,10 +115,20 @@ func (s *Service) ReviseTask(ctx context.Context, token, runRef string, req Revi
 			if err = tx.PutTask(task, req.ExpectedRevision); err != nil {
 				return "", 0, err
 			}
+			if err = tx.ReassignPendingTaskInputs(task, s.now()); err != nil {
+				return "", 0, err
+			}
 			// The running attempt retains its frozen assignment. This durable event
-			// is admitted only after its carrier is known to be quiescent.
+			// is admitted only after its carrier is known to be quiescent. The
+			// stop driver derives the monotone revision mismatch from the same task.
 			input := work.Inbox{ID: stableID("inbox", task.ID, fmt.Sprint(task.Revision)), ScopeID: task.ScopeID, TaskID: task.ID, RecipientRoleID: task.OwnerRoleID, EventID: fmt.Sprintf("task:%s:revision:%d", task.ID, task.Revision), State: work.InboxPending, AvailableAt: s.now(), Revision: 1}
-			if err = tx.PutInbox(input, 0); err != nil {
+			body := work.NewContent(input.ID+":notice", task.ScopeID, "text/plain; charset=utf-8", []byte("任务要求或负责人已调整。以本轮冻结的任务版本为准，先核对已有成果和未完成部分，再继续工作；旧执行的历史记录仍保留。"), s.now())
+			if err = tx.PutContent(body); err != nil {
+				return "", 0, err
+			}
+			message := work.Message{ID: input.ID + ":message", ScopeID: task.ScopeID, ConversationID: "task:" + task.ID, Source: work.Actor{Kind: work.ActorSystem, ID: "task-revision"}, BodyRef: body.ID, Revision: 1, CreatedAt: s.now()}
+			input.MessageID = message.ID
+			if _, _, err = tx.AcceptMessage(message, []work.Inbox{input}); err != nil {
 				return "", 0, err
 			}
 			return task.ID, task.Revision, nil

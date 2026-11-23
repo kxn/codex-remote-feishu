@@ -138,8 +138,12 @@ func (a *App) gatewayRuntimeHooks() gatewayRuntimeHooks {
 	if a == nil {
 		return gatewayRuntimeHooks{}
 	}
+	hook := a.teamIngressHook()
+	if a.applications != nil {
+		hook = a.applications.hook
+	}
 	return gatewayRuntimeHooks{
-		RawIngressHook:        a.teamIngressHook(),
+		RawIngressHook:        hook,
 		PrimaryGatewayForChat: a.feishuPrimaryGatewayForChat,
 		BotOpenIDForGateway:   a.feishuFactBotOpenID,
 	}
@@ -171,6 +175,9 @@ func (a *App) runtimeGatewayConfigFor(cfg config.AppConfig, gatewayID string) (f
 }
 
 func (a *App) applyRuntimeFeishuConfig(cfg config.AppConfig, gatewayID string) error {
+	if a.applications != nil && a.applications.hook == nil {
+		return errors.New("application ingress must be configured before starting Feishu gateways")
+	}
 	a.feishuApplyMu.Lock()
 	defer a.feishuApplyMu.Unlock()
 

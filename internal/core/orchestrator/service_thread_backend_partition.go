@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*mergedThreadView, backend agentproto.Backend, filterByBackend bool) {
+func (s *Service) mergePersistedRecentThreadsForBackend(surface *state.SurfaceConsoleRecord, viewsByID map[string]*mergedThreadView, backend agentproto.Backend, filterByBackend bool) {
 	if s == nil || !s.catalog.hasPersistedThreads() {
 		return
 	}
@@ -18,6 +18,9 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 	for i := range threads {
 		thread := threads[i]
 		if strings.TrimSpace(thread.ThreadID) == "" || !ordinaryThreadVisible(&thread) {
+			continue
+		}
+		if !s.threadVisibleForSurface(surface, backend, "", thread.ThreadID) {
 			continue
 		}
 		view := viewsByID[thread.ThreadID]
@@ -36,13 +39,13 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 	// Loaded identities outside the recent window still receive fresh names.
 	ids := make([]string, 0, len(viewsByID))
 	for id, view := range viewsByID {
-		if agentproto.NormalizeBackend(view.Backend) == agentproto.BackendCodex {
+		if agentproto.NormalizeBackend(view.Backend) == agentproto.BackendCodex && s.threadVisibleForSurface(surface, agentproto.BackendCodex, "", id) {
 			ids = append(ids, id)
 		}
 	}
 	names := s.catalog.explicitThreadNames(agentproto.BackendCodex, ids)
-	for _, view := range viewsByID {
-		if agentproto.NormalizeBackend(view.Backend) == agentproto.BackendCodex {
+	for id, view := range viewsByID {
+		if agentproto.NormalizeBackend(view.Backend) == agentproto.BackendCodex && s.threadVisibleForSurface(surface, agentproto.BackendCodex, "", id) {
 			view.Thread = threadWithPersistedName(view.Thread, names)
 		}
 	}

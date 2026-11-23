@@ -176,3 +176,23 @@ func randomToken() (string, error) {
 	}
 	return hex.EncodeToString(bytes[:]), nil
 }
+
+// VerifyHeld checks the actual lock file against this process's unforgeable
+// in-memory lock capability. It does not expose the lock token.
+func (l *FileLock) VerifyHeld() error {
+	if l == nil || l.path == "" || l.token == "" {
+		return ErrLockHeld
+	}
+	raw, err := os.ReadFile(l.path)
+	if err != nil {
+		return err
+	}
+	var record lockRecord
+	if err = json.Unmarshal(raw, &record); err != nil {
+		return err
+	}
+	if record.PID != os.Getpid() || record.Token != l.token {
+		return ErrLockHeld
+	}
+	return nil
+}

@@ -82,7 +82,11 @@ func TestWorkInspectionNativeChildHelper(t *testing.T) {
 		case "thread/read":
 			write(map[string]any{"id": id, "result": map[string]any{"thread": map[string]any{"id": params["threadId"], "status": map[string]any{"type": "idle"}}}})
 		case "thread/goal/get":
-			write(map[string]any{"id": id, "result": map[string]any{"goal": nil}})
+			var goal any
+			if os.Getenv("WORK_INSPECTION_ACTIVE_GOAL") == "1" {
+				goal = map[string]any{"status": "active", "objective": "active"}
+			}
+			write(map[string]any{"id": id, "result": map[string]any{"goal": goal}})
 		default:
 			write(map[string]any{"id": id, "error": map[string]any{"message": "unsupported inspection method"}})
 		}

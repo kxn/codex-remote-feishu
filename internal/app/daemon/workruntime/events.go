@@ -11,15 +11,42 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-func (c *Coordinator) HandleEvent(ctx context.Context, currentTransportInstance string, event agentproto.Event) error {
+// CommittedEvent can only be produced by CommitEvent after the local store
+// transaction commits. Its fields are private to prevent fabricated receipts.
+type CommittedEvent struct {
+	coordinator   *Coordinator
+	instance      string
+	receipt       agentproto.EventReceipt
+	attemptID     string
+	durable       bool
+	nativeSession string
+}
+
+// NativeSession returns only a session whose ownership was established by the
+// same durable team event transaction, never an unvalidated event field.
+func (e *CommittedEvent) NativeSession() string {
+	if e == nil {
+		return ""
+	}
+	return e.nativeSession
+}
+
+// CommitEvent performs only local durable work; it does not send a receipt or
+// perform native reconciliation. Call PublishCommittedEvent after releasing any
+// outer ownership lock, even when the receipt transport can fail.
+func (c *Coordinator) CommitEvent(ctx context.Context, currentTransportInstance string, event agentproto.Event) (*CommittedEvent, error) {
 	if event.Journal == nil {
-		if event.Kind == agentproto.EventItemDelta || event.Kind == agentproto.EventThreadTokenUsageUpdated {
-			return c.applyLivePrivateOutput(ctx, currentTransportInstance, event)
+		if event.Kind != agentproto.EventItemDelta && event.Kind != agentproto.EventThreadTokenUsageUpdated {
+			return nil, fmt.Errorf("critical worker event requires durable journal identity")
 		}
-		return fmt.Errorf("critical worker event requires durable journal identity")
+		if err := c.applyLivePrivateOutput(ctx, currentTransportInstance, event); err != nil {
+			return nil, err
+		}
+		return &CommittedEvent{coordinator: c, instance: currentTransportInstance}, nil
 	}
 	var receipt agentproto.EventReceipt
 	var attemptID string
+	var nativeSession string
 	err := c.store.Within(ctx, func(tx *workstore.Tx) error {
 		carrier, err := tx.GetCarrier(event.Journal.CarrierIncarnation)
 		if err != nil {
@@ -40,23 +67,59 @@ func (c *Coordinator) HandleEvent(ctx context.Context, currentTransportInstance 
 				}
 			}
 		}
+		if err == nil && attemptID != "" && event.ThreadID != "" {
+			owned, e := tx.HasNativeSessionOwner(carrier.Incarnation, event.ThreadID, attemptID)
+			if e != nil {
+				return e
+			}
+			if owned {
+				nativeSession = event.ThreadID
+			}
+		}
 		return err
 	})
 	if err != nil {
-		return err
+		return nil, err
+	}
+	return &CommittedEvent{coordinator: c, instance: currentTransportInstance, receipt: receipt, attemptID: attemptID, durable: true, nativeSession: nativeSession}, nil
+}
+
+// PublishCommittedEvent performs post-commit effects, outside ownership locks.
+func (c *Coordinator) PublishCommittedEvent(ctx context.Context, committed *CommittedEvent) error {
+	return c.PublishCommittedEventTo(ctx, committed, c.options.SendReceipt)
+}
+
+// PublishCommittedEventTo preserves the committed token while allowing a
+// caller to deliver the receipt only to the connection that supplied the event.
+func (c *Coordinator) PublishCommittedEventTo(ctx context.Context, committed *CommittedEvent, send func(string, agentproto.EventReceipt) error) error {
+	if committed == nil || committed.coordinator != c {
+		return fmt.Errorf("event commit token required")
+	}
+	if !committed.durable {
+		return nil
 	}
 	var receiptErr error
-	if c.options.SendReceipt != nil {
-		receipt.InstanceID = currentTransportInstance
-		receiptErr = c.options.SendReceipt(currentTransportInstance, receipt)
+	if send != nil {
+		receipt := committed.receipt
+		receipt.InstanceID = committed.instance
+		receiptErr = send(committed.instance, receipt)
 	}
-	if attemptID != "" {
-		err = c.scheduleReconcile(ctx, attemptID)
+	var err error
+	if committed.attemptID != "" {
+		err = c.scheduleReconcile(ctx, committed.attemptID)
 	}
 	if receiptErr != nil {
 		return receiptErr
 	}
 	return err
+}
+
+func (c *Coordinator) HandleEvent(ctx context.Context, instance string, event agentproto.Event) error {
+	committed, err := c.CommitEvent(ctx, instance, event)
+	if err != nil {
+		return err
+	}
+	return c.PublishCommittedEvent(ctx, committed)
 }
 
 func (c *Coordinator) resolveBinding(tx *workstore.Tx, carrier workstore.CarrierRegistration, event agentproto.Event) (agentproto.ExecutionBinding, error) {

@@ -8,46 +8,15 @@ import (
 	"time"
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
-	"github.com/kxn/codex-remote-feishu/internal/core/work"
+	"github.com/kxn/codex-remote-feishu/internal/core/platformingress"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
-// MenuIngressEvent contains only verified SDK facts. A menu click carries no
-// chat or message ID; downstream must resolve a destination with this identity.
-type MenuIngressEvent struct {
-	GatewayRef string         `json:"gateway_ref"`
-	AppID      string         `json:"app_id"`
-	EventID    string         `json:"event_id"`
-	Tenant     string         `json:"tenant"`
-	SenderIDs  work.SenderIDs `json:"sender_ids"`
-	EventKey   string         `json:"event_key"`
-	ClickedAt  time.Time      `json:"clicked_at,omitempty"`
-	ReceivedAt time.Time      `json:"received_at"`
-}
-
-// PlatformIngressEvent is an observation. Recall events do not identify an
-// operator; reactions may belong to apps; bot-added is not proof all bots joined.
-type PlatformIngressEvent struct {
-	GatewayRef     string         `json:"gateway_ref"`
-	AppID          string         `json:"app_id"`
-	EventID        string         `json:"event_id"`
-	Tenant         string         `json:"tenant"`
-	Kind           string         `json:"kind"`
-	ChatID         string         `json:"chat_id,omitempty"`
-	MessageID      string         `json:"message_id,omitempty"`
-	OperatorType   string         `json:"operator_type,omitempty"`
-	OperatorIDs    work.SenderIDs `json:"operator_ids,omitempty"`
-	OperatorAppID  string         `json:"operator_app_id,omitempty"`
-	OperatorTenant string         `json:"operator_tenant,omitempty"`
-	Emoji          string         `json:"emoji,omitempty"`
-	RecallType     string         `json:"recall_type,omitempty"`
-	External       *bool          `json:"external,omitempty"`
-	OccurredAt     time.Time      `json:"occurred_at,omitempty"`
-	ReceivedAt     time.Time      `json:"received_at"`
-}
+type MenuIngressEvent = platformingress.MenuIngressEvent
+type PlatformIngressEvent = platformingress.PlatformIngressEvent
 
 func (g *LiveGateway) teamEventIdentity(base *larkevent.EventV2Base) (PlatformIngressEvent, error) {
 	var value PlatformIngressEvent
@@ -82,7 +51,7 @@ func (g *LiveGateway) handleTeamMenu(ctx context.Context, event *larkapplication
 		return true, fmt.Errorf("menu event missing actual operator")
 	}
 	ids := data.Operator.OperatorId
-	sender := work.SenderIDs{OpenID: xutil.StringValue(ids.OpenId), UserID: xutil.StringValue(ids.UserId), UnionID: xutil.StringValue(ids.UnionId)}
+	sender := platformingress.SenderIDs{OpenID: xutil.StringValue(ids.OpenId), UserID: xutil.StringValue(ids.UserId), UnionID: xutil.StringValue(ids.UnionId)}
 	key := strings.TrimSpace(xutil.StringValue(data.EventKey))
 	if sender.OpenID == "" && sender.UserID == "" && sender.UnionID == "" || key == "" {
 		return true, fmt.Errorf("menu event missing operator or event key")
@@ -165,7 +134,7 @@ func (g *LiveGateway) handleTeamReaction(ctx context.Context, event *larkim.P2Me
 		if v.MessageID == "" || v.Emoji == "" || (v.OperatorType != "user" && v.OperatorType != "app") {
 			return fmt.Errorf("reaction event missing message/emoji/operator")
 		}
-		if v.OperatorType == "app" && v.OperatorAppID == "" || v.OperatorType == "user" && v.OperatorIDs == (work.SenderIDs{}) {
+		if v.OperatorType == "app" && v.OperatorAppID == "" || v.OperatorType == "user" && v.OperatorIDs == (platformingress.SenderIDs{}) {
 			return fmt.Errorf("reaction event missing actual operator")
 		}
 		return nil

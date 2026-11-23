@@ -107,6 +107,9 @@ func (t *Tx) BeginPrivateShellOperation(req BeginPrivateShellOperationRequest) (
 		if e != nil {
 			return e
 		}
+		if e = t.AssertPersonalMigrationOpen(scope.ID); e != nil {
+			return e
+		}
 		action, e := t.GetPrivateReactionAction(req.Source.ReactionID)
 		if e != nil {
 			return e

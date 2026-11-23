@@ -47,7 +47,7 @@ func newPrivateMCPReadFixture(t *testing.T, appIDs ...string) *privateMCPReadFix
 	pickerTx(t, a, func(tx *workstore.Tx) error {
 		return tx.PutWorker(work.WorkerSession{ID: owner.WorkerSessionID, ScopeID: front.ScopeID, ContextID: front.ID, RoleID: front.RoleID, Backend: work.BackendCodex, State: work.WorkerReady, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: f.carrier.OriginInstanceID, CarrierIncarnation: f.carrier.Incarnation, InstanceGeneration: 1, ProcessGeneration: 1, LocationID: "mcp-location", LocationGeneration: 1, NativeSessionID: "mcp-session", NativeNamespace: "codex", Revision: 1}, 0)
 	})
-	driver, err := worktransport.New(a.teamRuntime.store, f.relay)
+	driver, err := worktransport.New(a.teamRuntime.store, f.relay, a.teamRuntime.beginPersonalSourceActivity)
 	if err != nil {
 		t.Fatal(err)
 	}

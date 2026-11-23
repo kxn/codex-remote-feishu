@@ -17,6 +17,7 @@ const (
 	targetPickerPendingNewThread      targetPickerPendingKind = "new_thread"
 	targetPickerPendingGitImport      targetPickerPendingKind = "git_import"
 	targetPickerPendingWorktreeCreate targetPickerPendingKind = "worktree_create"
+	targetPickerPendingPrivateMkdir   targetPickerPendingKind = "private_mkdir"
 )
 
 func (s *Service) clearTargetPickerRuntime(surface *state.SurfaceConsoleRecord) {

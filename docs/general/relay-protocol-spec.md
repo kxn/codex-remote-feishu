@@ -1,8 +1,8 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-08-16`
-> Summary: 在既有 canonical 协议基础上补充 `thread.shell_command`、Codex capability 声明、payload-file UserShell 注入和 queued `APPLAUSE` ack/恢复边界（#901）。
+> Updated: `2026-11-24`
+> Summary: 独立私人和团队原生 binding、载体认证、持久接受证据、检查及 live 序号；生产装配包含迁移切换门，当前改动尚未部署。
 
 ## 1. 文档定位
 
@@ -145,6 +145,18 @@ wrapper 建立连接后首先发送：
 - `probe=true` 的连接只用于版本/可达性检查，`relayd` 不得把它注册成可见实例，也不得触发普通实例初始化动作
 - `capabilitiesDeclared=true` 表示该实例显式声明了完整 capability matrix，`relayd` / daemon 必须按上报值原样消费，不能再按 backend 默认值补齐
 - 旧实例若未上报 `capabilitiesDeclared`，仍按 legacy fallback 处理：在缺失 capability 位上按 backend 默认值补齐
+
+### 3.3.1 独立私人载体（已实现的可选协议，尚未切换生产入口）
+
+私人模式在同一 `relay.agent.v1` 中使用 `privateNativeProtocolVersion=1`，命令/事件携带 `NativeTurnBinding`：应用 owner、epoch、carrier incarnation、实际 instance/process generation、后端和 native history namespace，以及需要时的私人 execution ID。它与团队 `Execution` 互斥；私人不伪造 role/task/attempt。旧团队协议字段和 canonical hash 在未添加私人字段时不变。
+
+启动使用冻结的 `PrivateNativeLaunchSnapshot`，cwd 必须是明确选择的绝对工作目录。独立每载体凭据通过握手通道验证，不能仅信 hello 自报 instance。宿主按已认证 `ConnectionID` 发送命令和 ACK，重连后旧连接不能接管同名实例。凭据不进入事件正文、日志或团队提示词；恢复使用受控 0600 文件和固定配置指纹。
+
+关键事件使用 wrapper journal 的 sequence/hash，daemon 先持久保存后 ACK；ACK 不代表输入已被模型接受。启动/追加的 accepted 只能来自实际 native request/session/turn 关联。查询合并时，每个等待命令仍须有持久 source-query 关联，不能把另一个查询的成功当成自己的结果。`native.control.result` 的 interrupt accepted 也不代表模型/后台已经停止。
+
+私人 `runtime.inspect` 单独声明 `privateNativeInspectionProtocolVersion=1`，使用 owner-only binding 或明确受检命令，`locationGeneration=0`；核验实际 native、continuation/goal、后台三个域。退役还要求先持久阻止新业务发送、完成检查、排空 socket，确认准确 OS 进程退出，并校验检查水位以后没有副作用帧。没有发送过 effectful native frame 的私人 journal 可以有水位 0；0 本身不是停止证明。
+
+可丢的 `item.delta` 使用单独的 `RuntimeLiveIdentity`（incarnation、sequence、payload hash），不占用 critical journal sequence，也不能携带完成、输入接受或停止证据。wrapper 分段持久预留 live sequence 后分配，重启跳过未使用号码；宿主验证可信连接及精确已接受会话后，将文本投影和已应用 live 标记同事务保存。critical final 继续使用旧 translator/core 的完整文本合并规则。
 
 ### 3.4 `welcome`
 

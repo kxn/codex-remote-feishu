@@ -1,7 +1,7 @@
-# Agent 统一运行层：代码复用与命令盘点依据
+# Agent 运行能力：代码复用与命令盘点依据
 
 > Type: `draft`
-> Updated: `2026-11-21`
+> Updated: `2026-11-24`
 > Summary: 保留原代码复用与完整 Slash 盘点；统一实现工作包、迁移合同和产品故事转由主文档规定。
 
 文档定位：本文件是专项依据／附录，不是另一份实施入口。用户行为以[产品主文档](./feishu-agent-team-product-design.md)为准，领域所有权、状态与迁移以[技术主文档](./feishu-agent-team-technical-design.md)为准，后端具体时序见[原生运行合同](./feishu-agent-team-runtime-contracts.md)。本文件保留原调查证据和解释；实现拆分、异常处理及验收统一按主文档的 US／T／UAT 编号追踪。
@@ -13,7 +13,7 @@
 本次用户明确的优先级：
 
 1. 最高优先级是 Raft 式群工作体验：固定同事、负责人协调、同事直接协作、并行执行、评审、交付与持续记忆。
-2. 单聊迁入同一底层并获得记忆；保留对话、工作的便利与连续性，以及现有适用的单聊 Slash Command；显示布局可调整，功能接到统一内核。
+2. 单聊保留独立私人核心并获得稳定记忆；保留对话、工作的便利与连续性，以及适用的单聊 Slash Command；与团队共享原生适配和平台通信。
 3. 原群聊体验可以整体丢弃，不维持旧 primary/workspace/coworkers 操作流程。
 4. Worktree 由 Agent 通过原生 Git 自主管理，平台不另造目录生命周期或合并引擎，用户无需理解或管理。
 5. 模型、已有工作目录等精确选择保留控件；用户明确给出的选择直接采用，Agent 不自行猜选已有资源。
@@ -55,7 +55,7 @@
 
 Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude 当前命令 switch 不具备同样的 compact handler；OpenCode 默认能力不提供 TurnSteer。完整运行层必须补齐适配，或在不支持即时操作的边界持久排队／受控重建，不能把声明字段存在视为功能已完成。
 
-现有 Bot record 还保存 `ProductMode`（headless/vscode）。新内核须把“使用哪个 backend/model”的角色策略与“这项工作由后台还是本地界面控制”分开：前者继续 Bot 级统一，后者属于 WorkerSession/controller。私聊接管本地编辑器不能把同 Bot 的所有项目群一起切换执行方式；旧 `/mode` 的混合含义要拆解，而不是照搬全局字段。
+现有 Bot record 还保存 `ProductMode`（headless/vscode）。新内核须把“使用哪个 backend/model”的角色策略与“这项工作由后台还是本地界面控制”分开：前者继续 Bot 级统一，后者属于 WorkerSession/controller。本地编辑器接管已移除；私人和团队执行归属分别验证，旧 `/mode` 的混合含义不能照搬为全局控制。
 
 
 ### 3.1 资料接入的新增审计
@@ -92,7 +92,7 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 
 [headless 启动](../../internal/app/daemon/app_headless.go:325) 检查 surface.PendingHeadless，[pool](../../internal/app/daemon/app_headless_pool.go:14) 依赖 attached surface/active turn 判断忙碌，[detach](../../internal/core/orchestrator/service_detach_headless.go) 可在最后 surface 离开时释放实例。
 
-新运行层用持久 launch operation、controller lease、session pin 和进程证据管理。离开菜单／切换查看对象不等于取消工作；明确停止或人工接管才改变执行资格。单聊长任务也应因此获得可靠后台连续性。
+新运行层用持久 launch operation、controller lease、session pin 和进程证据管理。离开菜单／切换查看对象不等于取消工作；明确停止和经过认证的运行状态变更才改变执行资格。单聊长任务也应因此获得可靠后台连续性。
 
 ### 4.4 事件、恢复与投影混在同一处理链
 
@@ -160,13 +160,13 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 
 单聊是找同一位同事单独工作、讨论和指导。默认个人范围，直接对话、交付文件、继续过去工作；长期偏好和未完成事项随角色与个人工作空间恢复。无需为了聊天伪造一个飞书项目群，也不必每条消息建一张 Task。
 
-需要项目资料时，用户明确提到项目或选择项目；系统展示当前作用范围，提供对应资料。模糊时请用户选项目，不按最近活跃群猜。讨论某项目不自动把私聊全文发布到群；形成项目决定／任务／成果时通过有来源的业务操作写入相应范围。
+需要项目资料时，通过 `/project` 明确选择当前授权项目；不按提及的项目名或最近活跃群自动切换身份。分享指定正文、私人记忆版本或已保存项目资料版本须由本人确认，登记到项目负责人收件箱；不自动发布私人全文或授予项目控制权。
 
 个人上下文读取角色职责、个人偏好、当前工作；项目上下文读取角色职责、项目共享知识与角色项目经验。私人信息不自动提升到全局 RoleMemory；跨范围共享通过明确动作和已有访问合同完成。
 
 当前 DM identity 按 gateway＋actor 分开，是可用入口；但 preferred user ID 有不同类型，gateway 也可重绑 AppID。个人记忆应关联稳定 Principal/Role/Scope，记录应用身份、ID 类型和 binding generation；只把 `gateway` 字符串当永久记忆 key 会在重绑后出错。旧身份关联失效时保存资料与迁移记录，不默认让新 App 继承，也不直接删除历史。
 
-同一个 Bot 的模型配置仍统一；多个用户的私人记忆、同一用户不同项目的工作记忆分别隔离。共享模型不是共享所有上下文。单聊和项目共享统一生命周期、执行、记忆服务，只有 scope、业务组织与展示不同。
+同一个 Bot 的模型配置仍统一；多个用户的私人记忆、同一用户不同项目的工作记忆分别隔离。共享模型不是共享所有上下文。私人和团队分别管理业务生命周期、执行与记忆，共享底层原生适配与平台通信。
 
 ## 7. 旧群退役与现有行为影响
 
@@ -188,7 +188,7 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 
 ## 8. 实现组织与迁移终点
 
-建议逻辑边界为：工作领域（scope/context/task/memory）→ 统一执行内核（session/attempt/claims/dispatch/recovery）→ 现有 wrapper/backend；飞书单聊与项目群分别投影，CLI 调同一业务用例。daemon 负责事务与副作用组合，避免两个控制器同时拥有同一原生 turn。
+实际逻辑边界为：中立可信入口 → 私人应用或群团队应用；私人 core 管理 session／队列，团队领域管理 scope/context/task/memory 与调度，两者通过共享 registry 和 wrapper/backend 保证载体唯一归属。daemon 负责事务与副作用组合。
 
 迁移期逐个 context 进行 authority cutover：保存旧 surface/native thread/目录关联，核对运行证据，建立新 context/session，提交归属代次后旧执行字段停止写入。单聊和群都迁入同一执行 owner；旧 owner union 只是过渡，不是永久双内核。
 
@@ -204,7 +204,7 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 
 - 同 Bot × 两个人私聊 × 两个项目群同时工作，结果、调用身份和记忆不会串线。
 - 人选模型／已有目录准确生效；Agent 创建内部工作区无需人操作，也不改变人所选项目资源。
-- 私聊与项目使用同一恢复和记忆机制；新会话保留应有记忆，重新开始任务不意外抹去角色。
+- 私人与团队分别恢复各自队列和记忆；新私人会话保留应有记忆，重新开始团队任务不意外抹去角色。
 - 事件只由一个 session/attempt owner 处理；查看／退出界面不终止后台工作，明确停止不会被自动继续绕过。
 - Agent 自行创建／恢复独立工作位置、固定成果评审、跨项目集成与冲突处理；平台不私自重置或清理目录。
 - 同一资料原位更新、团队引用不复制、旧预览清理不碰永久资料；issue/PR 与文档的权威范围不冲突。

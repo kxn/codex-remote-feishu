@@ -103,8 +103,11 @@ func workCommandProblem(command agentproto.Command, code, message string) error 
 }
 
 func (a *App) prepareWorkCommand(command agentproto.Command) (agentproto.Command, error) {
+	if a.privateNative != nil {
+		return a.privateNative.prepare(command)
+	}
 	if a.work == nil {
-		if command.Execution != nil {
+		if command.Execution != nil || command.NativeBinding != nil {
 			return command, workCommandProblem(command, "work_execution_not_supported", "当前 wrapper 未绑定 WorkerSession，无法接收团队执行命令。")
 		}
 		return command, nil
@@ -117,6 +120,9 @@ func (w *workExecutionState) prepareCommand(command agentproto.Command, backend 
 		if err := validateReadOnlyCommand(command); err != nil {
 			return command, err
 		}
+	}
+	if command.NativeBinding != nil {
+		return command, workCommandProblem(command, "work_execution_owner_mismatch", "mixed native binding")
 	}
 	ownerOnly := command.IsOwnerOnlyRuntimeCommand()
 	if command.Execution == nil || (ownerOnly && command.Execution.ValidateOwner() != nil) || (!ownerOnly && command.Execution.ValidateExecution() != nil) || strings.TrimSpace(command.CommandID) == "" {

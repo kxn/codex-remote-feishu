@@ -75,7 +75,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 				"turnId":   command.Target.TurnID,
 			},
 		}
-		t.pendingSuppressedResponse[xutil.LookupStringFromAny(payload["id"])] = suppressedResponseContext{Action: "turn/interrupt"}
+		t.pendingSuppressedResponse[xutil.LookupStringFromAny(payload["id"])] = suppressedResponseContext{Action: "turn/interrupt", CommandID: command.CommandID, ThreadID: command.Target.ThreadID, ExpectedTurnID: command.Target.TurnID, PrivateNative: command.NativeBinding != nil}
 		bytes, err := json.Marshal(payload)
 		if err != nil {
 			return nil, err
@@ -140,8 +140,19 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		}
 		return [][]byte{append(bytes, '\n')}, nil
 	case agentproto.CommandThreadsRefresh:
+		if command.NativeBinding != nil && t.threadListRefreshActive() && t.threadListRefresh.privateSource != "" {
+			t.threadListRefresh.privateWaiters = append(t.threadListRefresh.privateWaiters, command.CommandID)
+			return nil, nil
+		}
 		query := defaultThreadListQuery()
 		if owner, ok := t.threadListBroker.LookupOwner(query); ok {
+			if command.NativeBinding != nil {
+				if t.threadListRefresh == nil || t.threadListRefresh.privateSource == "" || t.threadListRefresh.privateRequestID != owner.RequestID {
+					return nil, fmt.Errorf("private shared query lacks canonical source")
+				}
+				t.threadListRefresh.privateWaiters = append(t.threadListRefresh.privateWaiters, command.CommandID)
+				return nil, nil
+			}
 			t.beginThreadListRefresh(owner.RequestID, owner.Visible)
 			t.Debugf(
 				"translate threads refresh: join inflight request=%s visible=%t currentThread=%s inflightReads=%d",
@@ -154,6 +165,11 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		}
 		requestID := t.NextRequest("threads-refresh")
 		t.beginThreadListRefresh(requestID, false)
+		if command.NativeBinding != nil {
+			t.threadListRefresh.privateSource = command.CommandID
+			t.threadListRefresh.privateRequestID = requestID
+			t.threadListRefresh.privateWaiters = []string{command.CommandID}
+		}
 		t.threadListBroker.RegisterNativeOwner(requestID, query)
 		t.Debugf(
 			"translate threads refresh: request=%s currentThread=%s inflightReads=%d",

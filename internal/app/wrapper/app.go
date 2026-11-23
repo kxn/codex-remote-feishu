@@ -21,10 +21,11 @@ import (
 )
 
 type App struct {
-	config  Config
-	runtime backendRuntime
-	work    *workExecutionState
-	workErr error
+	config        Config
+	runtime       backendRuntime
+	work          *workExecutionState
+	privateNative *privateNativeState
+	workErr       error
 }
 
 const (
@@ -47,12 +48,13 @@ type restartRequest struct {
 }
 
 type Config struct {
-	WorkLaunchSnapshot *agentproto.RuntimeLaunchSnapshot
-	RelayServerURL     string
-	CodexRealBinary    string
-	NameMode           string
-	Args               []string
-	ConfigPath         string
+	WorkLaunchSnapshot  *agentproto.RuntimeLaunchSnapshot
+	PrivateNativeLaunch *agentproto.PrivateNativeLaunchSnapshot
+	RelayServerURL      string
+	CodexRealBinary     string
+	NameMode            string
+	Args                []string
+	ConfigPath          string
 
 	InstanceID                string
 	DisplayName               string
@@ -84,6 +86,13 @@ type Config struct {
 }
 
 func LoadConfig(args []string, version, branch string) (_ Config, resultErr error) {
+	if os.Getenv(config.WorkLaunchSnapshotEnv) != "" && os.Getenv(agentproto.PrivateNativeLaunchEnv) != "" {
+		return Config{}, fmt.Errorf("team and private launch are mutually exclusive")
+	}
+	privateSnapshot, err := readPrivateNativeLaunch(os.Getenv(agentproto.PrivateNativeLaunchEnv))
+	if err != nil {
+		return Config{}, err
+	}
 	snapshot, err := readWorkLaunchSnapshot(os.Getenv(config.WorkLaunchSnapshotEnv))
 	if err != nil {
 		return Config{}, err
@@ -157,6 +166,7 @@ func LoadConfig(args []string, version, branch string) (_ Config, resultErr erro
 	}
 	return Config{
 		WorkLaunchSnapshot:        snapshot,
+		PrivateNativeLaunch:       privateSnapshot,
 		RelayServerURL:            loaded.RelayServerURL,
 		CodexRealBinary:           loaded.CodexRealBinary,
 		NameMode:                  loaded.NameMode,
@@ -206,13 +216,26 @@ func New(cfg Config) *App {
 			})
 		}
 	}
+	if cfg.WorkLaunchSnapshot != nil && cfg.PrivateNativeLaunch != nil {
+		return &App{config: cfg, runtime: runtime, workErr: fmt.Errorf("team and private launch are mutually exclusive")}
+	}
 	work, workErr := newWorkExecutionState(cfg)
+	private, privateErr := newPrivateNativeState(cfg)
+	if work != nil && private != nil {
+		workErr = fmt.Errorf("team and private launch are mutually exclusive")
+	}
+	if workErr == nil && privateErr != nil {
+		workErr = privateErr
+	}
+	if private != nil {
+		runtime = &privateNativeRuntime{backendRuntime: runtime, state: private}
+	}
 	if work != nil {
 		snapshotCopy := work.snapshot
 		cfg.WorkLaunchSnapshot = &snapshotCopy
 		runtime = &workExecutionRuntime{backendRuntime: runtime, work: work}
 	}
-	return &App{config: cfg, runtime: runtime, work: work, workErr: workErr}
+	return &App{config: cfg, runtime: runtime, work: work, privateNative: private, workErr: workErr}
 }
 
 func (a *App) debugf(format string, args ...any) {
@@ -305,11 +328,31 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		OnCommand: func(ctx context.Context, command agentproto.Command) error {
 			originalCommand := command
 			var err error
+			privatePrepared := false
+			if a.privateNative != nil {
+				if command.NativeBinding == nil || command.NativeBinding.Owner != a.privateNative.snapshot.Owner {
+					return fmt.Errorf("private command owner mismatch")
+				}
+				duplicate, e := a.prepareJournalCommand(originalCommand)
+				if e != nil {
+					return e
+				}
+				if duplicate {
+					return nil
+				}
+				privatePrepared = true
+			}
 			command, err = a.prepareWorkCommand(command)
 			if err != nil {
+				if privatePrepared {
+					a.recordPrivatePrewriteRejection(client, originalCommand, err)
+				}
 				return err
 			}
-			duplicate, err := a.prepareJournalCommand(originalCommand)
+			duplicate := false
+			if !privatePrepared {
+				duplicate, err = a.prepareJournalCommand(originalCommand)
+			}
 			if err != nil {
 				return err
 			}
@@ -317,11 +360,15 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				return nil
 			}
 			if command.Kind == agentproto.CommandRuntimeInspect {
-				if a.work == nil {
-					return workCommandProblem(command, "work_execution_not_supported", "当前 wrapper 未启用团队原生检查。")
+				if a.work == nil && a.privateNative == nil {
+					return workCommandProblem(command, "work_execution_not_supported", "当前 wrapper 未启用原生检查。")
 				}
 				event := a.inspectNative(ctx, command, writeCh)
 				event.Execution = agentproto.CloneExecutionBinding(command.Execution)
+				if command.NativeBinding != nil {
+					binding := *command.NativeBinding
+					event.NativeBinding = &binding
+				}
 				return client.SendEvents([]agentproto.Event{event})
 			}
 			if command.Kind == agentproto.CommandProcessExit {
@@ -375,6 +422,9 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			result, err := a.runtime.TranslateCommand(command)
 			if err != nil {
 				a.debugf("relay command translation failed: command=%s err=%v", command.CommandID, err)
+				if privatePrepared {
+					a.recordPrivatePrewriteRejection(client, originalCommand, err)
+				}
 				if problem, ok := err.(agentproto.ErrorInfo); ok {
 					return problem.Normalize()
 				}
@@ -489,7 +539,13 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	})
 	problems.SetClient(client)
 	if a.work != nil && a.work.journal != nil {
+		if credential := os.Getenv(agentproto.TeamRelayCredentialEnv); credential != "" {
+			client.SetPrivateCredential(credential)
+		}
 		client.SetEventJournal(a.work.journal)
+	} else if a.privateNative != nil {
+		client.SetPrivateCredential(os.Getenv(agentproto.PrivateNativeCredentialEnv))
+		client.SetEventJournal(a.privateNative.journal)
 	}
 	client.SetRawLogger(rawLogger)
 
@@ -591,15 +647,17 @@ func (a *App) relayHello() agentproto.Hello {
 		instance.CodexProfileID = strings.TrimSpace(a.config.CodexProfileID)
 	}
 	return agentproto.Hello{
-		Protocol:                         agentproto.WireProtocol,
-		CarrierProcess:                   a.carrierProcessIdentity(),
-		WorkerProtocolVersion:            a.workProtocolVersion(),
-		RuntimeInspectionProtocolVersion: a.inspectionProtocolVersion(),
-		JournalProtocolVersion:           a.journalProtocolVersion(),
-		CarrierIncarnation:               a.carrierIncarnation(),
-		Instance:                         instance,
-		Capabilities:                     a.runtime.Capabilities(),
-		CapabilitiesDeclared:             true,
+		Protocol:                               agentproto.WireProtocol,
+		CarrierProcess:                         a.carrierProcessIdentity(),
+		WorkerProtocolVersion:                  a.workProtocolVersion(),
+		PrivateNativeProtocolVersion:           a.privateNativeProtocolVersion(),
+		PrivateNativeInspectionProtocolVersion: a.privateInspectionProtocolVersion(),
+		RuntimeInspectionProtocolVersion:       a.inspectionProtocolVersion(),
+		JournalProtocolVersion:                 a.journalProtocolVersion(),
+		CarrierIncarnation:                     a.carrierIncarnation(),
+		Instance:                               instance,
+		Capabilities:                           a.runtime.Capabilities(),
+		CapabilitiesDeclared:                   true,
 	}
 }
 

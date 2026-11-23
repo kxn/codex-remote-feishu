@@ -11,7 +11,7 @@ import (
 
 func (s *Store) PrepareCommand(command agentproto.Command) (*agentproto.RuntimeCommandReceipt, bool, error) {
 	ownerOnly := command.IsOwnerOnlyRuntimeCommand()
-	if command.CommandID == "" || command.Execution == nil || (ownerOnly && command.Execution.ValidateOwner() != nil) || (!ownerOnly && command.Execution.ValidateExecution() != nil) {
+	if command.NativeBinding != nil || command.CommandID == "" || command.Execution == nil || (ownerOnly && command.Execution.ValidateOwner() != nil) || (!ownerOnly && command.Execution.ValidateExecution() != nil) {
 		return nil, false, ErrConflict
 	}
 	raw, err := json.Marshal(command)

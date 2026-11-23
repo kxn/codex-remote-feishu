@@ -21,16 +21,23 @@ import (
 type Registrar interface {
 	RegisterCommand(context.Context, string, agentproto.Command) error
 }
+
+// RegisteredSender owns the registration/send lifetime when a runtime uses
+// the shared execution owner. Bind only during construction.
+type RegisteredSender interface {
+	SendRegistered(context.Context, string, string, agentproto.Command, func() error) error
+}
 type Transport interface {
 	SendCommand(string, agentproto.Command) error
 }
 type Driver struct {
-	store     *workstore.Store
-	transport Transport
-	registrar Registrar
-	now       func() time.Time
-	mu        sync.Mutex
-	waiters   map[string]*inspectionWaiter
+	store         *workstore.Store
+	transport     Transport
+	registrar     Registrar
+	activityGuard func(context.Context, string) (func(), error)
+	now           func() time.Time
+	mu            sync.Mutex
+	waiters       map[string]*inspectionWaiter
 }
 type inspectionReply struct {
 	Result agentproto.RuntimeInspectionResult
@@ -45,16 +52,32 @@ type inspectionWaiter struct {
 // starting a relay. It breaks the coordinator/driver constructor dependency.
 func (d *Driver) BindRegistrar(registrar Registrar) { d.registrar = registrar }
 
-func New(store *workstore.Store, transport Transport) (*Driver, error) {
-	if store == nil || transport == nil {
-		return nil, fmt.Errorf("durable store and relay transport are required")
+func effectfulNativeCommand(kind agentproto.CommandKind) bool {
+	switch kind {
+	case agentproto.CommandRuntimeInspect, agentproto.CommandTurnInterrupt, agentproto.CommandProcessExit, agentproto.CommandThreadsRefresh, agentproto.CommandThreadHistoryRead, agentproto.CommandThreadGoalGet, agentproto.CommandThreadRead, agentproto.CommandModelList, agentproto.CommandRuntimeMCPRead:
+		return false
+	default:
+		return true
 	}
-	return &Driver{store: store, transport: transport, now: time.Now, waiters: make(map[string]*inspectionWaiter)}, nil
+}
+
+func New(store *workstore.Store, transport Transport, guard func(context.Context, string) (func(), error)) (*Driver, error) {
+	if store == nil || transport == nil || guard == nil {
+		return nil, fmt.Errorf("durable store, relay transport and source activity guard are required")
+	}
+	return &Driver{store: store, transport: transport, activityGuard: guard, now: time.Now, waiters: make(map[string]*inspectionWaiter)}, nil
 }
 
 func (d *Driver) SendCommand(ctx context.Context, instanceID string, command agentproto.Command) error {
 	if d.registrar == nil || command.Execution == nil {
 		return &PreSendError{Err: fmt.Errorf("registered worker command required")}
+	}
+	if effectfulNativeCommand(command.Kind) {
+		end, err := d.activityGuard(ctx, command.Execution.ScopeID)
+		if err != nil {
+			return &PreSendError{Err: err}
+		}
+		defer end()
 	}
 	var incarnation string
 	err := d.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -70,6 +93,9 @@ func (d *Driver) SendCommand(ctx context.Context, instanceID string, command age
 	})
 	if err != nil {
 		return &PreSendError{Err: err}
+	}
+	if sender, ok := d.registrar.(RegisteredSender); ok {
+		return sender.SendRegistered(ctx, incarnation, instanceID, command, func() error { return d.transport.SendCommand(instanceID, command) })
 	}
 	if err = d.registrar.RegisterCommand(ctx, incarnation, command); err != nil {
 		return &PreSendError{Err: err}

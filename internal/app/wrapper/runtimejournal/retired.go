@@ -22,10 +22,30 @@ func (s *Store) NativeWriteWatermark() (int64, error) {
 // VerifyRetiredWriteFence is read-only. It is used only after an independently
 // verified exact carrier OS identity has exited; it never reopens for replay.
 func VerifyRetiredWriteFence(ctx context.Context, snapshot agentproto.RuntimeLaunchSnapshot, stateDir string, watermark int64) error {
-	if watermark <= 0 {
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	return verifyRetiredWriteFence(ctx, snapshot.JournalPath, stateDir, snapshot.CWD, snapshot.CarrierIncarnation, raw, watermark, true)
+}
+
+// VerifyRetiredPrivateWriteFence verifies the exact private launch and journal
+// after an independently proven carrier exit. It is not itself an exit proof.
+func VerifyRetiredPrivateWriteFence(ctx context.Context, snapshot agentproto.PrivateNativeLaunchSnapshot, stateDir string, watermark int64) error {
+	if err := snapshot.Validate(); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	return verifyRetiredWriteFence(ctx, snapshot.JournalPath, stateDir, snapshot.CWD, snapshot.Owner.CarrierIncarnation, raw, watermark, true)
+}
+func verifyRetiredWriteFence(ctx context.Context, journalPath, stateDir, cwd, incarnation string, raw []byte, watermark int64, allowEmpty bool) error {
+	if watermark < 0 || (watermark == 0 && !allowEmpty) {
 		return fmt.Errorf("no durable native write watermark")
 	}
-	path, err := ValidatePath(snapshot.JournalPath, stateDir, snapshot.CWD)
+	path, err := ValidatePath(journalPath, stateDir, cwd)
 	if err != nil {
 		return err
 	}
@@ -40,16 +60,15 @@ func VerifyRetiredWriteFence(ctx context.Context, snapshot agentproto.RuntimeLau
 		return err
 	}
 	defer db.Close()
-	raw, _ := json.Marshal(snapshot)
 	var fingerprint string
-	if err = db.QueryRowContext(ctx, `SELECT payload_hash FROM launch_contracts WHERE incarnation=?`, snapshot.CarrierIncarnation).Scan(&fingerprint); err != nil {
+	if err = db.QueryRowContext(ctx, `SELECT payload_hash FROM launch_contracts WHERE incarnation=?`, incarnation).Scan(&fingerprint); err != nil {
 		return err
 	}
 	if fingerprint != hash(raw) {
 		return fmt.Errorf("retired journal launch contract changed")
 	}
 	var count int
-	if err = db.QueryRowContext(ctx, `SELECT count(*) FROM frames f JOIN commands c ON c.id=f.command_id WHERE c.incarnation=? AND f.id>? AND f.native_method NOT IN ('thread/read','thread/goal/get','model/list','thread/goal/clear','turn/interrupt','session/cancel','interrupt')`, snapshot.CarrierIncarnation, watermark).Scan(&count); err != nil {
+	if err = db.QueryRowContext(ctx, `SELECT count(*) FROM frames f JOIN commands c ON c.id=f.command_id WHERE c.incarnation=? AND f.id>? AND f.native_method NOT IN ('thread/read','thread/goal/get','model/list','thread/goal/clear','turn/interrupt','session/cancel','interrupt')`, incarnation, watermark).Scan(&count); err != nil {
 		return err
 	}
 	if count != 0 {
@@ -57,7 +76,7 @@ func VerifyRetiredWriteFence(ctx context.Context, snapshot agentproto.RuntimeLau
 	}
 	// A watermark cannot refer to a missing or truncated journal prefix.
 	var maximum int64
-	if err = db.QueryRowContext(ctx, `SELECT coalesce(max(f.id),0) FROM frames f JOIN commands c ON c.id=f.command_id WHERE c.incarnation=?`, snapshot.CarrierIncarnation).Scan(&maximum); err != nil {
+	if err = db.QueryRowContext(ctx, `SELECT coalesce(max(f.id),0) FROM frames f JOIN commands c ON c.id=f.command_id WHERE c.incarnation=?`, incarnation).Scan(&maximum); err != nil {
 		return err
 	}
 	if maximum < watermark {

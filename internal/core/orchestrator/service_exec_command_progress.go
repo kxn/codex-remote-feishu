@@ -319,6 +319,10 @@ func (s *Service) RecordExecCommandProgressSegmentWindow(surfaceID, threadID, tu
 	if strings.TrimSpace(itemID) != "" && progress.ItemID != strings.TrimSpace(itemID) {
 		return
 	}
+	recordExecCommandProgressSegmentWindow(progress, messageID, cardStartSeq, cardEndSeq)
+}
+
+func recordExecCommandProgressSegmentWindow(progress *state.ExecCommandProgressRecord, messageID string, cardStartSeq, cardEndSeq int) {
 	appended := false
 	segment := ensureExecCommandProgressActiveSegment(progress)
 	if segment == nil || (strings.TrimSpace(segment.MessageID) != "" && strings.TrimSpace(segment.MessageID) != strings.TrimSpace(messageID)) {

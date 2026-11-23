@@ -17,6 +17,9 @@ func (s *Server) SendEventReceipt(instanceID string, receipt agentproto.EventRec
 	if current == nil {
 		return errors.New("instance offline")
 	}
+	if current.authenticated {
+		return errors.New("authenticated carrier requires connection identity")
+	}
 	if receipt.InstanceID == "" {
 		receipt.InstanceID = instanceID
 	}

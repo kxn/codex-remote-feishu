@@ -72,7 +72,7 @@ func (t *Tx) deferPrivateReactionSource(observation PlatformObservation, facts p
 // Bounded fair scans reuse the existing action journal. A permanent download
 // cannot occupy the first page forever; checked entries rotate behind others.
 func (t *Tx) resolveDeferredPrivateReactionSources(limit int) error {
-	rows, err := t.tx.QueryContext(t.ctx, `SELECT payload FROM team_private_reaction_actions WHERE state='waiting_source' ORDER BY julianday(json_extract(payload,'$.deferred_checked_at')),id LIMIT ?`, limit)
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT a.payload FROM team_private_reaction_actions a WHERE a.state='waiting_source' AND NOT EXISTS(SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=json_extract(a.payload,'$.scope_id')) ORDER BY julianday(json_extract(a.payload,'$.deferred_checked_at')),a.id LIMIT ?`, limit)
 	if err != nil {
 		return err
 	}

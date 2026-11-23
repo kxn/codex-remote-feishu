@@ -1,7 +1,7 @@
 # 人与 Agent 的交付：Raft 源码与适配依据
 
 > Type: `draft`
-> Updated: `2026-11-23`
+> Updated: `2026-11-24`
 > Summary: 标明交付专项的设计依据及现行实现和验收入口。
 
 文档定位：本文件是专项依据／附录，不是另一份实施入口。用户行为以[产品主文档](./feishu-agent-team-product-design.md)为准，领域所有权、状态与迁移以[技术主文档](./feishu-agent-team-technical-design.md)为准，后端具体时序见[原生运行合同](./feishu-agent-team-runtime-contracts.md)。本文件保留原调查证据和解释；实现拆分、异常处理及验收统一按主文档的 US／T／UAT 编号追踪。
@@ -141,7 +141,7 @@ Agent 从当前需求、已有仓库规则和项目工作约定确定怎样交�
 
 ### 6.2 发布结果与送达分开
 
-新增 Delivery 记录：scope/task、受众、意图（告知／决策／评审／交付）、简要结论、需人动作、ArtifactVersion／ResourceVersion／PR／commit 引用、关联话题、保留类别和操作回执。单聊使用个人 scope，普通消息不强迫存在 Task。
+新增 Delivery 记录：scope/task、受众、意图（告知／决策／评审／交付）、简要结论、需人动作、ArtifactVersion／ResourceVersion／PR／commit 引用、关联话题、保留类别和操作回执。该 Delivery 模型属于群团队；单聊答复由私人应用自己的消息、effect 与平台回执管理，不创建团队个人 scope 或 Task。
 
 Agent 通过显式 CLI 业务操作准备／提交，命令名由统一 registry 定义；不另外预加载大套工具。服务端检查本次发布声明的内容／引用、允许范围与实际保存结果；只有项目明确采用的必需成果约束才参与完成条件，再将可发送的交付和 outbox 在同一事务中关联。外部保存是前置 operation，不能放进数据库事务伪造原子提交。
 

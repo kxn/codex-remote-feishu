@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,10 +37,11 @@ type relayConn interface {
 type dialRelayConnFunc func(context.Context, string, http.Header) (relayConn, error)
 
 type Client struct {
-	journal   EventJournal
-	url       string
-	hello     agentproto.Hello
-	callbacks ClientCallbacks
+	credential string
+	journal    EventJournal
+	url        string
+	hello      agentproto.Hello
+	callbacks  ClientCallbacks
 
 	mu      sync.RWMutex
 	conn    relayConn
@@ -101,6 +104,11 @@ func newClientWithQueueSizes(url string, hello agentproto.Hello, callbacks Clien
 	close(client.outboundState.ensureIdleLocked())
 	return client
 }
+
+const PrivateCredentialHeader = "X-Codex-Private-Carrier"
+
+// SetPrivateCredential is called before Run; credentials are never in envelopes.
+func (c *Client) SetPrivateCredential(value string) { c.credential = value }
 
 func defaultDialRelayConn(ctx context.Context, url string, header http.Header) (relayConn, error) {
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, url, header)
@@ -256,10 +264,25 @@ func (c *Client) enqueue(outbox *[]queuedEnvelope, max int, item queuedEnvelope,
 }
 
 func (c *Client) RunOnce(ctx context.Context) error {
+	if c.hello.PrivateNativeProtocolVersion != 0 || c.credential != "" {
+		endpoint, err := url.Parse(c.url)
+		if err != nil || c.credential == "" {
+			return errors.New("private carrier credential and relay URL required")
+		}
+		host := endpoint.Hostname()
+		ip := net.ParseIP(host)
+		if endpoint.Scheme != "wss" && !(endpoint.Scheme == "ws" && (host == "localhost" || ip != nil && ip.IsLoopback())) {
+			return errors.New("private relay requires TLS or loopback")
+		}
+	}
 	connectionEpoch := atomic.AddUint64(&c.epoch, 1)
 	runCtx, runCancel := context.WithCancel(ctx)
 	defer runCancel()
-	conn, err := c.dialRelayConn(ctx, c.url, http.Header{})
+	header := http.Header{}
+	if c.credential != "" {
+		header.Set(PrivateCredentialHeader, c.credential)
+	}
+	conn, err := c.dialRelayConn(ctx, c.url, header)
 	if err != nil {
 		return err
 	}

@@ -33,6 +33,17 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			if pending.Action == "turn/steer" {
 				return nativeSteerResponse(pending, requestID, message), nil
 			}
+			if pending.Action == "turn/interrupt" && pending.PrivateNative {
+				event := agentproto.Event{Kind: agentproto.EventNativeControlResult, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, TurnID: pending.ExpectedTurnID, Action: "turn.interrupt", Status: "accepted"}
+				if problem := jsonrpcutil.ExtractErrorMessage(message); problem != "" {
+					event.Status = "failed"
+					event.ErrorMessage = problem
+				} else if result, ok := message["result"]; !ok || result == nil {
+					event.Status = "unknown"
+					event.ErrorMessage = "native control response lacks result"
+				}
+				return Result{Suppress: true, Events: []agentproto.Event{event}}, nil
+			}
 			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 				delete(t.pendingRemoteTurnByThread, pending.ThreadID)
 				t.Debugf("observe server suppressed response error: request=%s action=%s thread=%s error=%s", requestID, pending.Action, pending.ThreadID, errMsg)
@@ -289,6 +300,15 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if t.threadListRefreshOwnsResponse(requestID) {
 			refresh := t.threadListRefresh
+			if refresh.privateSource != "" {
+				if problem := jsonrpcutil.ExtractErrorMessage(message); problem != "" {
+					refresh.privateStatus = "failed"
+					refresh.privateError = problem
+				} else if result, ok := message["result"]; !ok || result == nil {
+					refresh.privateStatus = "unknown"
+					refresh.privateError = "native query response lacks result"
+				}
+			}
 			delete(refresh.records, "")
 			borrowed := refresh.ownerVisible
 			refresh.ownerRequestID = ""
@@ -304,14 +324,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			)
 			if len(threads) == 0 {
 				refresh.records = map[string]agentproto.ThreadSnapshotRecord{}
-				return Result{
-					Suppress:         !borrowed,
-					OutboundToParent: threadListAliasResponses,
-					Events: []agentproto.Event{{
-						Kind:    agentproto.EventThreadsSnapshot,
-						Threads: nil,
-					}},
-				}, nil
+				result := t.finishThreadListRefresh(!borrowed)
+				result.OutboundToParent = threadListAliasResponses
+				return result, nil
 			}
 			var outbound [][]byte
 			for index, thread := range threads {
@@ -411,6 +426,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				Suppress: true,
 				Events: []agentproto.Event{{
 					Kind:          agentproto.EventThreadHistoryRead,
+					RequestID:     requestID,
 					CommandID:     pending.CommandID,
 					ThreadID:      threadID,
 					ThreadHistory: &history,
@@ -893,104 +909,4 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 	default:
 		return Result{}, nil
 	}
-}
-
-func threadRefreshNeedsRead(record agentproto.ThreadSnapshotRecord) bool {
-	if strings.TrimSpace(record.CWD) == "" {
-		return true
-	}
-	if strings.TrimSpace(record.Name) == "" && strings.TrimSpace(record.Preview) == "" {
-		return true
-	}
-	if record.RuntimeStatus == nil && strings.TrimSpace(record.State) == "" {
-		return true
-	}
-	return false
-}
-
-func parseCodexProblemEvent(message map[string]any) *agentproto.ErrorInfo {
-	errPayload := lookupMap(message, "params", "error")
-	if len(errPayload) == 0 {
-		return nil
-	}
-	messageText := strings.TrimSpace(xutil.LookupStringFromAny(errPayload["message"]))
-	detailsText := strings.TrimSpace(xutil.LookupStringFromAny(errPayload["additionalDetails"]))
-	retryable := lookupBool(message, "params", "willRetry")
-	if retryable && detailsText != "" && strings.HasPrefix(strings.ToLower(messageText), "reconnecting") {
-		messageText = detailsText
-	}
-	problem := agentproto.ErrorInfo{
-		Code:      xutil.FirstNonEmpty(codexErrorCode(errPayload["codexErrorInfo"]), "codex_runtime_error"),
-		Layer:     "codex",
-		Stage:     "runtime_error",
-		Message:   xutil.FirstNonEmpty(messageText, detailsText),
-		Details:   xutil.FirstNonEmpty(detailsText, messageText),
-		ThreadID:  lookupString(message, "params", "threadId"),
-		TurnID:    lookupString(message, "params", "turnId"),
-		Retryable: retryable,
-	}
-	normalized := problem.Normalize()
-	return &normalized
-}
-
-func codexErrorCode(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return strings.TrimSpace(typed)
-	case map[string]any:
-		if len(typed) != 1 {
-			return ""
-		}
-		for key := range typed {
-			return strings.TrimSpace(key)
-		}
-	}
-	return ""
-}
-
-func extractTurnPlanSnapshot(message map[string]any) *agentproto.TurnPlanSnapshot {
-	params := lookupMap(message, "params")
-	if len(params) == 0 {
-		return nil
-	}
-	snapshot := &agentproto.TurnPlanSnapshot{
-		Explanation: strings.TrimSpace(xutil.LookupStringFromAny(params["explanation"])),
-	}
-	rawPlan, _ := params["plan"].([]any)
-	for _, raw := range rawPlan {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		step := strings.TrimSpace(xutil.LookupStringFromAny(entry["step"]))
-		status := agentproto.NormalizeTurnPlanStepStatus(xutil.LookupStringFromAny(entry["status"]))
-		if step == "" && status == "" {
-			continue
-		}
-		snapshot.Steps = append(snapshot.Steps, agentproto.TurnPlanStep{
-			Step:   step,
-			Status: status,
-		})
-	}
-	if snapshot.Explanation == "" && len(snapshot.Steps) == 0 {
-		return nil
-	}
-	return snapshot
-}
-
-func lookupBool(message map[string]any, path ...string) bool {
-	current := any(message)
-	for _, segment := range path {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return false
-		}
-		next, exists := m[segment]
-		if !exists {
-			return false
-		}
-		current = next
-	}
-	value, ok := current.(bool)
-	return ok && value
 }

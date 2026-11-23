@@ -12,7 +12,7 @@ func (t *Tx) ListPendingMenuInteractions(limit int) ([]MenuInteraction, error) {
 	if limit < 1 || limit > 100 {
 		return nil, fmt.Errorf("invalid menu batch")
 	}
-	rows, err := t.tx.QueryContext(t.ctx, "SELECT payload FROM menu_interactions WHERE state='pending' ORDER BY json_extract(payload,'$.envelope.received_at'),id LIMIT ?", limit)
+	rows, err := t.tx.QueryContext(t.ctx, "SELECT payload FROM menu_interactions WHERE state='pending' AND NOT EXISTS (SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=json_extract(menu_interactions.payload,'$.scope_id')) ORDER BY json_extract(payload,'$.envelope.received_at'),id LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +82,9 @@ func (t *Tx) BeginMenuDestination(id string, expected int64, text string) (v Men
 		}
 		if v.DestinationState != "" {
 			return nil
+		}
+		if e = t.AssertPersonalMigrationOpen(v.ScopeID); e != nil {
+			return e
 		}
 		if text == "" || v.Envelope.SenderIDs.OpenID == "" {
 			return fmt.Errorf("menu entry needs actual App-qualified open_id and frozen text")

@@ -352,6 +352,10 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 }
 
 func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surface *state.SurfaceConsoleRecord, view *mergedThreadView, mode startHeadlessMode, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
+	return s.startHeadlessForResolvedThreadWithProfilePolicy(surface, view, mode, cleanup, true)
+}
+
+func (s *Service) startHeadlessForResolvedThreadWithProfilePolicy(surface *state.SurfaceConsoleRecord, view *mergedThreadView, mode startHeadlessMode, cleanup surfaceOverlayRouteCleanupOptions, restoreWorkspaceProfile bool) []eventcontract.Event {
 	if surface == nil || view == nil {
 		return nil
 	}
@@ -386,7 +390,9 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 	if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
 		return blocked
 	}
-	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
+	if restoreWorkspaceProfile {
+		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
+	}
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
 	threadTitle := displayThreadTitle(view.Inst, view.Thread)
@@ -436,8 +442,10 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 		}
 	}
 	surface.Backend = agentproto.NormalizeBackend(targetBackend)
-	if blocked := s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface); len(blocked) != 0 {
-		return append(events, blocked...)
+	if restoreWorkspaceProfile {
+		if blocked := s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface); len(blocked) != 0 {
+			return append(events, blocked...)
+		}
 	}
 	launchContract := s.headlessLaunchContract(surface)
 	s.adoptSurfacePendingHeadlessLaunch(surface, &state.HeadlessLaunchRecord{

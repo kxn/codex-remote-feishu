@@ -39,7 +39,7 @@ func (a *App) launchInitialChild(ctx context.Context, logger *debuglog.RawLogger
 }
 
 func (a *App) recordWorkStartupFailure(stage string) {
-	if !a.managedInspectionEnabled() {
+	if a.work == nil || !a.managedInspectionEnabled() {
 		return
 	}
 	identity := a.carrierProcessIdentity()

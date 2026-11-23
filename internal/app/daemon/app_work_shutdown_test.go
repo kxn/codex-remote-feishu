@@ -46,6 +46,9 @@ func TestShutdownCarrierOSHelper(t *testing.T) {
 }
 
 func shutdownFixture(t *testing.T, respond bool) (*App, *workstore.Store, *int) {
+	return shutdownFixtureWithWitness(t, respond, false)
+}
+func shutdownFixtureWithWitness(t *testing.T, respond, witness bool) (*App, *workstore.Store, *int) {
 	t.Helper()
 	ctx := context.Background()
 	root := t.TempDir()
@@ -60,17 +63,48 @@ func shutdownFixture(t *testing.T, respond bool) (*App, *workstore.Store, *int) 
 			t.Fatal(err)
 		}
 	}
+	roleID := "role"
+	if witness {
+		roleID = teamID("role", "gateway")
+	}
 	txRun(func(tx *workstore.Tx) error {
 		if err := tx.PutPrincipal(work.Principal{ID: "human", DisplayName: "Human", Revision: 1}, 0); err != nil {
 			return err
 		}
-		if err := tx.PutRole(work.Role{ID: "role", Name: "Role", Description: "Role", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); err != nil {
+		if err := tx.PutRole(work.Role{ID: roleID, Name: "Role", Description: "Role", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); err != nil {
 			return err
 		}
-		if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "role", GatewayRef: "gateway", AppID: "app", IdentityGeneration: 1}, 0); err != nil {
+		if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: roleID, GatewayRef: "gateway", AppID: "app", IdentityGeneration: 1}, 0); err != nil {
 			return err
 		}
-		return tx.PutScope(work.WorkScope{ID: "scope", Kind: work.ScopePersonal, PrincipalID: "human", RoleID: "role", Revision: 1}, 0)
+		principalID := "human"
+		var ingressID string
+		if witness {
+			now := time.Now().UTC()
+			raw := work.RawIngressEnvelope{GatewayRef: "gateway", AppID: "app", EventID: "witness", Tenant: "tenant", ChatID: "chat", ChatType: "p2p", MessageID: "witness-message", SenderType: "user", SenderIDs: work.SenderIDs{OpenID: "human"}, MessageType: "text", RawContent: `{"text":"hello"}`, ReceivedAt: now}
+			gateway := work.IngressGateway{GatewayRef: "gateway", AppID: "app", RoleID: roleID, BotGeneration: 1}
+			ingress, _, e := tx.AcceptRawIngress(raw, gateway)
+			if e != nil {
+				return e
+			}
+			principal, _, e := tx.ResolvePrincipal(work.IdentityEvidence{Tenant: "tenant", AppID: "app", Generation: 1, IDs: raw.SenderIDs, ObservationRef: ingress.ID})
+			if e != nil {
+				return e
+			}
+			principalID = principal.ID
+			ingressID = ingress.ID
+		}
+		if e := tx.PutScope(work.WorkScope{ID: "scope", Kind: work.ScopePersonal, PrincipalID: principalID, RoleID: roleID, Revision: 1}, 0); e != nil {
+			return e
+		}
+		if witness {
+			nav, e := tx.EnsurePrivateNavigation("scope", ingressID, time.Now())
+			if e != nil {
+				return e
+			}
+			return tx.FreezePrivateIngressNavigation(ingressID, nav)
+		}
+		return nil
 	})
 	signer, err := workauth.New([]byte("0123456789abcdef0123456789abcdef"), nil)
 	if err != nil {
@@ -84,7 +118,7 @@ func shutdownFixture(t *testing.T, respond bool) (*App, *workstore.Store, *int) 
 	r := &teamRuntime{app: a, store: store, service: service, signer: signer}
 	a.teamRuntime = r
 	relay := &shutdownRelay{}
-	driver, err := worktransport.New(store, relay)
+	driver, err := worktransport.New(store, relay, r.beginPersonalSourceActivity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +204,18 @@ func shutdownFixture(t *testing.T, respond bool) (*App, *workstore.Store, *int) 
 		}
 		return driver.DeliverInspection(ctx, event)
 	}
-	if err = r.host.Prepare(ctx, workengine.WorkerNeed{ScopeID: "scope", RoleID: "role"}); err != nil {
+	need := workengine.WorkerNeed{ScopeID: "scope", RoleID: roleID}
+	if witness {
+		txRun(func(tx *workstore.Tx) error {
+			nav, e := tx.GetPrivateNavigation("scope")
+			if e != nil {
+				return e
+			}
+			need.ContextID = nav.FrontContextID
+			return nil
+		})
+	}
+	if err = r.host.Prepare(ctx, need); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

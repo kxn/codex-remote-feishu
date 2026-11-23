@@ -1,7 +1,10 @@
 package workstore
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -107,7 +110,7 @@ func (t *Tx) SupersedePrivateDisplayUpdate(id string, now time.Time) (bool, erro
 // ListPendingPrivatePreviews returns accepted terminal displays awaiting their
 // durable preview decision, including interrupted preparations after restart.
 func (t *Tx) ListPendingPrivatePreviews(limit int) ([]string, error) {
-	rows, err := t.tx.QueryContext(t.ctx, `SELECT id FROM private_execution_display WHERE json_extract(payload,'$.PreviewTerminal') IS NOT NULL ORDER BY json_extract(payload,'$.Binding.attemptId'),id LIMIT ?`, limit)
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT id FROM private_execution_display d WHERE json_extract(d.payload,'$.PreviewTerminal') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=json_extract(d.payload,'$.Binding.scopeId')) ORDER BY json_extract(d.payload,'$.Binding.attemptId'),id LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -124,10 +127,42 @@ func (t *Tx) ListPendingPrivatePreviews(limit int) ([]string, error) {
 }
 
 func (t *Tx) HasPendingPrivatePreview(attemptID string) (bool, error) {
-	var found int
-	err := t.tx.QueryRowContext(t.ctx, `SELECT 1 FROM private_execution_display WHERE json_extract(payload,'$.PreviewTerminal') IS NOT NULL AND json_extract(payload,'$.Binding.attemptId')=? LIMIT 1`, attemptID).Scan(&found)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT d.payload,p.payload_hash FROM private_execution_display d LEFT JOIN personal_migration_preserved p ON p.kind='preview' AND p.scope_id=json_extract(d.payload,'$.Binding.scopeId') AND p.record_id=d.id AND p.record_revision=d.revision AND p.payload=d.payload AND json_extract(d.payload,'$.PreviewState')='queued' AND EXISTS (SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=p.scope_id AND f.state='draining') WHERE json_extract(d.payload,'$.PreviewTerminal') IS NOT NULL AND json_extract(d.payload,'$.Binding.attemptId')=?`, attemptID)
+	if err != nil {
+		return false, err
 	}
-	return err == nil, err
+	defer rows.Close()
+	for rows.Next() {
+		var raw string
+		var saved sql.NullString
+		if err = rows.Scan(&raw, &saved); err != nil {
+			return false, err
+		}
+		sum := sha256.Sum256([]byte(raw))
+		if !saved.Valid || saved.String != hex.EncodeToString(sum[:]) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func (t *Tx) ListPersonalMigrationPreviews(scopeID string) ([]PrivateExecutionDisplay, error) {
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT payload FROM private_execution_display WHERE json_extract(payload,'$.Binding.scopeId')=? AND json_extract(payload,'$.PreviewTerminal') IS NOT NULL ORDER BY id`, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []PrivateExecutionDisplay
+	for rows.Next() {
+		var raw string
+		var display PrivateExecutionDisplay
+		if err = rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal([]byte(raw), &display); err != nil {
+			return nil, err
+		}
+		result = append(result, display)
+	}
+	return result, rows.Err()
 }

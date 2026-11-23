@@ -865,6 +865,18 @@ func (t *Translator) observeControlResponse(message map[string]any) Result {
 	}
 	delete(t.pendingControlReplies, requestID)
 	resolved := ResolvedCommandResponse{RequestID: requestID}
+	if pending.Kind == "interrupt" && pending.PrivateNative {
+		event := agentproto.Event{Kind: agentproto.EventNativeControlResult, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, TurnID: pending.TurnID, Action: "turn.interrupt", Status: "accepted"}
+		if subtype := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(response["subtype"]))); subtype == "" {
+			event.Status = "unknown"
+			event.ErrorMessage = "native control response lacks subtype"
+		} else if subtype != "success" {
+			event.Status = "failed"
+			event.ErrorMessage = xutil.FirstNonEmpty(xutil.LookupStringFromAny(response["error"]), xutil.LookupStringFromAny(response["message"]), "Claude control request failed.")
+			resolved.RejectMessage = event.ErrorMessage
+		}
+		return Result{Events: []agentproto.Event{event}, ResolvedCommandResponses: []ResolvedCommandResponse{resolved}, Suppress: true}
+	}
 	if subtype := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(response["subtype"]))); subtype != "" && subtype != "success" {
 		resolved.RejectMessage = xutil.FirstNonEmpty(
 			xutil.LookupStringFromAny(response["error"]),

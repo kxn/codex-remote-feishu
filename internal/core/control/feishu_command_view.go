@@ -17,6 +17,7 @@ type FeishuCatalogMenuView struct {
 }
 
 type FeishuCatalogConfigView struct {
+	PrivateApplication          bool
 	CatalogFamilyID             string
 	CatalogVariantID            string
 	CatalogBackend              agentproto.Backend

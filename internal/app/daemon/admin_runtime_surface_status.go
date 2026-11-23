@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"sort"
 	"strings"
 	"time"
@@ -22,12 +23,16 @@ type adminSurfaceStatusSummary struct {
 }
 
 func (a *App) runtimeSurfaceStatusesLocked(surfaces []*state.SurfaceConsoleRecord) []adminSurfaceStatusSummary {
+	return runtimeSurfaceStatuses(surfaces, a.service.SurfaceSnapshot)
+}
+
+func runtimeSurfaceStatuses(surfaces []*state.SurfaceConsoleRecord, snapshotFor func(string) *control.Snapshot) []adminSurfaceStatusSummary {
 	summaries := make([]adminSurfaceStatusSummary, 0, len(surfaces))
 	for _, surface := range surfaces {
 		if surface == nil {
 			continue
 		}
-		snapshot := a.service.SurfaceSnapshot(surface.SurfaceSessionID)
+		snapshot := snapshotFor(surface.SurfaceSessionID)
 		summary := adminSurfaceStatusSummary{
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Platform:         strings.TrimSpace(surface.Platform),

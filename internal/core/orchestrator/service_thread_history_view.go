@@ -108,6 +108,9 @@ func (s *Service) startThreadHistoryQuery(surface *state.SurfaceConsoleRecord, i
 		}
 	}
 	events := []eventcontract.Event{s.threadHistoryViewEvent(surface, view, inline, sourceMessageID)}
+	if s.config.PrivateApplication {
+		return append(events, s.privateHistoryQuery(surface, inst, record, sourceMessageID))
+	}
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindDaemonCommand,
 		GatewayID:        surface.GatewayID,

@@ -157,6 +157,9 @@ type pendingRequest struct {
 }
 
 type pendingControlReply struct {
+	PrivateNative         bool
+	ThreadID              string
+	TurnID                string
 	CommandID             string
 	Kind                  string
 	DesiredPermissionMode string

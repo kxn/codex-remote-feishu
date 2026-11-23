@@ -129,6 +129,7 @@ type turnState struct {
 	StartedAt           time.Time
 	Completed           bool
 	HasObservableOutput bool
+	PrivateObserved     bool
 	Traffic             agentproto.TrafficClass
 	MessageIDs          map[string]bool
 }

@@ -543,6 +543,10 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 	}
 	finalPath := strings.TrimSpace(localState.FinalPath)
 	if strings.TrimSpace(record.LocalDirectoryName) != "" {
+		if s.config.PrivateApplication {
+			processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingPrivateMkdir, finalPath, "", "正在创建工作区目录", "", nil, "")
+			return append(processing, eventcontract.Event{Kind: eventcontract.KindDaemonCommand, SurfaceSessionID: surface.SurfaceSessionID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandPrivateMkdir, SurfaceSessionID: surface.SurfaceSessionID, PickerID: record.PickerID, LocalPath: finalPath}})
+		}
 		if err := os.MkdirAll(finalPath, 0o755); err != nil {
 			setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
 				Level: control.FeishuTargetPickerMessageDanger,
@@ -555,6 +559,10 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 			return []eventcontract.Event{s.targetPickerViewEvent(surface, updatedView, false)}
 		}
 	}
+	return s.finishPrivateLocalDirectory(surface, flow, record, finalPath)
+}
+
+func (s *Service) finishPrivateLocalDirectory(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, record *activeTargetPickerRecord, finalPath string) []eventcontract.Event {
 	events := s.enterTargetPickerNewThread(surface, finalPath)
 	filtered := filterPickerFollowupEvents(events)
 	if targetPickerNewThreadReady(surface, finalPath) {

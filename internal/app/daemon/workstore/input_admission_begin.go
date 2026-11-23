@@ -18,6 +18,7 @@ type BeginAttemptInputAdmissionRequest struct {
 	InputIDs               []string
 	Command                agentproto.Command
 	Source                 PrivateActionSource
+	ProjectSource          *ProjectInputSource
 	Now                    time.Time
 }
 
@@ -30,9 +31,31 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 		if e != nil {
 			return e
 		}
-		principal, source, e := t.authorizePrivateInputAdmission(req.Source, attempt, req.Now)
-		if e != nil {
+		if e = t.AssertPersonalMigrationOpen(attempt.ScopeID); e != nil {
 			return e
+		}
+		var actor work.Actor
+		var source work.SourceRef
+		var recipientRole string
+		if req.ProjectSource != nil {
+			if req.Source != (PrivateActionSource{}) || len(req.InputIDs) != 1 || req.InputIDs[0] != req.ProjectSource.InputID {
+				return ErrScopeDenied
+			}
+			actor, source, e = t.authorizeProjectInputAdmission(*req.ProjectSource, attempt)
+			if e != nil {
+				return e
+			}
+			input, e := t.GetInbox(req.ProjectSource.InputID)
+			if e != nil {
+				return e
+			}
+			recipientRole = input.RecipientRoleID
+		} else {
+			principal, proof, err := t.authorizePrivateInputAdmission(req.Source, attempt, req.Now)
+			if err != nil {
+				return err
+			}
+			actor, source, recipientRole = work.Actor{Kind: work.ActorPrincipal, ID: principal.PrincipalID}, proof, principal.RoleID
 		}
 		if old, e := t.GetAttemptInputAdmission(req.ID); e == nil {
 			if old.AttemptID != attempt.ID || old.RunRef != req.RunRef || old.Source.ID != source.ID || !reflect.DeepEqual(old.InputIDs, req.InputIDs) || old.CommandID != req.Command.CommandID {
@@ -60,6 +83,15 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 		} else if !errors.Is(e, ErrNotFound) {
 			return e
 		}
+		if req.ProjectSource != nil {
+			pending, err := t.HasPendingAttemptInputAdmissions(attempt.ID)
+			if err != nil {
+				return err
+			}
+			if pending {
+				return ErrConflict
+			}
+		}
 		worker, e := t.GetWorker(attempt.RunRef.WorkerID)
 		if e != nil {
 			return e
@@ -74,7 +106,7 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 		if e != nil {
 			return e
 		}
-		if wc.Purpose == work.PurposeControl || wc.Purpose == work.PurposeReview || wc.RoleID != principal.RoleID {
+		if wc.Purpose == work.PurposeControl || wc.Purpose == work.PurposeReview || wc.RoleID != recipientRole {
 			return ErrScopeDenied
 		}
 		scope, e := t.GetScope(worker.ScopeID)
@@ -145,8 +177,10 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 		if command.Kind != agentproto.CommandTurnSteer || command.CommandID == "" || command.Execution == nil || command.Execution.AttemptID != attempt.ID || command.Execution.RunRef != attempt.RunRef.RunID || !command.Execution.SameOwner(carrier.Owner) || command.Target.ThreadID != worker.NativeSessionID || command.Target.TurnID == "" || (len(command.Prompt.Inputs) == 0 && command.Kind == agentproto.CommandTurnSteer) {
 			return ErrScopeDenied
 		}
-		if e = t.validateReactionAdmission(req.Source, command, req.InputIDs); e != nil {
-			return e
+		if req.ProjectSource == nil {
+			if e = t.validateReactionAdmission(req.Source, command, req.InputIDs); e != nil {
+				return e
+			}
 		}
 		binding, e := t.GetRoleBotBinding(worker.RoleID)
 		if e != nil {
@@ -202,7 +236,7 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 			if e != nil {
 				return e
 			}
-			if input.ShellOperationID != "" || input.State != work.InboxPending || input.ScopeID != scope.ID || input.RecipientRoleID != worker.RoleID || input.RecipientContextID != wc.ID || input.TaskID != attempt.TaskID || input.AvailableAt.After(req.Now) || input.ControlOfInputID != "" || input.SessionGoalIntentID != "" {
+			if input.ShellOperationID != "" || input.State != work.InboxPending || input.ScopeID != scope.ID || input.RecipientRoleID != worker.RoleID || (input.RecipientContextID != wc.ID && !(req.ProjectSource != nil && req.ProjectSource.WasImplicit && input.RecipientContextID == "")) || input.TaskID != attempt.TaskID || input.AvailableAt.After(req.Now) || input.ControlOfInputID != "" || input.SessionGoalIntentID != "" {
 				return ErrScopeDenied
 			}
 		}
@@ -214,7 +248,16 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 		if e = t.PutContent(body); e != nil {
 			return e
 		}
-		op := work.Operation{ID: command.CommandID, ScopeID: scope.ID, ContextID: wc.ID, Actor: work.Actor{Kind: work.ActorPrincipal, ID: principal.PrincipalID}, Kind: "native.input.steer", TargetID: worker.ID, TargetGeneration: worker.Generation, IdempotencyKey: req.ID, RequestRef: body.ID, RequestHash: body.SHA256, Steps: []work.OperationStep{{ID: "human_source", State: work.OperationConfirmed, Receipt: mustJSON(source)}}, State: work.OperationSending, Revision: 1, CreatedAt: req.Now, UpdatedAt: req.Now}
+		sourceReceipt := mustJSON(source)
+		sourceStep := "human_source"
+		if req.ProjectSource != nil {
+			sourceStep = "project_message_source"
+			sourceReceipt = mustJSON(struct {
+				Source    work.SourceRef     `json:"source"`
+				Selection ProjectInputSource `json:"selection"`
+			}{source, *req.ProjectSource})
+		}
+		op := work.Operation{ID: command.CommandID, ScopeID: scope.ID, ContextID: wc.ID, Actor: actor, Kind: "native.input.steer", TargetID: worker.ID, TargetGeneration: worker.Generation, IdempotencyKey: req.ID, RequestRef: body.ID, RequestHash: body.SHA256, Steps: []work.OperationStep{{ID: sourceStep, State: work.OperationConfirmed, Receipt: sourceReceipt}}, State: work.OperationSending, Revision: 1, CreatedAt: req.Now, UpdatedAt: req.Now}
 		canonical, added, e := t.PutOperation(op, 0)
 		if e != nil {
 			return e
@@ -236,6 +279,9 @@ func (t *Tx) BeginAttemptInputAdmission(req BeginAttemptInputAdmissionRequest) (
 			}
 			before := input.Revision
 			input.Revision++
+			if req.ProjectSource != nil && req.ProjectSource.WasImplicit {
+				input.RecipientContextID = wc.ID
+			}
 			input.State = work.InboxClaimed
 			input.ClaimedAttemptID = attempt.ID
 			if e = t.PutInbox(input, before); e != nil {

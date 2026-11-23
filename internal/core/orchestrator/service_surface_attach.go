@@ -299,6 +299,9 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if surface == nil || inst == nil || pending == nil {
 		return nil
 	}
+	if pending.Purpose == state.HeadlessLaunchPurposePrivateUpgrade {
+		return s.attachPrivateUpgradeInstance(surface, inst, pending)
+	}
 	cleanup := surfaceOverlayRouteCleanupOptions{}
 	if record := s.activeTargetPicker(surface); targetPickerPendingStillRunning(surface, record) {
 		cleanup.PreserveTargetPicker = true

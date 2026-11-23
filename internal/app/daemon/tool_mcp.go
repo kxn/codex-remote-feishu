@@ -32,6 +32,16 @@ func (a *App) newToolRuntimeHandler() http.Handler {
 // 是否注册 describe_image：profile 声明主模型支持直接看图时不注册。
 func (a *App) newToolMCPServerForRequest(req *http.Request) *mcp.Server {
 	server := a.newToolMCPServer()
+	if _, ok := req.Context().Value(privateToolCallerKey{}).(*privateToolCaller); ok {
+		project := privateProjectDefinition()
+		server.AddTool(&mcp.Tool{Name: project.Name, Description: project.Description, InputSchema: project.InputSchema}, func(ctx context.Context, callReq *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return a.handleMCPToolCall(ctx, project.Name, callReq)
+		})
+		definition := privateMemoryDefinition()
+		server.AddTool(&mcp.Tool{Name: definition.Name, Description: definition.Description, InputSchema: definition.InputSchema}, func(ctx context.Context, callReq *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return a.handleMCPToolCall(ctx, definition.Name, callReq)
+		})
+	}
 	// 只有同时满足“端点已配置”和“主模型未声明支持看图”时才注入工具：
 	// 未配置端点时注入一个必失败的工具体验更糟。
 	if !a.callerRequestNeedsVisionAssist(req) {
@@ -89,6 +99,25 @@ func (a *App) newToolMCPServer() *mcp.Server {
 }
 
 func (a *App) handleMCPToolCall(ctx context.Context, toolName string, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if caller, ok := ctx.Value(privateToolCallerKey{}).(*privateToolCaller); ok {
+		var result *mcp.CallToolResult
+		err := caller.run(ctx, func(bound context.Context) error {
+			var e error
+			result, e = a.dispatchMCPToolCall(bound, toolName, req)
+			return e
+		})
+		if err != nil {
+			return newMCPToolErrorResult(toolError{Code: "private_turn_unavailable", Message: "The private-chat turn is no longer available. The tool was not retried automatically."}), nil
+		}
+		return result, nil
+	}
+	if a.privateTools != nil {
+		return newMCPToolErrorResult(toolError{Code: "private_turn_required", Message: "Authenticated private-chat context is required."}), nil
+	}
+	return a.dispatchMCPToolCall(ctx, toolName, req)
+}
+
+func (a *App) dispatchMCPToolCall(ctx context.Context, toolName string, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	arguments, err := decodeMCPToolArguments(req)
 	if err != nil {
 		return nil, err
@@ -99,6 +128,10 @@ func (a *App) handleMCPToolCall(ctx context.Context, toolName string, req *mcp.C
 		apiErr *toolError
 	)
 	switch strings.TrimSpace(toolName) {
+	case privateProjectToolName:
+		result, apiErr = a.privateProjectTool(ctx, arguments)
+	case privateMemoryToolName:
+		result, apiErr = a.privateMemoryTool(ctx, arguments)
 	case describeImageToolName:
 		result, apiErr = a.describeImageTool(ctx, arguments)
 	case feishuSendIMFileToolName:

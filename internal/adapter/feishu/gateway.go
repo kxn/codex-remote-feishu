@@ -59,12 +59,14 @@ type LiveGateway struct {
 	createReactionFn   func(context.Context, string, string) (*larkim.CreateMessageReactionResp, error)
 	deleteReactionFn   func(context.Context, string, string) (*larkim.DeleteMessageReactionResp, error)
 
-	mu             sync.Mutex
-	stateHook      func(GatewayState, error)
-	rawIngressHook *RawIngressHook
-	reactions      map[string]string
-	messages       map[string]string
-	botOpenID      string
+	mu                        sync.Mutex
+	stateHook                 func(GatewayState, error)
+	rawIngressHook            *RawIngressHook
+	ingressStarted            bool
+	startupHookAtConstruction bool
+	reactions                 map[string]string
+	messages                  map[string]string
+	botOpenID                 string
 }
 
 type gatewayMessage struct {
@@ -117,6 +119,7 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 	if config.RawIngressHook != nil {
 		copy := *config.RawIngressHook
 		gateway.rawIngressHook = &copy
+		gateway.startupHookAtConstruction = copy.startupRouterID != "" && copy.startupNonce != ""
 	}
 	gateway.downloadImageFn = gateway.downloadImage
 	gateway.downloadFileFn = gateway.downloadFile

@@ -56,13 +56,16 @@ func (h *Host) PrepareAfterUpgrade(ctx context.Context, upgradeID, workerID stri
 			return e
 		}
 		if worker.Generation > frozen.Generation {
+			if worker.Generation != frozen.Generation+1 || worker.ScopeID != frozen.ScopeID || worker.ContextID != frozen.ContextID || worker.RoleID != frozen.RoleID {
+				return workstore.ErrConflict
+			}
 			if worker.State == work.WorkerReady {
 				ready = true
 				return nil
 			}
-			return fmt.Errorf("upgraded carrier has not completed real Hello readiness")
-		}
-		if worker.Generation != frozen.Generation || worker.CarrierIncarnation != frozen.CarrierIncarnation {
+			// Prepared launches may be safely re-registered and started;
+			// sending/unknown still require real observed launch evidence.
+		} else if worker.Generation != frozen.Generation || worker.CarrierIncarnation != frozen.CarrierIncarnation {
 			return workstore.ErrConflict
 		}
 		if gate, e := tx.GetRuntimeGate(worker.ID); e == nil && (gate.RecoveryReason != "" || gate.Reason != "snapshot_rebuild_required") {
@@ -141,4 +144,20 @@ func (h *Host) freezeUpgradeBinary(ctx context.Context, settings *LaunchSettings
 		}
 		return nil
 	})
+}
+
+// registerLaunchCarrier routes both initial preparation and replay of an
+// unsent prepared launch through the same upgrade capability.
+func (h *Host) registerLaunchCarrier(ctx context.Context, carrier workstore.CarrierRegistration) error {
+	id, _ := ctx.Value(upgradeLaunchKey{}).(string)
+	if id == "" {
+		return h.config.Registry.RegisterCarrier(ctx, carrier)
+	}
+	registry, ok := h.config.Registry.(interface {
+		RegisterCarrierAfterUpgrade(context.Context, string, workstore.CarrierRegistration) error
+	})
+	if !ok {
+		return fmt.Errorf("maintenance carrier recovery registry unavailable")
+	}
+	return registry.RegisterCarrierAfterUpgrade(ctx, id, carrier)
 }

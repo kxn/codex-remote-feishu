@@ -1,77 +1,46 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-11-23`
-> Summary: 持久团队运行时的执行归属、原生会话恢复、项目收尾与参与门禁规则；旧 surface 引擎仅供迁移审计。
-## 0. 持久团队运行时：本分支的新入口
+> Updated: `2026-11-24`
+> Summary: 私人应用和持久团队应用的入口归属、执行与恢复边界，以及共用 surface 状态机的历史参考。
 
-本节适用于 `configureWorkRuntime`、`activateWorkRuntime` 激活后的飞书群聊和私聊。后文原有 surface／room／attach 状态机保留为旧实现和迁移审计依据，不能反向成为新流程的第二个执行者。原生适配器、主机能力及模型设置继续复用，旧群的 primary／coworker 和 Cron 不再拥有调度权。实现与尚未完成的验收见 [实施账本](../inprogress/feishu-agent-team-implementation.md)。
+## 0. 私人应用与持久团队应用的当前归属
+
+当前入口通过中立平台路由按可信 SDK 事件身份和冻结归属分别进入独立私人应用或群团队应用。私人应用以本人、Bot 身份和 epoch 管理私人 journal、checkpoint、队列、原生 carrier、持久回执和展示；群团队应用以项目、成员、任务和业务上下文管理团队工作。两者共用后端协议、配置来源和必要宿主能力，但不共用私人业务状态或写入权。首个可靠历史 SDK 观察可用于建立旧个人 owner 归属；无法精确归属时保留该 Bot/owner 的待核查屏障，不能另建竞争私人 owner，群项目不受连带屏蔽。
+
+平台事件先持久冻结原始事实和归属，SQLite 提交后才确认 SDK；重投使用原归属和首次接收时间，不按最新导航重新解析。私人卡片、reaction、recall 和菜单须有匹配的平台消息、视图或 p2p 绑定；无证据保留未决，不能跨应用猜测。真实 hook 必须在 gateway 启动前安装，中立 router 的覆盖证明同时依赖当前 gateway 启动身份和实际持有的 daemon 独占锁。目标切换前先关闭源 owner 投递并排空在途 admission；已接收事件不再次投递，待处理事件只在目标导入和 ready 验证后显式转移。
 
 ### 执行归属
 
-用户的消息先进入 SQLite，保存实际 SDK 身份、原始目标、附件内容引用和接收时的导航版本，成功提交后才确认接收。重复消息合并不同 Bot 的观察，不凭模型名或最近活动会话决定归属。群消息进入项目；私聊进入 principal＋role 的个人范围。私聊查看项目不会把私人全文转入项目。管理和只读评审上下文不能被选作普通 private front；评审历史只读展示，继续工作的入口只选择普通工作上下文。
+群项目的 WorkContext、WorkerSession 和 ExecutionAttempt 分别记录工作、受管原生会话与一次任务承接；任务要求版本、责任代次、worker、carrier 和 controller 分别核对。成员长期目录按项目与角色稳定归属，执行 cwd 和临时任务上下文不改变资料归属。普通群消息按明确成员/上下文或可证明的任务负责人路由；管理和评审上下文不领取普通业务。
 
-业务工作由 WorkContext 承接，WorkerSession 是该上下文使用的原生执行会话，ExecutionAttempt 记录一次实际承接的输入和任务。原生 turn 只是其中的一段执行。任务要求版本、责任代次、worker 代次、carrier incarnation、controller 代次分别校验，不能用同一个 thread ID 代替全部身份。
+私人消息以原始平台消息和认证真人为来源，进入独立私人 checkpoint 的 session、队列和原生 turn；不会创建团队 WorkContext、ExecutionAttempt 或私人管理 Agent。私人 `/list`、`/use`、`/new`、`/history` 和菜单复用已有私人 core 语义，工作区和会话选择仍需精确载体与后端归属。真人引用、图片、文件和待处理输入保留原始关联；未知原生接收或发送不能当作成功，也不能自动重跑。
 
-私聊引用回复按实际平台消息映射确定原上下文，在接收事务中冻结，不因用户之后切换工作而改变。已确认的发送操作或原始 SDK 入站提供归属证据；引用独立评审时回到其发起工作。未知引用、跨个人范围、失效机器人身份或缺少项目访问资格不会把原要求交给当前 Agent，而是保留原消息并经持久发送队列提示用户明确归属。回复本身不修改私聊导航，也不解除暂停。
+### 私聊停止、资料与发布
 
-引用旧工作的私聊命令同样使用冻结目标；例如 `/stop` 停止旧工作而不误停当前新工作。群内引用旧任务时，若原负责角色已移除或在团队停用，输入改交当前有效负责人协调并保留旧任务关联，不重开任务或改写责任代次；暂时不可用的成员仍按既有排队语义处理。成员退出后，旧执行仍可结算已承接输入，但不能再次领取新工作。
+私人和新团队载体分别鉴权、分别路由，同时使用精确连接身份发送原生命令和事件回执。已认证团队连接不等于私人连接；事件提交后，回执仍绑定提交该事件的连接，不能转发到后来替换的 socket。历史团队协议的兼容依据是原启动记录，认证失败不得降级到历史入口。
 
-文字 Slash Command 从真实原文解析，不把引用展开的警告或补充资料拼成命令参数。其目标来自接收时冻结的上下文；设置／查询允许引用与当前 front 不同的旧个人工作，但仍核对同一 scope、角色、真人和接收时导航版本。查询和在原卡查看结果不切换 front；之后发生的新导航使旧待处理动作失效。
+私人 `/stop` 记录本人当前执行停止意图，撤销此前尚未派发的输入；在途请求和已发送输出依据独立原生／平台回执结算，新真人输入不受永久项目暂停门禁影响。普通私人答复通过独立 journal 的展示和 effect 发布，不需要团队 outcome 报告。菜单同步替卡、回调、文件发送、未知发送和旧卡失效按私人视图及真实平台收据处理；群进度和正式交付仍由团队 outbox 与项目权限处理。
 
-计算并发、carrier、任务责任和执行位置分别占用。daemon 当前总计算额度为 8，其中 1 个保留给管理上下文；普通业务最多使用 7 个，管理执行仍需满足总额度、carrier 和位置约束，不无界增加进程。Agent 可在用户选定的代码资源内准备独立目录并登记下一次执行位置；登记不移动仍在运行的原生进程，也不释放旧目录。没有用户选定的代码资源时，非代码工作在该上下文独立的临时目录进行。
+私人 `/project` 和工具菜单提供显式的项目资料查询与指定内容分享。入口依据可信私聊 SDK 身份及当前项目成员资格，只列本人有权访问且当前助手是有效成员的项目；保存资料按项目和固定版本读取。MCP 可以查询或准备分享草案，由本人在私人卡片核对项目和精确正文、私人记忆版本或目标项目已保存的资料版本后确认；确认登记到项目负责人收件箱并保留私人来源，重复回调去重。私人附件继续使用已有 `/sendfile`，不会自动分享到项目。入口不切换私人身份或 cwd，不共享整个私人 transcript，也不授予群发布或项目停止权限。账号只以可信租户 user_id 或配置的开发者域关联：需要时通过当前 Bot 的通讯录接口核对 open_id；无法获得跨 Bot 身份时保持应用内身份，不猜相同 open_id。
 
-### 私聊停止和发布能力
+私人长期记忆按本人和 Bot 归属，由私人应用维护可发现索引、版本、修订和撤销；导入的个人记忆在目标应用成为唯一权威，不能将团队共享记忆混入或回查旧团队库作为第二写入者。受认证的私人 carrier 通过独立工具凭据使用这些能力。Codex 自动记忆由受管启动策略关闭，用户自有的 instructions、MCP 和其他配置保留。
 
-私人 `/stop` 记录当前执行的停止意图并撤销该指令之前的未派发私人用户输入，不把所查看项目转成项目暂停。停止执行及其旧 Goal／自动续跑不会重新领取；新真人消息可以正常准入，无需解除永久私人 pause gate。旧私人停止 gate 仅在真实新私聊输入或明确控制入口，核对其固定 ID、同一发起人和已确认停止记录后兼容清理；清理前把旧占用执行及其续跑冻结，不开放其他来源的暂停。同事交回结果与其他项目工作不受连带取消。
+### 配置、状态和旧入口
 
-私聊助手、项目负责人、被真人直接点名的专家和获明确交付委派的专家具有不同发布范围。CLI 能力发现和受管说明来自实际身份，业务服务在登记发布及发送前再次核对本轮真实来源、项目／成员、任务代次、Bot 和目的地。普通专家只能内部通信、保存及交接；发现层隐藏不代替服务端校验。直接回复绑定当前真实真人输入，不能借用任意历史 input ID；交付委派冻结内容类型和资料版本，可撤销且不可跨群借用。媒体发送使用受管服务及持久上传／发送收据，不恢复旧泛用 MCP Bearer。用户自行配置的研发 MCP 不因此禁用。
+Bot 的 backend、Profile 和模型由既有配置所有者解析；team Role 仅保存配置引用和指纹，私人 checkpoint 保存本人有效设置及显式覆盖。私人权限未覆盖时继承 Bot 的实际有效默认，显式设置优先。启动冻结相应配置和原生身份；变更、账号和 namespace 的一致性分别验证，旧启动快照不能覆盖当前选择。
 
-私人命令与原生输出新增消息统一向已验证的私聊 `chat_id` 直发；原始引用用于选择上下文，不等于平台回复目标。菜单按钮继续更新被点击的已确认卡片，群话题语义不变。未知发送保留已冻结的路由，不能在升级后换目的地重试。
-
-普通私人原生答复由宿主投影；发布权不是模型有没有在最终文本提到文件。文件保存、内部交接和对人发布分别建模，受管后台评审继续只读，结果经原有内部／发起私聊入口返回。
-
-普通单聊的真人输入不要求模型额外提交团队处理报告。仅在精确原生 turn 正常结束、最终文字／图片或明确的空答复通知已持久保存、三类执行均已停止且没有未决业务副作用时，系统记录本轮实际处理的输入和检查点，释放占用，下一条消息可继续。记录的业务完成状态仍是 unknown，不推断项目任务完成。TaskID、Goal、自动续跑、评审、管理成功答复和非真人输入不适用这一普通对话规则；轮内追加输入必须具有实际接受回执。界面发送的 unknown 仍独立核查，不以重复运行原请求代替恢复发送。
-
-Codex 的 systemError 只有在精确目标 turn 为 failed、返回的所有 turn 均已终止且输入队列已空时才能证明原生段停止，仍需独立核对 Goal 和后台工作。已证实 modelNotFound 且目标 turn 只有用户输入、没有模型或工具执行的私人请求，保存失败而非重放；管理副本失败不吞掉原业务输入。界面显示实际模型错误，保留用户选择，不自动切换模型。
-
-尚无原生 turn 的私人启动拒绝，只接受已登记 prompt 命令对应的精确 thread/start 或 turn/start 拒绝回执、同一持久事件的独立核查证据、完整停止证明和无未决业务副作用。满足时结束为失败并记录已回应的请求，下一条真人输入可正常准入；管理副本只结算副本。普通错误文本、超时和未知写入不能使用此路径。已有会话的 resume 拒绝仍走其独立检查点恢复机制，不能为了清除提示吞掉待恢复请求。
-
-普通私聊和项目共用输入归属校验。普通真人消息以原文交给后端，附上本轮来源、可用的检查点和必要资料。多条输入保留各自的消息身份；超出本轮正文预算时提供原文引用。团队协作与后台任务继续使用结构化输入。
-
-### 配置、状态和旧入口的唯一归属
-
-Bot 全局的 backend／Profile／模型选择由既有持久配置和 Bot settings store 持有，SQLite Role 只保存引用与变化指纹；不能从旧 orchestrator 镜像反向恢复配置。Claude 的模型、推理和上下文偏好与 Profile 一起解析为有效配置，指纹与原生启动使用同一个结果，并保留内置配置继承的认证。Codex 的独立上下文偏好同样参与设置版本。私聊的 access／plan 由 WorkContext preferences 持有，先应用再编译后端启动参数；清除偏好回到后端默认，不继承旧 surface/Bot 值。新 Worker 的启动记录冻结当次配置，旧 Worker 的冻结记录不能反向覆盖之后的选择。配置更新和最终启动/任务准入共享短的配置门禁，先同步 Role 的实际设置引用；启动占位与任务领取还在 SQLite 事务内校验上下文偏好版本。旧计划冲突时保留待处理输入，由下一次计划读取当前配置。
-
-私聊显示档位由展示层在收到事件时读取。启动与派发按同一组有效执行参数判断进程能否复用，准入时仍检查最新配置版本。修改显示档位可沿用当前进程；改变执行权限会重新准备。Codex 同一连接内切换模型时，若有可归属的实际模型回执或明确模型配置，沿用旧版的模型组判断。已知跨组时开启新原生会话，模型组未知时保留原历史。
-
-Codex 原生 Profile 没有显式 provider 时，只有已解析的原生连接与线程策略才可使用 `InheritNativeProvider`；start/resume 不发送 `modelProvider`，仍发送冻结的上下文窗口、自动压缩值与指令。服务端观察到的 provider 才是实际值，缺少回执仍是不完整证据。API/OAuth Profile 仍要求明确 provider；旧协议 JSON 未提供新字段时保持原有校验语义。
-
-模型目录是配置读取，不属于业务执行。Codex 通过独立、有时限的临时 `app-server` 执行初始化、必要的账号核对和 `model/list`，不调用 Host.Prepare、不创建／恢复 thread 或 prompt，不依赖当前工作会话、业务容量或恢复 gate。已配置的模型目录在启动后预热，并发查询最多两个；相同身份／分页的查询合并，满额时显式刷新仍保存待查询意图，不静默丢失。
-
-目录的唯一可展示缓存为 `profile_model_catalogs`。命名空间包含 Bot 身份、Profile、提供商／端点、能力、分页及稳定账号身份；OAuth 使用真实账号指纹和套餐，不使用会随 daemon 重启变化的执行 AuthGeneration。执行连接的安全代次策略保持不变。原生继承配置的缓存按稳定凭据身份分区，查询前后核对实际凭据摘要，避免切账号时污染旧分区。账号及端点不同不可借用目录，模型／推理参数或同账号 token 更新不会凭空清空选项。
-
-最后成功列表持久、长期保留。二十四小时仅是后台更新周期，不是隐藏旧列表的时限；刷新失败更新错误和尝试信息，保留成功选项与证据。自动失败重试有五分钟退避，显式刷新可以立即重试；未完成的只读查询可在重启后重新执行。每次完成须匹配当前查询 attempt，迟到结果不能覆盖新查询。
-
-模型页的等待状态持久保存；目录到达和初始卡片发送先后任意，均只更新已确认的原卡片。更新前再次核对导航、Bot 身份、配置指纹、上下文偏好和当前视图；用户已返回或切换页面时，迟到结果不抢回菜单。等待视图分批轮转，尚未就绪的页面不能饿死其他已就绪页面。
-
-系统管理复用真实安装、网络和升级适配器。查看失败保留具体原因和重新查看入口；有副作用的操作结果未知时不得自动重放。外网管理页链接生成独立于私人命令通道运行，先保存等待卡与 `host.admin.weblink` 操作，再进入 `sending`；重启遗留的 `sending` 转为 `unknown` 并提示核对，不能猜测链接未生成而重发。结果只更新仍有效的原页面；离开页面不会被迟到结果导航回来。升级确认后的旧取消按钮必须核对已登记执行及真实升级状态，不能宣称撤销已开始的升级。
-
-`/v1/status` 和 `/api/admin/runtime-status` 使用同一状态投影。团队模式 `authority=persistent_teams`，`work` 从单一 SQLite 事务读取计数和有界详情；旧 instances／surfaces／pendingRemoteTurns／activeRemoteTurns 返回空数组。库不可用时明确返回 `work.available=false`，不能伪装成无任务或回退旧引擎。网关连通状态仍由真实网关读取。
-
-生产启动在装载旧文件之前设置 history-only 边界。旧 room/surface 文件即使需要格式规范化也不保存；配置目录迁移和 Bot 身份替换不得改写它们，也不得因这些历史文件损坏而阻止现行配置变更。原始迁移快照仍在装载前保存。旧 instance/surface MCP 服务不再发布；过渡环境保留的旧处理器明确返回停用，不能使用旧 token 绕过团队 CLI。旧 VS Code 安装/重装入口停用，只保留已有集成的明确清理操作。
-
-本次具体发现、责任表和回归证据见 [SSOT 审计记录](../inprogress/feishu-agent-team-ssot-audit.md)。
+VS Code 接管、安装和重装入口已移除；仅保留对检测到的旧集成的明确清理。旧 team-private 数据只作为迁移来源，不能重新获得接收、调度或发布权。旧群 primary/coworker、Cron 和旧接管入口不复活。下文第 1 节以后的历史 surface 机制可供私人 core 实现参考，但其中旧产品模式、所有者和入口说法不覆盖本节与现行代码。
 
 ### 迁移与持续输入
 
-启动前原样保存旧状态文件和校验值，固定迁移清单，关闭旧写入与调度权后再激活新入口。旧选中会话是历史引用，不自动等于在途执行；实际未完成的队列、独立实例及不确定 shell 工作保留对应资源隔离。旧格式缺少的时间戳或身份不得伪造。私聊历史只在新的真实 SDK 身份足以证明原归属后认领，旧群历史不自动变成新项目全文。
+启动前固定旧来源并关闭旧私人写入与调度权，再按覆盖证明、停止事实和最终快照迁移。旧 team-private 表情的补录、领取和新发送受相同 source fence 约束；fence 前正在进行的 HTTP 等待真实结果并持久保存。若结果仍未知，冻结并导入精确旧消息的表情来源，只限制该消息的表情链，不宣称已发送或撤回，也不阻止其他私人消息或群工作。旧选中会话是历史引用，不自动等于在途执行；实际未完成的队列、独立实例及不确定 shell 工作保留对应资源隔离。旧格式缺少的时间戳或身份不得伪造。已有可信 SDK 原始观察及冻结绑定足以证明归属时可在启动前认领历史 owner，无需等待真人再发消息；证据不足则保持对应来源待核查。旧群历史不自动变成新项目全文。
 
-切换导航只影响之后的输入。已收到的消息、迟到按钮、正在执行的输入和回复目的地保持各自冻结的归属。回复地址从该个人上下文的真实平台来源确定，系统恢复消息和队友消息不改变目的地。App 身份替换后，旧代次私聊地址不能直接复用。
+切换导航只影响之后的输入。已收到的消息、迟到按钮、正在执行的输入和回复目的地保持各自冻结的归属。私人回复地址从认证 owner 与平台记录确定，系统恢复不改变原目的地。App 身份替换后，旧代次私聊地址不能直接复用。
 
 ### 暂停、停止与恢复
 
-项目暂停保留未处理业务输入。群项目业务执行被 runtime gate 阻塞时也会保留原业务输入，并将人的管理沟通交给独立上下文。普通私聊不创建管理副本，也不因恢复 gate 将用户消息交给另一个 Agent。输入留在原 front，Slash 和设置仍走确定性的宿主入口。历史未领取的私人管理副本取消，原输入保留；已开始的旧执行仍按真实原生回执结算，不直接抹除。负责人仍可通过独立管理上下文处理人的状态查询、参与约定和恢复指令；平台只接受该上下文的管理业务命令，并为它分配独立工作目录；这不等于为原生进程提供了强安全沙箱。纯管理消息只有保存真实管理操作或实际状态答复后才能标为已处理，混合业务要求不能随之吞掉。
+项目暂停保留未处理业务输入。群项目业务执行被 runtime gate 阻塞时也会保留原业务输入，并将人的管理沟通交给独立上下文。私人应用不创建管理副本，也不因恢复 gate 将用户消息交给另一个 Agent；本人输入、Slash 和设置由私人应用处理。旧私人执行仅作为迁移证据处理，未知输入和输出按各自组件保留。负责人仍可通过独立管理上下文处理人的状态查询、参与约定和恢复指令；平台只接受该上下文的管理业务命令，并为它分配独立工作目录；这不等于为原生进程提供了强安全沙箱。纯管理消息只有保存真实管理操作或实际状态答复后才能标为已处理，混合业务要求不能随之吞掉。
 
 停止先保存控制操作，再向精确原生目标发送。原生 turn、Goal 续轮和后台工作都证明安静后才能释放执行占用；网络断开、租约过期、超时和 PID 不见都不是完整证明。跨主机的进程身份不得拿到本机核查。
 
@@ -80,6 +49,8 @@ Codex 原生 Profile 没有显式 provider 时，只有已解析的原生连接�
 关机先拒绝新入口、停止并等待各调度通道，保持 relay 回执处理运行，再逐个停止受管 carrier。新引擎激活后跳过旧的进程清理逻辑。总等待超时不会强行释放占用，下一次启动仍能核查未确定的执行。
 
 ### 本轮修复后的恢复与业务门禁
+
+以下 Worker、Attempt、runtime gate 和业务准入规则适用于群团队及旧源迁移核查，不是私人应用的状态模型。
 
 生产调度分别运行项目生命周期收尾、空闲 carrier 核查和原生启动失败核查。暂停／归档先关准入，真实业务占用和外部写入按证据结算后才进入最终状态；项目导航和只读观察不会冒充业务副作用阻止收尾。
 
@@ -99,7 +70,7 @@ daemon 启动时、接受新 Hello 之前，上一进程持久保存的已连接
 
 上述完整离线证据成立时，同一执行的系统停机 `thread.goal.clear`／`turn.interrupt` 未知回执不再阻塞私人对话结算。必须验证原始请求哈希、登记命令、系统来源、精确执行与会话关联及停机幂等键，并在结果提交事务重查连接和写入边界；原操作仍保持 unknown，不伪造成功。Goal 授权、其他执行的操作、真实外部副作用或证据缺失不适用此例外。
 
-私聊采纳项目要求会创建带 TaskID 的独立任务上下文，冷项目负责人也能领取。任务记忆更正通知携带真实任务归属；启动时只修复可以从原记忆通知／采纳映射证明的旧无任务输入，不猜测一般消息归属。
+群团队采纳项目要求时创建带 TaskID 的独立任务上下文，冷项目负责人也能领取。任务记忆更正通知携带真实任务归属；启动时只修复可以从原记忆通知／采纳映射证明的旧无任务输入，不猜测一般消息归属。私人显式分享先进入项目负责人 inbox，不自行创建任务。
 
 参与约定按同一事项范围保存现行事实。同条款重复表达返回既有约定，不授予新发起人修改权；不同人的修订形成由原发起人决定的协调请求。新增参与点必须逐项涵盖范围内所有未完成任务，记录尚未经过、已经经过或明确不适用的事实；只有尚未经过的生成实际问题和任务门禁。类别／阶段由负责人结合工作事实理解，字符串本身不证明互不冲突；已知同任务、同参与点的不同责任不能通过另一个分类名绕过，必须先协调现行约定。
 
@@ -111,17 +82,23 @@ daemon 启动时、接受新 Hello 之前，上一进程持久保存的已连接
 
 原生准备异步执行并限制同时启动数，同一工作流只允许一个准备任务。停止准入后等待正在准备的任务退出，再枚举实际 carrier；取消上下文不是进程已经结束的证明。人类卡片动作按群保持接收顺序、最多四个群并行，慢 API 不阻塞其他群。私聊命令与入站登记分开运行，慢原生查询不会阻止项目消息接收。
 
-`/review` 建立独立、冻结目标和执行目录的只读工作上下文，不切换原 front。没有目录时保留请求，用户选择后继续。真实 Git 差异有大小上限且禁用外部 diff/textconv；评审以原生最终文字和精确 terminal 证据保存，实际 quiescence 后交还原会话。该专用桥不接受普通文件扫描，也不替代任务验收。Codex、Claude 和 OpenCode 在各自真实启动策略中限制写入。
+私人 `/review` 复用私人 core 的独立只读评审流程，保留发起会话与冻结目标；群项目的独立评审仍按团队上下文和任务权限执行。评审结果与原生终态必须有实际证据，不替代任务验收。
 
-Codex `/compact` 使用原生协议；其他后端采用明确标注的安全重建。二者都等待真实空闲，保留长期记忆、工作检查点和旧记录。`/autowhip` 与 `/autocontinue` 是按个人工作上下文保存的两项策略：前者只检查明确尚未完成的已授权工作，后者只处理可识别的上游失败，均有次数上限并受停止、未知副作用和执行证据约束。
+Codex `/compact` 使用原生协议；其他后端采用明确标注的安全重建。二者都等待真实空闲，保留长期记忆、工作检查点和旧记录。`/autowhip` 与 `/autocontinue` 是私人 surface 的两项策略：前者只检查明确尚未完成的已授权工作，后者只处理可识别的上游失败，均有次数上限并受停止、未知副作用和执行证据约束。
 
-私聊 `/steerall` 对 Codex 使用精确原生 turn 的追加输入协议：同事务保存追加准入记录并领取输入，真实 `turn/steer` 回执确认目标后，才将这些输入纳入本次执行可报告的集合。初始 Attempt.InputIDs 不被改写。写入结果未知时不当成拒绝，也不把输入谎称已处理；真正停止后的只读核查与恢复 gate 保留可能已执行的风险。Claude／OpenCode 没有已验证的等价轮内确认时，输入继续留待下一轮，并明确告知用户。
+私人 `/steerall` 与反应追加由私人输入队列及原生回执确认，不通过团队 Attempt 记账。群成员忙时追加使用项目 input admission，只有匹配原生回执才算送达；不支持或结果未知时保留待处理状态。
 
 `/upgrade codex` 由独立持久维护事务协调本机受管 Codex 池。人确认实际安装指纹和精确目标版本后，阻止新的 Codex 准入，等待在途准备及执行真实退场，跟踪安装进程并核对实际受管程序，再恢复新代次连接。Claude／其他后端不受这个专用准入门影响。丢失安装回执只读核查已有进程与安装，不重复运行 npm；原有暂停和恢复限制保留。进度与最终结果由飞书界面直接呈现，不等待模型回话。来自 VS Code 包的程序仍需由其安装来源更新。
 
 相同发送者、接收者、会话、正文和任务版本的重复消息，没有新人工输入时第三次不再唤醒接收者，返回 `needs_coordination` 并仅保存一次负责人协调提示。新内容、任务修订或新人工输入可开启新的交流。该规则判断可证实的重复，不声称自动理解不同文字是否具有实质进展。
 
 ### 从建立项目到持续协作的接续
+
+项目成员的稳定文件目录按项目与角色定位，与任务、原生会话和执行 cwd 分离。Prepare 和每轮 Plan 使用同一目录准备逻辑；本轮输入提供目录与 `member.workspace.inspect` 入口，不修改已冻结的启动指令，因此增加入口不会要求现有载体重建。动态索引沿用当前成员授权、记忆版本及项目资料权限，列出本成员的任务和历史上下文；有记录的旧 scratch 路径只标记为未经核验的历史位置，不证明其中内容仍是原成果，不批量迁移文件。
+
+群业务执行的忙时消息由独立 `team-inbox` lane 准入，明确成员/任务上下文及原始通信来源，且需求/责任代次仍与本轮一致后才可追加。项目输入来源与私人 reaction 来源独立授权，共用精确原生回执；只在原生接收事实确认后计入本轮输入，不能把发送函数返回当作已接受。同一上下文遵循到达顺序，未决输入或本轮拒绝的队首不能被后续补充越过；独立成员/上下文不受连带阻塞。重启时未结发送先归为 unknown，已证明未发送则保留历史记录并释放输入；模糊目标、不支持的后端和失效任务仍保留待处理输入，不猜测另一个 worker。
+
+正式 `task.revise` 不属于普通忙时追加：新要求形成独立修订输入并改变任务代次，旧 attempt 保留冻结版本且不能产生新版本业务效果。系统对精确旧执行发起停止，按原生 turn、续轮和后台工作的实际静止证据归档未报告旧 attempt，再把未处理输入交给新版或按新责任转交；未知写入仍独立核查，不能把停止请求当成已经静止。
 
 建立上下文只列当前启用、App 身份仍匹配的配置角色。沿用其他项目团队必须来自本轮真人原话中的项目名，并验证此人对来源项目的访问；不按全库项目名泄露团队。需要执行目录时，`bootstrap.location.pick` 打开绑定项目发起人、原始消息和群代次的真人选择器；选择后按原消息身份恢复需求一次，负责人不能自行猜测已有目录。两个项目复用团队名单，不复用其工作上下文或首任务。
 
@@ -137,9 +114,9 @@ Codex `/compact` 使用原生协议；其他后端采用明确标注的安全重
 
 ### 会话目标与人的指导
 
-Codex Goal 是会话续轮约束，不是项目目标或任务验收。续轮必须关联本次实际执行及明确预算来源，不能把无归属的原生 turn 算作当前任务。预算耗尽保留未完成工作，不能自动把任务标为完成。配置 `work.defaultGoalTokenBudget` 默认 100000，仅用于已证明属于当前执行、但模型没有明确预算的原生 Goal；显式预算及已有正预算优先。默认补全必须经过持久控制操作和成功原生回执，不能只改本地显示。
+Codex Goal 是会话续轮约束，不是项目目标或任务验收。续轮必须关联本次实际执行及明确预算来源，不能把无归属的原生 turn 算作当前任务。预算耗尽保留未完成工作，不能自动把任务标为完成。群团队配置 `work.defaultGoalTokenBudget` 默认 100000，仅用于已证明属于当前执行、但模型没有明确预算的原生 Goal；显式预算及已有正预算优先。默认补全必须经过持久控制操作和成功原生回执，不能只改本地显示。
 
-私聊空闲 Goal 的暂停是有真实用户来源的状态操作，不为暂停而启动新的模型执行。恢复则进入正常准入，冻结原 carrier、会话、控制代次、目标版本、正文和预算；排队、领取、发送原生 prompt 以及设置 Goal 前分别校验，不能在重建会话上悄悄创建另一个目标。尚未领取的过期恢复请求保存拒绝原因并取消该输入，不影响之后的新输入。已领取或写入未知仍按实际执行恢复规则处理。
+私人 Goal 操作由私人应用按认证本人、当前会话和实际原生回执处理，不以团队上下文或 attempt 充当所有者。群执行的 Goal 恢复仍冻结对应 carrier、会话、目标版本和预算，旧代次或未知写入不能静默应用到另一执行。
 
 原生 GoalSet 当前没有服务端 CAS 参数，上述检查保证受管调度边界的目标一致，不声称可以原子阻止独立外部程序在原生调用期间改目标。明确关联的 RPC 回执才确认命令成功；无命令关联的空闲 paused／终止通知只能撤销续轮授权及更新同一目标观察，不能创建授权。通知先于回执时，只接受该已登记命令的同目标、同预算、同原生版本的暂停结果。清除同时撤销旧目标状态，旧恢复按钮和排队恢复不能重新建立已清除的目标。
 
@@ -149,40 +126,19 @@ Goal 查询失败只结算查询，不把正常执行变成异常。查询／清
 
 ### 验证边界
 
-本轮已核对旧执行迁移隔离、私聊命令归属、实际追加输入、原生维护和外部未知写入恢复。完整执行链使用实际 Engine、Host、Driver、wrapper journal、CLI、HTTP 服务、SQLite 和受控原生子进程，覆盖 Codex／Claude 及群内负责人—专家交接；相关普通／race 测试与完整 Windows 构建通过。受控模型进程和平台发送端不代表生产租户或真实模型行为已经验收；OpenCode 缺少本机可运行二进制时仅记录协议测试。具体场景和证据见实施账本，不恢复旧引擎作为隐式兜底。
+受控测试覆盖团队任务修订后的精确停止与续接、私人迁移的实际锁与 gateway hook 证明、源 carrier 崩溃隔离、target 导入与手动恢复；受控子进程和本地平台模拟不能代替真实租户、真实模型和完整线上切换验收。更多证据与未完事项见[实施账本](../inprogress/feishu-agent-team-implementation.md)。
 
-### 旧引擎历史变更摘要（仅用于迁移审计）
+### 私人会话、恢复和版本边界
 
-> 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
-> 2. 这些 mismatch 候选不会再假装“可直接接管”；
-> 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
-> 4. headless restore 不再把 visible VS Code 或 visible external mismatch 误当成 exact-thread auto-restore 目标；手动 `attach workspace` 也不再 silent 接管 profile/backend-contract mismatch 的实例。
-> 5. Claude managed headless 的 exact-thread restore 现在额外要求“目标 session 的 cwd 仍属于该 instance 当前 workspace”才允许原地复用；跨 workspace 旧 session 会改走 restart/fresh-start，不再把当前 attached Claude instance 的 metadata 直接 silent retarget 到别的目录。
-> `codex <-> claude <-> opencode` 的 headless backend 互切现在统一锚定当前工作区目录：只要切换前已有当前 workspace，surface 就会保留这份 workspace claim，并优先 attach 目标 backend 下同 workspace 的兼容在线实例；若只剩 incompatible managed headless，则会 restart 成匹配合同；若没有兼容实例，则会 fresh-start matching managed headless，并保留原来的 unbound / new-thread-ready / exact-thread continuation 意图。进入 Claude workspace 时，surface 会按 `workspace+profile` 快照恢复飞书临时 `reasoning / access` override；`plan` 不写入也不恢复这套快照，而 `/status` 会把“最近观察到的当前会话权限/模式”和“下条飞书消息的实际 override”分开投影。2026-08-11 补充：OpenCode `/access` 是 relaunch-backed runtime desired，合法私聊写 bot capability 的 `PromptOverride.AccessMode`，队列冻结该 desired access 但 dispatch 不发送 ACP per-turn override；空闲 workspace 立即按 `OpenCodeRuntimeAccessMode` 重启，不空闲时由 prompt dispatch preflight 进入 `PendingHeadless(Purpose=prompt_dispatch_restart)` 后自动继续原消息。OpenCode `/plan on|off` 已开放为 ACP session mode 动态切换，queue item 只在飞书显式 override 存在时冻结 `PlanMode`，dispatch 时由 translator 在 `session/prompt` 前发送 `session/set_config_option configId=mode`；`/plan clear` 清掉本地 override，后续 prompt 不再强制 mode，跟随 OpenCode 当前/默认状态。2026-08-12 #877 补充：OpenCode `/reasoning low|medium|high|xhigh|max|clear` 也是飞书显式 runtime override，存入 bot/surface `PromptOverride.ReasoningEffort`；queue item 冻结该 reasoning override，dispatch 时 translator 在 `session/prompt` 前按固定顺序执行 `mode` 后 `effort` 的 `session/set_config_option`。只有当前 OpenCode session/model 通过 ACP `configOptions id=effort` 声明支持时才允许修改；否则 `/reasoning` fail closed 并提示当前模型/配置不支持。2026-08-09 补充：OpenCode headless 使用同一条 mode/profile/restart 主链，`/mode opencode` 与 `/opencodeprofile` 都会冻结 `OpenCodeAdmissionRef` 并在 workspace 内走 `workspace_route_restart`；OpenCode observed config 不写回 workspace defaults，profile revision 不匹配时 fail closed。2026-08-01 补充：Codex headless admission 现在在 queue item、PendingHeadless 和 daemon start command 上冻结 `CodexAdmissionRef`；daemon runtime resolver 优先消费该精确 definition/preference revision，而不是启动时重读 current Profile。resolver 输出的 `CodexConnectionContract` 与 `CodexThreadPolicy` 会回填到 pending launch，并在实例连回后成为 active instance 与 route actual 的 observed contract；Codex instance compatibility 在 route actual 带 connection contract 时必须匹配 `ConnectionContractID`，同 Profile 的 Key/端点 generation 变化不会复用旧 child。当前进程内 pending/queue/active owner 也会进入 Codex Profile references projection，删除检查不只看 durable bot/surface resume owner。同日补充：Codex prompt dispatch、`thread/start`、`thread/resume`、compact resume 与 `process.child.restart` restore 现在统一携带 typed `CodexResumePolicy`；`apply_target_profile` 会显式传目标 `modelProvider`，只在 policy 为 explicit/preserved 时传 `model` 与 reasoning/review/context config，`codex_default` 不再从本地 UI template 或旧 thread metadata 猜值；profile instruction 作为 thread policy 进入 `developerInstructions`，不再通过 `model_catalog_json` 修改 `instructions_template`；`agents.default_subagent_model` 作为 first-class launch override 注入，只有 DeepSeek/MiMo 等 catalog-backed provider 才额外注入 provider-owned catalog，普通 GPT/OpenAI-like profile 不生成 generic managed catalog。`TurnStarted` 会把 requested/effective context window 写入 `CodexEffectiveThreadContract`，当上游 effective window 小于 requested window 时标记 `context_preference_clamped`。2026-05-02 的新变化是：Claude headless 的 `/reasoning` 也正式并入 headless launch contract，queue item / auto-continue / review apply 都会冻结各自目标 reasoning；真正 dispatch 前统一比较 `desired launch contract` 与 wrapper hello 上报的 observed runtime contract，若不一致则进入 `PendingHeadless(Purpose=prompt_dispatch_restart)`，由 daemon 显式 `kill + start headless`，实例重新 attach 后再自动继续原 dispatch。Claude `/access` 与 `/plan` 仍保留动态 permission-mode 通道，不被并入 Claude reasoning restart-only 合同；其中显式 `/access` override 还会额外写入 `workspace+profile` 快照，而 `plan` 不会。Codex/OpenCode Profile 切换也已并入同一条 surface 级 headless 重启主链，切换时会沿用与 Claude profile 相同的 request-gate / busy-gate / current-workspace continuation 规则；idle detached 更新 bot record 的 canonical Profile 并投影同 gateway surface，workspace 内则由发起 surface 直接重启或 fresh-start 当前工作区。其余能力仍保持此前基线：headless 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。surface-level backend seam 也已正式落成真实状态：headless 下区分 `codex` / `claude` / `opencode` 三个 backend，workspace defaults、surface resume 与 detached catalog context 都按 backend 分区，`/mode` 的底层语义收口成 `codex|claude|opencode|vscode`，其中 `normal` 仍作为 `codex` 的兼容 alias。另一个新变化是把上游 runtime 问题自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它由 orchestrator 本地 codex/gateway error-family policy 驱动，拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；request gate 现在还补上了 `item/tool/call` 的最小 fail-closed 分支：relay / Feishu / headless 会展示只读 `tool_callback` 提示，并立即自动回写 unsupported 结构化结果，避免 tool 在中途 silent hang；同时 detached-branch 产品入口已经正式接上：普通文本里的 `[什么？]` / `[耸肩摊手]` 会分别触发 `fork_ephemeral` / `start_ephemeral`，统一复用 `keep_surface_selection`，且不会再让 detour turn 污染当前 surface 默认 thread；review mode 的 detached review session 也已接入同一条远端状态机：review thread 会带显式 `source=review` / parent-thread 元数据，surface 会在不改绑当前选中 thread 的前提下记录 `ReviewSession` runtime，并把后续审阅文本继续路由到 review thread；与此同时，普通 attach/list/use 候选现在会显式排除 `source=review` 会话，不再把 detached review thread 混进 merged thread list、current-instance dropdown 或 workspace recency。本轮还把 `process.child.restart` 收口成“两段式 restart 合同”：`ack` 只代表新 child 已接管，thread restore 结果改由独立 outcome event 回传，daemon 会对 `/bendtomywill` 与 standalone Codex upgrade 统一等待最终 outcome，因此 late restore 不会再把 patch / upgrade 误判成已失败或已完成。2026-05-06 的补充是：Claude wrapper 在“当前 child 已经 `--resume` 到某个旧 session”时，如果 surface 明确要求 `PromptExecutionMode=start_new + threadID=""`，会先把 child 重启成 fresh launch，再清掉旧的 expected-resume 影子状态，确保 `/new` 的首条消息不会重新落回被恢复的旧 Claude session。同一轮里，remote-surface 的 execution lifecycle 也已明确拆成两个 sibling seam：dispatch core 统一 owner `DispatchMode / ActiveQueueItemID / QueuedQueueItemIDs / pendingRemote / activeRemote`，recovery core 统一 owner `PendingHeadless / headless attach-fail-expire / disconnect-degraded-timeout teardown`；`prompt_dispatch_restart` 只保留显式 handshake，不再让 queue/recovery 在业务路径里平行散写同一批 carrier。注意：2026-04-29 新拍板的下一轮 Claude MVP 产品边界不再由本文定义，而改以 [Claude Backend Integration Plan](../inprogress/claude-backend-integration-plan.md) 第 `7.6` / `12.1` 节为准；本文仍只记录当前 live 实现。
+普通私人文字与此前同组待配对图片按原始顺序组成输入，原生接收与用户可见反馈分别保存。`/new` 准备新的私人会话；已选工作区和兼容的原生历史按私人 core 的恢复合同处理，变更模型或权限本身不等于丢弃历史。本人停止、原生请求确认和未知发送使用各自的持久回执。
 
-2026-08-13 #887 补充：detached review 不再把普通聊天框输入自动路由到 review thread。ready 结果卡显式提供 `继续追问审阅`、`退出审阅`、`按审阅意见继续修改`；只有第一个动作会开启一次性纯文字 capture，其他普通文字、图片、文件均被 Review overlay gate 拦截。
+旧 team-private 迁移先以真实 owner witness、锁和中立入口屏障排空源写入，再保存源快照、目标导入及 transfer；target ready 前不启动私人载体或发送新结果。已停止进程不等于所有远端执行已静止：不能证明的旧执行、已领取输入和未知发送分别保留；不会把旧 attempt 当作私人 task，也不会自动重跑旧输入。`/status` 汇总待核查组件，`/recover` 按本人请求分页列出历史输入（`/recover page N` 翻页）；`/recover N` 查看并按证据取回附件，`/new` 后 `/recover confirm N` 才把该项作为新输入。再次确认或重启不会重复入队；同一新会话的后续恢复需要已持久的原生 `start_new` 命令及实际接受回执，核对 owner、epoch、backend 和 namespace。缺失附件或未决来源不能伪装恢复成功。
 
-2026-11-21：`/bendtomywill` 的命令、菜单、回调、rollout 改写和回滚实现已完全删除。下文历史沿革不再代表该能力存在，也没有 hidden alias。
-
-### 2026-11-23 单聊原生会话边界修正
-
-私人对话排队的每条说明文字与此前尚待配对的图片组成一次普通输入，按接收顺序分别执行。用户主动追加时沿用当前轮次。群团队继续按项目、任务和成员上下文成批领取工作。
-
-个人对话的输入固定交给当前上下文绑定的原生后端，普通轮次继续复用 NativeSessionID；内部 ExecutionAttempt 是输入与回执的记录，不是要求另一个模型分派任务。私人启动提示词与群负责人提示词分离，不要求每次回答调用 outcome.report。结束后的输入结算由精确原生回执和停止证据完成；记忆、资料与原生工具按需使用。不能通过增加私人管理 Agent 解决恢复故障。
-
-接收消息、原生后端就绪和上一轮结算会唤醒对应处理通道；每个通道保持单一消费者，持久轮询只作为恢复补偿，内存通知不承担数据权威。通知不能绕过输入归属、执行占用、权限或群发布频控。
-
-成功启动但未执行过工作的离线进程不应永久等待不存在的 turn 回执。宿主同时核对精确进程退出、启动契约、无会话和无 attempt、canonical 命令仅目录/检查、原生日志仅目录查询且完整，才允许同上下文重新准备。已完成过工作的离线空闲进程则必须具备最后一份精确静止回执、两侧写入边界和精确进程退出；有未决执行、额外副作用或身份不匹配时不放行。
-
-私人权限未单独设置时继承旧 Bot 的有效默认值（旧空值等价 full access），显式会话设置优先；群项目与只读评审不继承此默认。修改设置不伪装成已批准正在等待确认的旧原生请求。
-
-改变模型、推理强度、权限、计划模式或记忆提示词时，在安全停止并重建执行进程后续接同一原生会话；不得仅因这些可变参数变化而丢弃历史。工作目录、后端、连接账户与提供方等身份必须仍兼容。明确新建对话或原生端已证明不能恢复原会话时，才按对应路径新建；连接凭据只保存摘要，不把密钥写进快照。
-
-私聊的鼓掌仍按旧产品合同通过固定读取命令注入排队文字和附件引用；它在内部属于独立的会话级操作，不冒充 turn.steer 接收回执。发送前验证真人来源和冻结的活动会话；发送后以精确关联的原生 UserShell item 记录实际轮次、输出与退出状态。空 RPC 答复不证明执行完成，实际轮次也不必等于发送时的模型轮次。保留独立输入预留，避免同一文字又被普通队列消费；未知写入不重发。附有暂存图片的说明文字必须携带精确同组的图片引用一起注入、预留和结算，不能丢图或只消费说明文字。成功只补原消息反应，不把内部固定命令或 payload 回显成新的结果卡。原生接收回执与固定读取完成分别保存；只有读取确实成功才结算原输入。读取失败或中断可能已部分送达，保留输入归属、不自动重放；发送前零帧拒绝才可退回队列，较弱的后到 ACK 不能抹除已有写入证据。没有归属的独立轮次边界先持久记录，只有精确 UserShell item 证明实际轮次后才归属；不得把它当成模型轮次结束。批准／取消在登记原生命令的最终事务再次检查所属请求和轮次；已经结束的请求不能迟到发送。
-
-恢复已保存的原生确认答复时，先检查原轮次的终态。若原执行器断线或恢复门仍关闭，保留已保存的人类决定，等待原执行器重新具备接收条件。等待期间不反复登记同一次发送。历史私人管理会话只有在原请求、轮次、用户的取消决定、未发送记录和本机执行器退出证据全部吻合时，才终止该答复并关闭问题。原轮次继续保留原有状态，独立于用户当前的私人会话。 已进入发送状态且缺少原生登记时，不能断定可以重试；只允许依据真实轮次终态，或上述已退役私人执行器的精确退出及未发送证据关闭答复。
+OpenCode 私人宿主检查实际二进制及 ACP 初始化均满足 2.x 且不低于 2.1.4，并冻结 Profile、cwd 和 namespace；受控子进程、journal、真实 daemon relay 与 SDK 入站链路已验证，外部模型行为仍须实际环境验证。私人 `/upgrade` 的状态、轨道、latest/dev/local 和共享 `/upgrade codex` 维护均已接入；受控安装流程与真实私人 wrapper 停止、重建、认证 hello 和 session 接续分别有组合测试，但尚未在同一个测试中同时执行真实安装与在线载体切换。真实平台和真实模型的验收不由离线 fixture 代替。
 
 ## 1. 文档定位
+
+以下是历史 surface 状态机及可复用 core 细节；运行时 owner、入口、VS Code 接管及已移除功能以第 0 节为准，历史术语不构成现行私人应用的第二份权威。
 
 2026-08-01 #766 补充：Codex Profile-aware resume 不再把 requested policy 当作 observed actual。普通 dispatch、compact 与 `process.child.restart` restore 在目标 thread 已有同 connection/provider 的 `CodexEffectiveThreadContract` 时使用 `preserve_thread_settings`，保留 observed model/reasoning，同时仍请求当前 Profile 的 context preference；否则使用 `apply_target_profile`。`CodexEffectiveThreadContract` 只记录 `thread/started` 或 `thread.settings.updated` 已证明的 provider/model/reasoning，以及 `turn/started` 的 requested/effective context window；缺少 provider evidence 或 observed provider 与 Resume Policy 冲突时，wrapper 在 `turn.started` 上附带 `codex_protocol_incomplete`，不把 requested provider/model/reasoning 伪装成 actual。2026-08-02 补充：Codex headless 的跨模型组自动新会话有两道状态机边界：`/codexprofile` 在生成 headless continuation 时先比较当前 thread/source runtime 组与目标 Profile 组，普通 dispatch 在冻结 queue item 时再比较旧 thread 已证明模型组与当前目标模型组；目前模型组只分 `gpt` 与 `non_gpt`。目标 Profile 组优先由 Profile 声明的模型推导，DeepSeek catalog-backed dynamic API Profile 不再因为走动态目录而被归到 GPT 组。双方都可判定且不同组时，不再复用旧 thread；profile/backend 切换进入 `workspace_route_restart + PrepareNewThread=true`，dispatch guard 同步把 surface 切到 `new_thread_ready`，并提示用户已自动新建会话。目标模型继续由 typed `CodexResumePolicy`、目标 Profile 或用户显式 override 持有，不在 wrapper/adapter 清理历史 item。
 
@@ -346,6 +302,8 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
 surface 不是单一枚举，而是五层正交状态叠加。
 
 ### 3.1 产品模式 / backend overlay
+
+> 以下矩阵或旧接管路径是历史参考；VS Code 接管、安装和重装入口已移除，私人与团队当前入口见第 0 节。
 
 | 代号 | 条件 | 用户语义 |
 | --- | --- | --- |
@@ -998,6 +956,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 ### 4.1.3 `vscode` `/list` 先选 instance，并显式投影“当前实例”
 
+> 以下矩阵或旧接管路径是历史参考；VS Code 接管、安装和重装入口已移除，私人与团队当前入口见第 0 节。
+
 当前 `vscode` 的 `/list` 仍然只列在线 VS Code instance，但卡片展示已经切到 instance-aware 的专用布局。
 
 对应实现里：
@@ -1015,6 +975,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 ### 4.1.4 vscode `/use` / `/useall` 仍是 instance-scoped thread 选择，但菜单路径会把结果留在原卡
 
+> 以下矩阵或旧接管路径是历史参考；VS Code 接管、安装和重装入口已移除，私人与团队当前入口见第 0 节。
+
 当前 `vscode` 的 `/use` / `/useall` 产品语义没有放宽，仍然只围绕当前 attached VS Code instance 的 thread 集合展开。
 
 对应实现里：
@@ -1026,6 +988,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 5. 选择 thread 后，same-thread / busy / attach-known-thread / visible-thread 切换等既有产品语义保持不变；但若入口来自 stamped 菜单卡，首张可投影结果卡会继续替回当前菜单卡，不再额外 append 一张 detached notice 或“命令已提交”锚点卡。
 
 ### 4.1.5 stamped `/mode vscode` 与 `/vscode-migrate` 的 owner-card 收口边界
+
+> 以下矩阵或旧接管路径是历史参考；VS Code 接管、安装和重装入口已移除，私人与团队当前入口见第 0 节。
 
 这轮实现没有改 `vscode` 兼容性检查本身的产品语义，只改了它在 card callback 场景下的承接 carrier。
 
@@ -1694,6 +1658,8 @@ E3 Running
 
 ### 5.3 本地 VS Code 仲裁
 
+> 以下矩阵或旧接管路径是历史参考；VS Code 接管、安装和重装入口已移除，私人与团队当前入口见第 0 节。
+
 ```text
 E0/E1
   -- local.interaction.observed 或 local turn.started --> E4 PausedForLocal
@@ -1956,6 +1922,8 @@ transport degraded retained attachment
 12. 因此，后续若新增真正属于 runtime 层的提示，默认应进入这条独立车道，而不是继续直接手写普通 `UIEventNotice`。
 
 ## 6. 命令矩阵
+
+> 以下矩阵或旧接管路径是历史参考；VS Code 接管、安装和重装入口已移除，私人与团队当前入口见第 0 节。
 
 ### 6.1 基础路由态
 

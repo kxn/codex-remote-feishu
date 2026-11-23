@@ -113,10 +113,11 @@ type activeTargetPickerRecord struct {
 }
 
 type activeThreadHistoryRecord struct {
-	ThreadID string
-	ViewMode control.FeishuThreadHistoryViewMode
-	Page     int
-	TurnID   string
+	QueryCommandID, QueryInstanceID string
+	ThreadID                        string
+	ViewMode                        control.FeishuThreadHistoryViewMode
+	Page                            int
+	TurnID                          string
 }
 
 type activeReviewPickerRecord struct {
@@ -180,15 +181,18 @@ type activePathPickerRecord struct {
 }
 
 type surfaceUIRuntimeRecord struct {
-	AsyncUserInputs        map[string]*asyncUserInputRecord
-	AsyncUserInputSequence uint64
-	ActiveOwnerCardFlow    *activeOwnerCardFlowRecord
-	ActiveTargetPicker     *activeTargetPickerRecord
-	ActiveThreadHistory    *activeThreadHistoryRecord
-	ActiveReviewPicker     *activeReviewPickerRecord
-	ActivePathPicker       *activePathPickerRecord
-	ActivePlanProposal     *activePlanProposalRecord
-	ActiveWorkspacePage    *activeWorkspacePageRecord
+	PrivateUpgradeFlow          *PrivateUpgradeFlow
+	PrivateCodexContractVersion string
+	PrivateMCPOAuth             map[string]privateMCPOAuthRequest
+	AsyncUserInputs             map[string]*asyncUserInputRecord
+	AsyncUserInputSequence      uint64
+	ActiveOwnerCardFlow         *activeOwnerCardFlowRecord
+	ActiveTargetPicker          *activeTargetPickerRecord
+	ActiveThreadHistory         *activeThreadHistoryRecord
+	ActiveReviewPicker          *activeReviewPickerRecord
+	ActivePathPicker            *activePathPickerRecord
+	ActivePlanProposal          *activePlanProposalRecord
+	ActiveWorkspacePage         *activeWorkspacePageRecord
 }
 
 type SurfaceUIRuntimeSummary struct {

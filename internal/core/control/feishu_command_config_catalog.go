@@ -18,6 +18,18 @@ func BuildFeishuCommandConfigPageView(view FeishuCatalogConfigView) FeishuPageVi
 
 func modePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
 	def, _ := FeishuCommandDefinitionByID(FeishuCommandMode)
+	if view.PrivateApplication {
+		def.Description = "查看当前后端；选择 Codex、Claude 或 OpenCode。"
+		def.ArgumentFormNote = "选择 codex / claude / opencode。"
+		def.Examples = []string{"/mode codex", "/mode claude", "/mode opencode"}
+		options := make([]FeishuCommandOption, 0, len(def.Options))
+		for _, option := range def.Options {
+			if option.Value != "vscode" {
+				options = append(options, option)
+			}
+		}
+		def.Options = options
+	}
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {

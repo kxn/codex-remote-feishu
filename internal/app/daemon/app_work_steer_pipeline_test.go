@@ -145,7 +145,7 @@ func runPrivateSteerAll(t *testing.T, withImages bool, automatic ...bool) {
 		return tx.PutWorker(work.WorkerSession{ID: owner.WorkerSessionID, ScopeID: front.ScopeID, ContextID: front.ID, RoleID: front.RoleID, Backend: work.BackendCodex, State: work.WorkerPreparing, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: carrier.OriginInstanceID, CarrierIncarnation: carrier.Incarnation, InstanceGeneration: 1, ProcessGeneration: 1, LocationID: "steer-location", LocationGeneration: 1, Revision: 1}, 0)
 	})
 	relay := &steerOuterRelay{}
-	driver, e := worktransport.New(s, relay)
+	driver, e := worktransport.New(s, relay, a.teamRuntime.beginPersonalSourceActivity)
 	if e != nil {
 		t.Fatal(e)
 	}

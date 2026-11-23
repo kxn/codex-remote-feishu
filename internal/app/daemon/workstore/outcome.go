@@ -163,6 +163,16 @@ func (t *Tx) commitOutcome(request OutcomeRequest) error {
 			return e
 		}
 		staleTask = task.RequirementsRevision != attempt.FrozenRequirementsRevision || task.AssignmentGeneration != attempt.FrozenAssignmentGeneration || task.State == work.TaskCancelled
+		if task.State == work.TaskCancelled {
+			if e = t.cancelPendingTaskInputs(task); e != nil {
+				return e
+			}
+		}
+		if staleTask && task.State != work.TaskCancelled {
+			if e = t.ReassignPendingTaskInputs(task, request.Now); e != nil {
+				return e
+			}
+		}
 		if staleTask && (len(request.FollowupInbox) > 0 || len(request.Operations) > 0 || len(request.Outbox) > 0) {
 			return fmt.Errorf("stale task outcome may only archive historical evidence")
 		}

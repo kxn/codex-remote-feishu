@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/nativeinspection"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
@@ -116,20 +117,5 @@ func ObserveProtocol(request InspectionRequest, input ProtocolInspection) (Nativ
 }
 
 func matchRPC(probe RPCProbe, method, sessionID string) (json.RawMessage, error) {
-	var request struct {
-		ID     json.RawMessage `json:"id"`
-		Method string          `json:"method"`
-		Params struct {
-			ThreadID string `json:"threadId"`
-		} `json:"params"`
-	}
-	var response struct {
-		ID     json.RawMessage `json:"id"`
-		Result json.RawMessage `json:"result"`
-		Error  json.RawMessage `json:"error"`
-	}
-	if json.Unmarshal(probe.Request, &request) != nil || json.Unmarshal(probe.Response, &response) != nil || len(request.ID) == 0 || string(request.ID) != string(response.ID) || request.Method != method || request.Params.ThreadID != sessionID || (len(response.Error) > 0 && string(response.Error) != "null") || len(response.Result) == 0 {
-		return nil, fmt.Errorf("native probe request/response correlation failed")
-	}
-	return response.Result, nil
+	return nativeinspection.MatchRPC(probe, method, sessionID)
 }

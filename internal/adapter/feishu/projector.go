@@ -35,6 +35,8 @@ type Operation struct {
 	MessageID            string
 	ReplyToMessageID     string
 	EmojiType            string
+	ReactionID           string
+	ReactionAbsent       bool
 	Text                 string
 	AttentionText        string
 	AttentionUserID      string
@@ -53,6 +55,8 @@ type Operation struct {
 	cardEnvelope         cardEnvelopeVersion
 	card                 *cardDocument
 	finalSourceBody      string
+	frozenCard           map[string]any
+	durableTransportID   string
 }
 
 func (operation Operation) FinalSourceBody() string {
@@ -106,6 +110,24 @@ func (p *Projector) SetMenuHomeVersion(value string) {
 func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Operation {
 	event = event.Normalized()
 	return applyAttentionToOperations(p.projectEventBase(chatID, event), event.Meta.Attention)
+}
+
+// ProjectStatusSnapshotWithoutWorktree is safe inside the private checkpoint
+// transaction: it never starts the optional git worktree probe.
+func (p *Projector) ProjectStatusSnapshotWithoutWorktree(chatID string, event eventcontract.Event) []Operation {
+	event = event.Normalized()
+	payload, ok := event.CanonicalPayload().(eventcontract.SnapshotPayload)
+	if !ok {
+		return nil
+	}
+	binary := ""
+	if p != nil {
+		binary = p.snapshotBinary
+	}
+	snapshot := payload.Snapshot
+	elements := projectSnapshotElements(snapshot, binary, formatSnapshotCurrentDirectoryPlain(snapshotCurrentDirectory(snapshot), ""), nil)
+	ops := []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{Title: "当前状态", ThemeKey: cardThemeInfo, Elements: elements})}
+	return applyAttentionToOperations(ops, event.Meta.Attention)
 }
 
 func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) []Operation {

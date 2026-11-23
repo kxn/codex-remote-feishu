@@ -14,6 +14,7 @@ func extendedCommandDTOs() map[string]any {
 		"resource.register": RegisterResourceRequest{}, "resource.capture": CaptureResourceRequest{}, "resource.read-version": ReadResourceVersionRequest{}, "resource.reconcile": ReconcileResourceRequest{}, "delivery.publish": PublishDeliveryRequest{},
 		"decision.list": KnowledgeListRequest{}, "decision.mine": KnowledgeListRequest{}, "decision.respond": DecisionRespondRequest{}, "agreement.list": KnowledgeListRequest{}, "agreement.apply": AgreementApplyRequest{},
 	}
+	dtos["member.workspace.inspect"] = KnowledgeListRequest{}
 	dtos["commands"] = struct{}{}
 	dtos["publication.grant"] = GrantPublicationRequest{}
 	dtos["publication.revoke"] = RevokePublicationRequest{}
@@ -61,6 +62,8 @@ func (s *Service) executeExtended(ctx context.Context, token string, req workcmd
 	case "decision.request":
 		return executeDTO(ctx, token, req, s.RequestDecision)
 
+	case "member.workspace.inspect":
+		return executeDTO(ctx, token, req, s.MemberWorkspaceInspect)
 	case "memory.list":
 		return executeDTO(ctx, token, req, s.MemoryList)
 	case "memory.read":

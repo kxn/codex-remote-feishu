@@ -30,7 +30,11 @@ func (a *App) syncClaudeProfilesCatalogLocked(cfg config.AppConfig) {
 	if a == nil || a.service == nil {
 		return
 	}
-	a.service.MaterializeClaudeProfiles(materializeClaudeProfileRecords(cfg, claudeSystemReasoningEffortFromEnv(a.headlessRuntime.BaseEnv)))
+	records := materializeClaudeProfileRecords(cfg, claudeSystemReasoningEffortFromEnv(a.headlessRuntime.BaseEnv))
+	a.updatePrivateClaudeCatalogLocked(records)
+	if !a.privateServiceOwned.Load() {
+		a.service.MaterializeClaudeProfiles(records)
+	}
 }
 
 func claudeSystemReasoningEffortFromEnv(env []string) string {

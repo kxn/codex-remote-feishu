@@ -73,6 +73,7 @@ func (s *Service) buildCatalogContextWithWorkspaceKey(surface *state.SurfaceCons
 		primaryBotState = string(primaryBotStateForSurface(surface, s.ensureFeishuRoomContextForSurface(surface)))
 	}
 	return control.NormalizeCatalogContext(control.CatalogContext{
+		PrivateApplication:            s.config.PrivateApplication,
 		Backend:                       backend,
 		ProductMode:                   string(productMode),
 		MenuStage:                     string(s.commandMenuStage(surface)),

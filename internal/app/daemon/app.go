@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
@@ -94,21 +95,30 @@ type vscodeCompatibilityCacheState struct {
 }
 
 type App struct {
-	teamRuntime         *teamRuntime // constructed before Run; one durable work authority
-	service             *orchestrator.Service
-	projector           *feishu.Projector
-	gateway             feishu.Gateway
-	finalBlockPreviewer previewpkg.FinalBlockPreviewService
-	relay               *relayws.Server
-	serverIdentity      agentproto.ServerIdentity
-	debugRelayFlow      bool
-	rawLogger           *debuglog.RawLogger
-	conversationTrace   conversationTracer
+	privateCatalogSnapshot  atomic.Pointer[[]string]
+	privateProfilesSnapshot atomic.Pointer[privateProfileCatalog]
+	privateCodexContracts   atomic.Pointer[privateCodexContractSnapshot]
+	profileReferenceGate    sync.RWMutex
+	privateSettingsRevision atomic.Uint64
+	privateSettingsCache    sync.Map
+	privateServiceOwned     atomic.Bool
+	teamRuntime             *teamRuntime // constructed before Run; one durable work authority
+	service                 *orchestrator.Service
+	projector               *feishu.Projector
+	gateway                 feishu.Gateway
+	finalBlockPreviewer     previewpkg.FinalBlockPreviewService
+	relay                   *relayws.Server
+	serverIdentity          agentproto.ServerIdentity
+	debugRelayFlow          bool
+	rawLogger               *debuglog.RawLogger
+	conversationTrace       conversationTracer
 
-	relayServer *http.Server
-	apiServer   *http.Server
-	pprofServer *http.Server
-	toolRuntime toolruntime.State
+	relayServer  *http.Server
+	apiServer    *http.Server
+	pprofServer  *http.Server
+	toolRuntime  toolruntime.State
+	privateTools *privateToolRuntime
+	applications *applicationRuntime
 
 	daemonStartedAt   time.Time
 	daemonLifecycleID string
@@ -207,10 +217,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		panic(err)
 	}
 	app := &App{
-		service: orchestrator.NewService(time.Now, orchestrator.Config{
-			TurnHandoffWait: 800 * time.Millisecond,
-			GitAvailable:    gitExecutableAvailable(),
-		}, renderer.NewPlanner()),
+		service:                     orchestrator.NewService(time.Now, daemonOrchestratorConfig(), renderer.NewPlanner()),
 		projector:                   feishu.NewProjector(),
 		gateway:                     gateway,
 		serverIdentity:              serverIdentity,
@@ -269,10 +276,11 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 	app.cronRuntime.gatewayIdentityLookup = app.defaultCronGatewayIdentityLookup
 	app.feishuRuntime.registration = newLiveFeishuRegistrationRunner()
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
-		OnHello:      app.enqueueHello,
-		OnEvents:     app.enqueueEvents,
-		OnCommandAck: app.enqueueCommandAck,
-		OnDisconnect: app.enqueueDisconnect,
+		AuthorizeHello: app.authorizeApplicationHello,
+		OnHello:        app.applicationHello,
+		OnEvents:       app.applicationEvents,
+		OnCommandAck:   app.applicationAck,
+		OnDisconnect:   app.applicationDisconnect,
 	})
 	app.sendAgentCommand = app.relay.SendCommand
 	app.relay.SetServerIdentity(serverIdentity)
@@ -353,7 +361,11 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 }
 
 func (a *App) SetToolRuntime(cfg toolruntime.Config) {
-	a.toolRuntime.Configure(cfg, a.newToolRuntimeHandler())
+	handler := a.newToolRuntimeHandler()
+	if a.applications != nil {
+		handler = a.applicationRequestGuard(handler)
+	}
+	a.toolRuntime.Configure(cfg, handler)
 }
 
 func (a *App) SetFinalBlockPreviewer(previewer previewpkg.FinalBlockPreviewService) {
@@ -439,6 +451,11 @@ func (a *App) Run(ctx context.Context) error {
 	a.listenMu.Unlock()
 
 	errCh := make(chan error, 4)
+	if a.applications != nil {
+		if err := a.applications.startWorkers(ctx, errCh); err != nil {
+			return err
+		}
+	}
 	// The setup page is opened before Run reaches this point. Start the API
 	// server before startup probes so local setup does not wait for them.
 	go func() {

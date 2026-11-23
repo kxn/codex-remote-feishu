@@ -28,6 +28,7 @@ const (
 	ActionShowCommandHelp             ActionKind = "surface.command.help"
 	ActionShowCommandMenu             ActionKind = "surface.command.menu"
 	ActionShowHistory                 ActionKind = "surface.command.history"
+	ActionPrivateProject              ActionKind = "surface.command.private_project"
 	ActionPrimaryCommand              ActionKind = "surface.command.primary"
 	ActionCoworkersCommand            ActionKind = "surface.command.coworkers"
 	ActionReviewCommand               ActionKind = "surface.command.review"
@@ -129,6 +130,8 @@ type ActionFileAttachment struct {
 }
 
 type Action struct {
+	RecoveryNewThread   bool   `json:",omitempty"`
+	RecoverySessionID   string `json:",omitempty"`
 	Kind                ActionKind
 	GatewayID           string
 	SurfaceSessionID    string
@@ -198,26 +201,29 @@ type SelectionOption struct {
 }
 
 type Snapshot struct {
-	SurfaceSessionID  string
-	ActorUserID       string
-	ProductMode       string
-	Backend           agentproto.Backend
-	WorkspaceKey      string
-	RoomWorkspaceKey  string
-	CodexProfileID    string
-	ClaudeProfileID   string
-	ClaudeProfileName string
-	Attachment        AttachmentSummary
-	PendingHeadless   PendingHeadlessSummary
-	NextPrompt        PromptRouteSummary
-	Gate              GateSummary
-	Dispatch          DispatchSummary
-	AutoWhip          AutoWhipSummary
-	AutoContinue      AutoContinueSummary
-	PermissionGaps    []PermissionGapSummary
-	Instances         []InstanceSummary
-	Threads           []ThreadSummary
+	SurfaceSessionID   string
+	ActorUserID        string
+	ProductMode        string
+	Backend            agentproto.Backend
+	WorkspaceKey       string
+	RoomWorkspaceKey   string
+	CodexProfileID     string
+	ClaudeProfileID    string
+	ClaudeProfileName  string
+	Attachment         AttachmentSummary
+	PendingHeadless    PendingHeadlessSummary
+	NextPrompt         PromptRouteSummary
+	Gate               GateSummary
+	Dispatch           DispatchSummary
+	AutoWhip           AutoWhipSummary
+	AutoContinue       AutoContinueSummary
+	PermissionGaps     []PermissionGapSummary
+	HistoricalRecovery *HistoricalRecoverySummary
+	Instances          []InstanceSummary
+	Threads            []ThreadSummary
 }
+
+type HistoricalRecoverySummary struct{ UnconfirmedReplies, ClaimedInputs, OtherInputs, SuspendedInputs, UnresolvedExecutions int }
 
 type PermissionGapSummary struct {
 	Scope        string
@@ -651,8 +657,15 @@ const (
 	DaemonCommandVSCodeMigrate              DaemonCommandKind = "vscode.migrate"
 	DaemonCommandThreadHistoryRead          DaemonCommandKind = "thread.history.read"
 	DaemonCommandSendIMFile                 DaemonCommandKind = "feishu.im_file.send"
+	DaemonCommandPrivateSendFile            DaemonCommandKind = "private.file.publish"
 	DaemonCommandGitWorkspaceImport         DaemonCommandKind = "workspace.git_import"
 	DaemonCommandGitWorkspaceImportCancel   DaemonCommandKind = "workspace.git_import.cancel"
+	DaemonCommandPrivateProjectQuery        DaemonCommandKind = "private.project.query"
+	DaemonCommandPrivateProjectShare        DaemonCommandKind = "private.project.share"
+	DaemonCommandPrivateMkdir               DaemonCommandKind = "private.workspace.mkdir"
+	DaemonCommandPrivateBotSettings         DaemonCommandKind = "private.bot.settings"
+	DaemonCommandPrivateStageInput          DaemonCommandKind = "private.input.stage"
+	DaemonCommandPrivateWorktreeObserve     DaemonCommandKind = "private.worktree.observe"
 	DaemonCommandGitWorkspaceWorktreeCreate DaemonCommandKind = "workspace.git_worktree.create"
 	DaemonCommandGitWorkspaceWorktreeCancel DaemonCommandKind = "workspace.git_worktree.cancel"
 )
@@ -683,6 +696,7 @@ type DaemonCommand struct {
 	AutoRestore               bool
 	Text                      string
 	LocalPath                 string
+	FileSHA256                string `json:",omitempty"`
 	RepoURL                   string
 	RefName                   string
 	BranchName                string

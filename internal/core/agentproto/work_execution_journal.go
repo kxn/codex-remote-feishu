@@ -52,3 +52,24 @@ func RuntimeEventPayloadHash(event Event) (string, error) {
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:]), nil
 }
+
+const RuntimeLiveProtocolVersion = 1
+
+// RuntimeLiveIdentity is a private, independently sequenced display frame.
+// It never establishes acceptance, terminal state, or critical journal order.
+type RuntimeLiveIdentity struct {
+	Version            int    `json:"version"`
+	CarrierIncarnation string `json:"carrierIncarnation"`
+	Sequence           uint64 `json:"sequence"`
+	PayloadHash        string `json:"payloadHash"`
+}
+
+func HashRuntimeLiveEvent(event Event) (string, error) {
+	event.Live = nil
+	raw, err := json.Marshal(event)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}

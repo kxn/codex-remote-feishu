@@ -29,6 +29,9 @@ func (t *Tx) ClaimAttempt(request ClaimRequest) error {
 }
 func (t *Tx) claimAttempt(request ClaimRequest) error {
 	attempt := request.Attempt
+	if err := t.AssertPersonalMigrationOpen(attempt.ScopeID); err != nil {
+		return err
+	}
 	if request.ControlReservedSlots < 0 || (request.ControlReservedSlots > 0 && (request.MaxActiveSlots < 1 || request.ControlReservedSlots >= request.MaxActiveSlots)) {
 		return fmt.Errorf("invalid control reserve")
 	}
@@ -216,6 +219,21 @@ func (t *Tx) claimAttempt(request ClaimRequest) error {
 		}
 		if input.ShellOperationID != "" || input.ContentState == work.InputContentPending || input.TaskID != attempt.TaskID || input.State != work.InboxPending || input.ScopeID != attempt.ScopeID || input.RecipientRoleID != worker.RoleID || input.RecipientContextID != "" && input.RecipientContextID != worker.ContextID {
 			return fmt.Errorf("input is not claimable by worker")
+		}
+		if input.MessageID != "" && scope.Kind == work.ScopeProject {
+			msg, e := t.GetMessage(input.MessageID)
+			if e != nil {
+				return e
+			}
+			if msg.DerivedFrom != nil && msg.DerivedFrom.Kind == "private_share" {
+				at := request.Now
+				if at.IsZero() {
+					at = time.Now().UTC()
+				}
+				if e = t.authorizePrivateProjectShare(scope, input, msg, at); e != nil {
+					return e
+				}
+			}
 		}
 		if revision, ok := request.ExpectedInputRevisions[id]; ok && revision != input.Revision {
 			return ErrConflict

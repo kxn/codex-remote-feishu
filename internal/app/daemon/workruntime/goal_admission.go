@@ -17,7 +17,7 @@ func nativeGoalAdmission(tx *workstore.Tx, worker work.WorkerSession) (bool, err
 	}
 	attempt, err := tx.GetOccupiedAttemptForWorker(worker.ID)
 	if err == nil {
-		stopped, e := tx.PrivateAttemptStopped(attempt)
+		stopped, e := tx.AttemptStopRequested(attempt)
 		if e != nil || stopped {
 			return false, e
 		}

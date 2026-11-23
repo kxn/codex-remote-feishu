@@ -637,6 +637,14 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
 		s.finishWorkspaceRouteRestartPendingRoute(surface, pending)
+	}
+	upgradeProblem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{})
+	if upgradeProblem.Code == "opencode_upgrade_required" {
+		notice := control.Notice{Code: upgradeProblem.Code, Title: "需要升级 OpenCode", Text: "当前 OpenCode 版本不支持单聊，请升级到 OpenCode 2.1.4 或更新的 2.x 版本。"}
+		events := []eventcontract.Event{{Kind: eventcontract.KindNotice, SurfaceSessionID: surfaceID, Notice: &notice}}
+		return s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
+	}
+	if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
 		notice := control.Notice{
 			Code:  "workspace_route_restart_failed",
 			Title: "当前工作区重启失败",

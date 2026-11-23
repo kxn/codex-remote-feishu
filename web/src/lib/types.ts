@@ -52,7 +52,8 @@ export interface BootstrapState {
 }
 
 export interface RuntimeStatus {
-  authority: "persistent_teams" | "legacy";
+  authority: "persistent_teams" | "legacy" | "separate_applications";
+  privateReadError?: string;
   work?:
     | { available: false; readError: string }
     | {

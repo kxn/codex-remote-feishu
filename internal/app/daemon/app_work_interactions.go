@@ -165,14 +165,40 @@ func (a *App) processTeamInteraction(ctx context.Context, interaction workstore.
 	viewID, _ := interaction.Envelope.Values["team_view"].(string)
 	action, _ := interaction.Envelope.Values["action"].(string)
 	var view workstore.UIView
+	var personalSource string
 	err := r.store.Within(ctx, func(tx *workstore.Tx) error {
 		var e error
 		view, e = tx.GetUIView(viewID)
 		if e != nil {
 			return e
 		}
-		return tx.ValidateViewInteraction(view, interaction)
+		if e = tx.ValidateViewInteraction(view, interaction); e != nil {
+			return e
+		}
+		viewScope, e := tx.GetScope(view.ScopeID)
+		if e != nil {
+			return e
+		}
+		if viewScope.Kind == work.ScopePersonal {
+			personalSource = view.ScopeID
+			return nil
+		}
+		personalSource, e = tx.PersonalSourceForPrivateChat(interaction.PrincipalID, interaction.Gateway.RoleID, interaction.Envelope.Tenant, interaction.Envelope.ChatID)
+		if errors.Is(e, workstore.ErrNotFound) {
+			return nil
+		}
+		return e
 	})
+	if err == nil && personalSource != "" && action != "native.respond" && !strings.HasPrefix(action, "runtime.") {
+		end, activityErr := r.beginPersonalSourceActivity(ctx, personalSource)
+		if errors.Is(activityErr, workstore.ErrPersonalMigrationFenced) {
+			return nil
+		}
+		if activityErr != nil {
+			return activityErr
+		}
+		defer end()
+	}
 	if err == nil {
 		switch {
 		case view.Kind == "review.result":

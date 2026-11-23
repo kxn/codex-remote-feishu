@@ -112,6 +112,8 @@ func (p teamBotSettingsPort) ApplyBot(ctx context.Context, binding work.RoleBotB
 	defer a.feishuApplyMu.Unlock()
 	a.adminConfigMu.Lock()
 	defer a.adminConfigMu.Unlock()
+	a.profileReferenceGate.RLock()
+	defer a.profileReferenceGate.RUnlock()
 	if _, _, err := p.facts(ctx, binding); err != nil {
 		return applied, err
 	}
@@ -182,7 +184,13 @@ func (a *App) persistWorkBotSettingsLocked(binding work.RoleBotBinding, expected
 	if err := a.botCapabilitySettingsState.store.Put(next); err != nil {
 		return "", err
 	}
-	a.materializeBotCapabilitySettingsStateLocked()
+	// The private service is processor-owned. Consumers reload from this
+	// authoritative store outside a.mu instead of mutating that service here.
+	if a.privateServiceOwned.Load() {
+		a.privateSettingsRevision.Add(1)
+	} else {
+		a.materializeBotCapabilitySettingsStateLocked()
+	}
 	return resolved.fingerprint, nil
 }
 

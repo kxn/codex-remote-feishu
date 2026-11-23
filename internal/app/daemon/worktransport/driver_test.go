@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,41 @@ import (
 
 type fakeRelay struct {
 	send func(string, agentproto.Command) error
+}
+
+func fixtureSourceActivity(store *workstore.Store) func(context.Context, string) (func(), error) {
+	var mu sync.Mutex
+	active := make(map[string]int)
+	return func(ctx context.Context, scope string) (func(), error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if err := store.Within(ctx, func(tx *workstore.Tx) error { return tx.AssertPersonalMigrationOpen(scope) }); err != nil {
+			return nil, err
+		}
+		active[scope]++
+		var once sync.Once
+		return func() { once.Do(func() { mu.Lock(); defer mu.Unlock(); active[scope]-- }) }, nil
+	}
+}
+
+func TestMigrationNativeSendClassification(t *testing.T) {
+	for _, kind := range []agentproto.CommandKind{agentproto.CommandPromptSend, agentproto.CommandThreadGoalClear, agentproto.CommandMCPOAuthLogin, agentproto.CommandRequestRespond, agentproto.CommandProcessChildRestart} {
+		if !effectfulNativeCommand(kind) {
+			t.Fatalf("effectful %s bypasses source activity", kind)
+		}
+	}
+	for _, kind := range []agentproto.CommandKind{agentproto.CommandRuntimeInspect, agentproto.CommandTurnInterrupt, agentproto.CommandProcessExit, agentproto.CommandThreadGoalGet} {
+		if effectfulNativeCommand(kind) {
+			t.Fatalf("read/stop %s blocked by personal source fence", kind)
+		}
+	}
+}
+
+func TestDriverRequiresSourceActivityGuard(t *testing.T) {
+	f := newTransportFixture(t)
+	if _, err := New(f.store, f.relay, nil); err == nil {
+		t.Fatal("driver accepted a missing source activity guard")
+	}
 }
 
 func (r *fakeRelay) SendCommand(instance string, command agentproto.Command) error {
@@ -44,7 +80,7 @@ func newTransportFixture(t *testing.T) *transportFixture {
 	}
 	t.Cleanup(func() { store.Close() })
 	f := &transportFixture{t: t, store: store, relay: &fakeRelay{}}
-	f.driver, err = New(store, f.relay)
+	f.driver, err = New(store, f.relay, fixtureSourceActivity(store))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,6 +14,16 @@ import (
 )
 
 func (a *App) startProfileCatalogRefresh(ctx context.Context, target teamProfileCatalogTarget) (workstore.ProfileModelCatalog, error) {
+	finished, admitted := a.beginApplicationNativeDelivery()
+	if !admitted {
+		return workstore.ProfileModelCatalog{}, errApplicationClosing
+	}
+	async := false
+	defer func() {
+		if !async {
+			finished()
+		}
+	}()
 	r := a.teamRuntime
 	r.catalogMu.Lock()
 	defer r.catalogMu.Unlock()
@@ -64,7 +74,9 @@ func (a *App) startProfileCatalogRefresh(ctx context.Context, target teamProfile
 	}
 	r.catalogPending[target.Key] = true
 	r.workers.Add(1)
+	async = true
 	go func() {
+		defer finished()
 		defer r.workers.Done()
 		defer func() { r.catalogMu.Lock(); delete(r.catalogPending, target.Key); r.catalogMu.Unlock() }()
 		probeCtx, cancel := context.WithTimeout(r.runContext, 35*time.Second)

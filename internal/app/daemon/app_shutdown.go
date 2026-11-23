@@ -43,6 +43,14 @@ func (a *App) Shutdown(ctx context.Context) error {
 			log.Printf("desktop session state cleanup failed: %v", err)
 		}
 	}()
+	if a.applications != nil && a.applications.native != nil && a.applications.runner != nil {
+		if shutdownMode(ctx) == shutdownctx.ModeConsoleClose {
+			closeCtx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+			defer cancel()
+			return a.shutdownApplications(closeCtx)
+		}
+		return a.shutdownApplications(context.WithoutCancel(ctx))
+	}
 
 	if shutdownMode(ctx) == shutdownctx.ModeConsoleClose {
 		return a.shutdownForConsoleClose()
@@ -378,6 +386,12 @@ func (a *App) stopIngressAndServers() {
 }
 
 func (a *App) finishShutdown(errs ...error) error {
+	applicationsClosed := true
+	if a.applications != nil {
+		err := a.applications.close()
+		errs = append(errs, err)
+		applicationsClosed = err == nil
+	}
 	if r := a.teamRuntime; r != nil && r.store != nil {
 		joined := r.runDone == nil
 		if r.runDone != nil {
@@ -387,7 +401,9 @@ func (a *App) finishShutdown(errs ...error) error {
 			default:
 			}
 		}
-		if joined {
+		// Private ingress and migration also read the shared settings/source
+		// store. A joined team scheduler alone cannot authorize its closure.
+		if joined && applicationsClosed {
 			errs = append(errs, r.store.Close())
 		}
 	}

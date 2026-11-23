@@ -261,3 +261,226 @@ func TestJournalRejectsWorkspaceAndEscapingPaths(t *testing.T) {
 		t.Fatal("two live wrappers acquired one journal")
 	}
 }
+
+func TestPrivateContractCannotRebindTeamIncarnation(t *testing.T) {
+	root, cwd := t.TempDir(), t.TempDir()
+	store := openTestStore(t, filepath.Join(root, "runtime.db"), root, cwd, "inc")
+	defer store.Close()
+	owner := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "owner", Epoch: 1, CarrierIncarnation: "inc", InstanceID: "instance", HostID: "host", InstanceGeneration: 1, ProcessGeneration: 1, Backend: agentproto.BackendCodex, HistoryNamespace: "history"}
+	snapshot := agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: filepath.Join(root, "runtime.db")}
+	if err := store.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindLaunchSnapshot(agentproto.RuntimeLaunchSnapshot{Version: 1}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("team rebind: %v", err)
+	}
+	binding := agentproto.NativeTurnBinding{Version: 1, Owner: owner, ExecutionID: "execution"}
+	command := agentproto.Command{CommandID: "private", Kind: agentproto.CommandPromptSend, NativeBinding: &binding}
+	if _, duplicate, err := store.PreparePrivateCommand(command); err != nil || duplicate {
+		t.Fatalf("prepare: %v %v", duplicate, err)
+	}
+	if _, duplicate, err := store.PreparePrivateCommand(command); err != nil || !duplicate {
+		t.Fatalf("replay: %v %v", duplicate, err)
+	}
+	if _, _, err := store.PrepareCommand(command); !errors.Is(err, ErrConflict) {
+		t.Fatalf("team accepted private command: %v", err)
+	}
+}
+
+func TestPrivateJournalReceiptReplayAfterReopen(t *testing.T) {
+	root, cwd := t.TempDir(), t.TempDir()
+	path := filepath.Join(root, "journal.db")
+	owner := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "owner", Epoch: 1, CarrierIncarnation: "inc", InstanceID: "instance", HostID: "host", InstanceGeneration: 1, ProcessGeneration: 1, Backend: agentproto.BackendCodex, HistoryNamespace: "history"}
+	snapshot := agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: path}
+	s := openTestStore(t, path, root, cwd, "inc")
+	if err := s.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	binding := agentproto.NativeTurnBinding{Version: 1, Owner: owner, ExecutionID: "run"}
+	command := agentproto.Command{CommandID: "command", Kind: agentproto.CommandTurnSteer, NativeBinding: &binding}
+	if _, _, err := s.PreparePrivateCommand(command); err != nil {
+		t.Fatal(err)
+	}
+	events, err := s.PersistEvents([]agentproto.Event{{Kind: agentproto.EventNativeTurnInputAccepted, CommandID: "command", NativeBinding: &binding, RequestID: "rpc", ThreadID: "session", TurnID: "turn", Status: "accepted"}})
+	if err != nil || len(events) != 1 || events[0].Journal == nil {
+		t.Fatalf("persist: %v", err)
+	}
+	original := events[0]
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s = openTestStore(t, path, root, cwd, "inc")
+	defer s.Close()
+	if err = s.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	events, _, err = s.Replay(0, 16)
+	if err != nil || len(events) != 1 || events[0].Journal.PayloadHash != original.Journal.PayloadHash || events[0].NativeBinding == nil || *events[0].NativeBinding != binding {
+		t.Fatalf("replay: %+v %v", events, err)
+	}
+	receipt := agentproto.EventReceipt{CarrierIncarnation: "inc", Sequence: original.Journal.Sequence, PayloadHash: original.Journal.PayloadHash}
+	if err = s.Acknowledge(receipt); err != nil {
+		t.Fatal(err)
+	}
+	events, _, err = s.Replay(0, 16)
+	if err != nil || len(events) != 0 {
+		t.Fatalf("acked replay: %+v %v", events, err)
+	}
+}
+
+func TestReadPrivateReceiptAfterLostAckAndUncertainWrite(t *testing.T) {
+	root, cwd := t.TempDir(), t.TempDir()
+	path := filepath.Join(root, "runtime.db")
+	owner := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "owner", Epoch: 1, CarrierIncarnation: "inc", InstanceID: "instance", HostID: "host", InstanceGeneration: 1, ProcessGeneration: 1, Backend: agentproto.BackendCodex, HistoryNamespace: "history"}
+	snapshot := agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: path}
+	s := openTestStore(t, path, root, cwd, "inc")
+	defer s.Close()
+	if err := s.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	binding := agentproto.NativeTurnBinding{Version: 1, Owner: owner, ExecutionID: "run"}
+	command := agentproto.Command{CommandID: "command", Kind: agentproto.CommandPromptSend, NativeBinding: &binding}
+	if _, _, err := s.PreparePrivateCommand(command); err != nil {
+		t.Fatal(err)
+	}
+	frame := []byte(`{"id":"rpc","method":"turn/start"}`)
+	id, err := s.PrepareFrame(command.CommandID, frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.StartFrame(id, frame); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.FinishFrame(id, errors.New("write interrupted")); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := ReadPrivateCommandReceipt(context.Background(), snapshot, root, command.CommandID)
+	if err != nil || len(receipt.Frames) != 1 || receipt.Frames[0].NativeRequestID != "rpc" || receipt.Frames[0].Stage != StageUnknown {
+		t.Fatalf("unknown receipt: %+v %v", receipt, err)
+	}
+}
+
+func TestRetiredPrivateFenceChecksFrozenContractAndLaterWrites(t *testing.T) {
+	ctx := context.Background()
+	root, cwd := t.TempDir(), t.TempDir()
+	path := filepath.Join(root, "runtime.db")
+	owner := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "owner", Epoch: 1, CarrierIncarnation: "inc", InstanceID: "instance", HostID: "host", InstanceGeneration: 1, ProcessGeneration: 1, Backend: agentproto.BackendCodex, HistoryNamespace: "history"}
+	snapshot := agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: path}
+	binding := agentproto.NativeTurnBinding{Version: 1, Owner: owner, ExecutionID: "run"}
+	s := openTestStore(t, path, root, cwd, "inc")
+	if err := s.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyRetiredPrivateWriteFence(ctx, snapshot, root, 0); err == nil {
+		t.Fatal("live writer journal was treated as retired")
+	}
+	cmd := agentproto.Command{CommandID: "first", Kind: agentproto.CommandPromptSend, NativeBinding: &binding}
+	if _, _, err := s.PreparePrivateCommand(cmd); err != nil {
+		t.Fatal(err)
+	}
+	frame := []byte(`{"id":"rpc1","method":"turn/start"}`)
+	id, err := s.PrepareFrame(cmd.CommandID, frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.StartFrame(id, frame); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.FinishFrame(id, nil); err != nil {
+		t.Fatal(err)
+	}
+	watermark, err := s.NativeWriteWatermark()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = VerifyRetiredPrivateWriteFence(ctx, snapshot, root, watermark); err != nil {
+		t.Fatal(err)
+	}
+	wrong := snapshot
+	wrong.Owner.Epoch++
+	if err = VerifyRetiredPrivateWriteFence(ctx, wrong, root, watermark); err == nil {
+		t.Fatal("changed launch accepted")
+	}
+	s = openTestStore(t, path, root, cwd, "inc")
+	if err = s.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	cmd.CommandID = "later"
+	if _, _, err = s.PreparePrivateCommand(cmd); err != nil {
+		t.Fatal(err)
+	}
+	frame = []byte(`{"id":"rpc2","method":"turn/steer"}`)
+	id, err = s.PrepareFrame(cmd.CommandID, frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.StartFrame(id, frame); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.FinishFrame(id, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = VerifyRetiredPrivateWriteFence(ctx, snapshot, root, watermark); err == nil {
+		t.Fatal("late native write ignored")
+	}
+}
+func TestRetiredPrivateFenceSupportsVerifiedEmptyJournal(t *testing.T) {
+	root, cwd := t.TempDir(), t.TempDir()
+	path := filepath.Join(root, "runtime.db")
+	owner := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "owner", Epoch: 1, CarrierIncarnation: "inc", InstanceID: "instance", HostID: "host", InstanceGeneration: 1, ProcessGeneration: 1, Backend: agentproto.BackendCodex, HistoryNamespace: "history"}
+	snapshot := agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: path}
+	s := openTestStore(t, path, root, cwd, "inc")
+	if err := s.BindPrivateLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyRetiredPrivateWriteFence(context.Background(), snapshot, root, 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRetiredTeamZeroWatermarkRequiresRealMatchingJournal(t *testing.T) {
+	ctx := context.Background()
+	root, cwd := t.TempDir(), t.TempDir()
+	path := filepath.Join(root, "runtime.db")
+	snapshot := agentproto.RuntimeLaunchSnapshot{Version: 1, CWD: cwd, JournalPath: path, CarrierIncarnation: "inc"}
+	if err := VerifyRetiredWriteFence(ctx, snapshot, root, 0); err == nil {
+		t.Fatal("missing journal proved zero writes")
+	}
+	store := openTestStore(t, path, root, cwd, "inc")
+	if err := store.BindLaunchSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyRetiredWriteFence(ctx, snapshot, root, 0); err != nil {
+		t.Fatalf("verified empty journal rejected: %v", err)
+	}
+	store = openTestStore(t, path, root, cwd, "inc")
+	cmd := testCommand()
+	if _, _, err := store.PrepareCommand(cmd); err != nil {
+		t.Fatal(err)
+	}
+	frame := []byte(`{"id":"rpc","method":"turn/start"}`)
+	if _, err := store.PrepareFrame(cmd.CommandID, frame); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyRetiredWriteFence(ctx, snapshot, root, 0); err == nil {
+		t.Fatal("later effectful frame accepted as zero writes")
+	}
+}

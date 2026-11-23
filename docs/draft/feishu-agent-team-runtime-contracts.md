@@ -1,8 +1,11 @@
 # 飞书 Agent 团队：Codex／Claude 运行合同附录
 
 > Type: `draft`
-> Updated: `2026-11-22`
+> Updated: `2026-11-24`
 > Summary: 区分旧 wrapper 的 MCP 注入与现行团队 CLI 的执行授权。
+
+> 架构决议更新（2026-11-23）：单聊与团队改为独立应用，共享原生接入和平台通信。本文中“单聊统一进入团队执行内核”的要求已由[应用分离设计](../inprogress/private-team-application-separation.md)替代；现有行为与迁移状态以该文的实施记录为准，不能把目标设计当成已部署事实。
+
 
 ## 1. 范围与证据等级
 
@@ -160,7 +163,7 @@ Raft 的[Codex 恢复降级](https://github.com/botiverse/raft-source/blob/5214e
 | `internal/adapter/claude/{commands,translator,observe,session_runtime_state}.go` | 缺失目标严格拒绝；保留合成 turn 证据来源；新增可验证的 input receipt／compaction 观测，不能把 Codex RPC 名直接移植 |
 | `internal/app/wrapper/{backend_runtime,app_child_session,app_child_session_claude,app_headless_claude,app_child_settings_claude,app_child_mcp}.go` | 增加版本化 LaunchContract／InstructionBundle 和明确 ready 阶段，安全重启携带新 snapshot，session credential 与 run_ref 校验接线 |
 | `internal/app/daemon/{app_headless,app_headless_pool,app_headless_claude_profile}.go` | 新宿主匹配按 role/scope/session generation／cwd／配置合同，空闲回收看 WorkerSession lease／inbox／活跃 Attempt；不能只看 surface attachment |
-| `internal/core/orchestrator/service_dispatch_core.go`、`service_compact.go` 与运行事件入口 | 提取 WorkerSession ownership、持久投递／恢复／维护用例；原单聊命令调用同一用例，不能让新旧 owner 双写 |
+| `internal/core/orchestrator/service_dispatch_core.go`、`service_compact.go` 与运行事件入口 | 团队使用 WorkerSession ownership 和持久投递／恢复；私人命令保留独立 core 与 journal，不能让两个应用或旧源双写 |
 | 新协作持久层与 CLI broker | 保存 Attempt、input receipt、checkpoint、操作去重、配置 desired/applied；消息与成果交付 outbox 独立于 native 最终文本 |
 
 当前 headless pool [syncManagedHeadlessLocked](../../internal/app/daemon/app_headless_pool.go:14)以 surface attachment／ActiveTurn 判 busy。新系统没有 surface 挂靠但有角色身份、收件箱或恢复中的 WorkerSession 时，不能被当作无归属空闲实例。预热可复用未绑定的进程能力；一旦包含 scope 凭据、角色说明、自动记忆或 session 状态，就按明确隔离与归还合同复用。

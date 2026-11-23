@@ -60,6 +60,8 @@ type PendingUpgrade struct {
 	ChatID                      string        `json:"chatID,omitempty"`
 	ActorUserID                 string        `json:"actorUserID,omitempty"`
 	SourceMessageID             string        `json:"sourceMessageID,omitempty"`
+	PrivateRequestID            string        `json:"privateRequestID,omitempty"`
+	SourceSHA256                string        `json:"sourceSHA256,omitempty"`
 	RequestedAt                 *time.Time    `json:"requestedAt,omitempty"`
 	ResultDeliveryAttempts      int           `json:"resultDeliveryAttempts,omitempty"`
 	ResultDeliveryLastAttemptAt *time.Time    `json:"resultDeliveryLastAttemptAt,omitempty"`

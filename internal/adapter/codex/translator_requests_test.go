@@ -1304,7 +1304,7 @@ func TestObserveThreadHistoryReadResultEmitsStructuredHistoryEvent(t *testing.T)
 		t.Fatalf("expected one suppressed history event, got %#v", result)
 	}
 	event := result.Events[0]
-	if event.Kind != agentproto.EventThreadHistoryRead || event.CommandID != "cmd-history-1" || event.ThreadHistory == nil {
+	if event.Kind != agentproto.EventThreadHistoryRead || event.CommandID != "cmd-history-1" || event.RequestID != requestID || event.ThreadHistory == nil {
 		t.Fatalf("unexpected history event: %#v", event)
 	}
 	if event.ThreadHistory.Thread.ThreadID != "thread-1" || event.ThreadHistory.Thread.Name != "修复登录" {

@@ -1,7 +1,7 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-11-22`
+> Updated: `2026-11-23`
 > Summary: 明确飞书团队的现行使用入口、目标合同、验收证据及退役设计。
 
 ## 1. 适用范围
@@ -125,6 +125,8 @@
 - 新增文档时，优先先判断它属于哪种生命周期，再决定放到哪个目录
 
 ## 6. 当前索引
+
+- 本轮已确认的单聊／团队分离架构、旧版对照、迁移及任务拆分，请读[应用分离设计与实施](./inprogress/private-team-application-separation.md)。它替代旧团队设计中共用业务内核的要求，完整切换尚需实施验收。
 
 - 使用飞书团队，请读[飞书使用说明书](./general/user-guide.md)。
 - 核对当前运行与卡片事实，请读[远程执行状态机](./general/remote-surface-state-machine.md)与[飞书卡片 UI 状态机](./general/feishu-card-ui-state-machine.md)的团队章节。

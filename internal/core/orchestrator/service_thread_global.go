@@ -59,6 +59,9 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			if thread == nil {
 				continue
 			}
+			if !s.threadVisibleForSurface(surface, state.EffectiveInstanceBackend(inst), inst.InstanceID, thread.ThreadID) {
+				continue
+			}
 			if !threadBelongsToInstanceWorkspace(inst, thread) {
 				continue
 			}
@@ -77,7 +80,7 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			}
 		}
 	}
-	s.mergePersistedRecentThreadsForBackend(viewsByID, targetBackend, filterByBackend)
+	s.mergePersistedRecentThreadsForBackend(surface, viewsByID, targetBackend, filterByBackend)
 
 	views := make([]*mergedThreadView, 0, len(viewsByID))
 	for _, view := range viewsByID {
@@ -175,6 +178,9 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 		if inst == nil || state.EffectiveInstanceBackend(inst) != backend {
 			continue
 		}
+		if !s.threadVisibleForSurface(surface, backend, inst.InstanceID, threadID) {
+			continue
+		}
 		thread := inst.Threads[threadID]
 		if !ordinaryThreadVisible(thread) || !threadBelongsToInstanceWorkspaceForTarget(inst, thread) {
 			continue
@@ -186,7 +192,7 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 			view.Backend = state.EffectiveInstanceBackend(inst)
 		}
 	}
-	if includePersisted && s.catalog.hasPersistedThreads() {
+	if includePersisted && s.catalog.hasPersistedThreads() && s.threadVisibleForSurface(surface, backend, "", threadID) {
 		thread, err := s.catalog.persistedThreadByIDForBackend(backend, threadID)
 		if err == nil && ordinaryThreadVisible(thread) {
 			found = true
@@ -209,6 +215,9 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 
 func (s *Service) persistedThreadView(surface *state.SurfaceConsoleRecord, threadID string) *mergedThreadView {
 	if s == nil || !s.catalog.hasPersistedThreads() {
+		return nil
+	}
+	if !s.threadVisibleForSurface(surface, agentproto.BackendCodex, "", strings.TrimSpace(threadID)) {
 		return nil
 	}
 	thread, err := s.catalog.persistedThreadByIDForBackend(agentproto.BackendCodex, strings.TrimSpace(threadID))

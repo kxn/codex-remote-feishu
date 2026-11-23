@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -113,6 +114,49 @@ func TestSystemWebColdIssueUsesActualServiceAndUpdatesOriginalCard(t *testing.T)
 			t.Fatal("actual link result not committed")
 		}
 		return err
+	})
+}
+
+func TestSystemWebMigrationFenceBlocksLateCredentialAndWaitsForInflight(t *testing.T) {
+	t.Run("late", func(t *testing.T) {
+		a, source, provider, _ := systemWebFixture(t, false)
+		if _, _, err := a.teamRuntime.beginPersonalSourceFence(t.Context(), source.ScopeID, "migration", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.runTeamSystemHostJobs(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if provider.calls.Load() != 0 {
+			t.Fatal("fenced private job issued a new admin credential")
+		}
+	})
+	t.Run("inflight", func(t *testing.T) {
+		a, source, provider, _ := systemWebFixture(t, true)
+		done := make(chan error, 1)
+		go func() { done <- a.runTeamSystemHostJobs(context.Background()) }()
+		select {
+		case <-provider.entered:
+		case <-time.After(time.Second):
+			t.Fatal("admin issuance did not start")
+		}
+		_, active, err := a.teamRuntime.beginPersonalSourceFence(t.Context(), source.ScopeID, "migration", time.Now())
+		if err != nil || active != 1 {
+			close(provider.unblock)
+			t.Fatalf("active=%d err=%v", active, err)
+		}
+		wait, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+		defer cancel()
+		if !errors.Is(a.teamRuntime.waitPersonalSourceActivities(wait, source.ScopeID), context.DeadlineExceeded) {
+			close(provider.unblock)
+			t.Fatal("migration did not wait for in-flight issuance")
+		}
+		close(provider.unblock)
+		if err = <-done; err != nil {
+			t.Fatal(err)
+		}
+		if err = a.teamRuntime.waitPersonalSourceActivities(t.Context(), source.ScopeID); err != nil {
+			t.Fatal(err)
+		}
 	})
 }
 

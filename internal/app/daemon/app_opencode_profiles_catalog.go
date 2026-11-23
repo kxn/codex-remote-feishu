@@ -41,7 +41,11 @@ func (a *App) syncOpenCodeProfilesCatalogLocked(cfg config.AppConfig) {
 	if a == nil || a.service == nil {
 		return
 	}
-	a.service.MaterializeOpenCodeProfiles(materializeOpenCodeProfileSummaries(cfg))
+	records := materializeOpenCodeProfileSummaries(cfg)
+	a.updatePrivateOpenCodeCatalogLocked(records)
+	if !a.privateServiceOwned.Load() {
+		a.service.MaterializeOpenCodeProfiles(records)
+	}
 }
 
 func (a *App) syncOpenCodeProfilesCatalogFromConfig() {

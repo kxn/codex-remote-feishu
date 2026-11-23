@@ -12,10 +12,11 @@ import (
 )
 
 type inspectedTurn struct {
-	Binding   agentproto.ExecutionBinding
-	CommandID string
-	Active    bool
-	Terminal  bool
+	Binding       agentproto.ExecutionBinding
+	NativeBinding *agentproto.NativeTurnBinding `json:"nativeBinding,omitempty"`
+	CommandID     string
+	Active        bool
+	Terminal      bool
 }
 type workInspectionState struct {
 	startupProcessUntracked bool
@@ -90,7 +91,7 @@ func (s *workInspectionState) events(events []agentproto.Event) {
 		if event.Kind == agentproto.EventTurnStarted || event.Kind == agentproto.EventTurnCompleted || event.Kind == agentproto.EventNativeTurnBindingObserved || event.Kind == agentproto.EventNativeInputReceipt {
 			s.dirty = true
 		}
-		if event.ThreadID != "" && (event.Kind == agentproto.EventNativeTurnBindingObserved || event.Kind == agentproto.EventTurnStarted || (event.Kind == agentproto.EventTurnCompleted && event.TurnID != "")) {
+		if event.ThreadID != "" && (event.Kind == agentproto.EventNativeTurnBindingObserved || event.Kind == agentproto.EventTurnStarted || (event.Kind == agentproto.EventTurnCompleted && event.TurnID != "") || (event.NativeBinding != nil && event.Kind == agentproto.EventModelCatalogUpdated)) {
 			s.sessionIDs[event.ThreadID] = true
 		}
 		key := nativeTurnKey(event.ThreadID, event.TurnID)
@@ -98,6 +99,11 @@ func (s *workInspectionState) events(events []agentproto.Event) {
 		if event.Kind == agentproto.EventNativeTurnBindingObserved || event.Kind == agentproto.EventTurnStarted {
 			if event.Execution != nil {
 				proof.Binding = *event.Execution
+				proof.CommandID = event.CommandID
+			}
+			if event.NativeBinding != nil {
+				b := *event.NativeBinding
+				proof.NativeBinding = &b
 				proof.CommandID = event.CommandID
 			}
 			if !proof.Terminal {
@@ -145,8 +151,14 @@ func (s *workInspectionState) events(events []agentproto.Event) {
 			delete(s.pendingInputs, "request:"+event.RequestID)
 			s.dirty = true
 		}
-		if event.Kind == agentproto.EventNativeInputReceipt && event.Status == "started" && event.TurnID != "" && event.Execution != nil {
-			proof.Binding = *event.Execution
+		if event.Kind == agentproto.EventNativeInputReceipt && event.Status == "started" && event.TurnID != "" && (event.Execution != nil || event.NativeBinding != nil) {
+			if event.Execution != nil {
+				proof.Binding = *event.Execution
+			}
+			if event.NativeBinding != nil {
+				binding := *event.NativeBinding
+				proof.NativeBinding = &binding
+			}
 			proof.CommandID = event.CommandID
 			proof.Active = !proof.Terminal
 			s.turns[key] = proof
@@ -408,9 +420,12 @@ func (s *workInspectionState) observeEscape(id, command string) {
 }
 
 func (s *workInspectionState) inspectInventory(snapshot agentproto.RuntimeLaunchSnapshot) agentproto.BackgroundInspection {
+	return s.inspectInventoryIdentity(snapshot.CarrierIncarnation, snapshot.ProcessGeneration, snapshot.LocationGeneration)
+}
+func (s *workInspectionState) inspectInventoryIdentity(incarnation string, processGeneration, locationGeneration int64) agentproto.BackgroundInspection {
 	s.mu.Lock()
 	scopes := append([]*hostinventory.Scope(nil), s.scopes...)
-	result := agentproto.BackgroundInspection{CarrierIncarnation: snapshot.CarrierIncarnation, ProcessGeneration: snapshot.ProcessGeneration, LocationGeneration: snapshot.LocationGeneration, NativeInputsComplete: true, NativeTaskSetComplete: s.taskInventoryKnown, PendingNativeInputs: len(s.pendingInputs)}
+	result := agentproto.BackgroundInspection{CarrierIncarnation: incarnation, ProcessGeneration: processGeneration, LocationGeneration: locationGeneration, NativeInputsComplete: true, NativeTaskSetComplete: s.taskInventoryKnown, PendingNativeInputs: len(s.pendingInputs)}
 	for commandID := range s.activeNativeCommands {
 		result.ActiveNativeTurnIDs = append(result.ActiveNativeTurnIDs, "native-input:"+commandID)
 	}

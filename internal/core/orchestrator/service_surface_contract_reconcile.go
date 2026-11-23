@@ -21,6 +21,9 @@ func (s *Service) reconcileGatewayHeadlessSurfacesAfterOpenCodeProfileChange(cur
 }
 
 func (s *Service) reconcileGatewayHeadlessSurfacesAfterContractChangeWithOptions(current *state.SurfaceConsoleRecord, prepareNewOpenCodeThread bool) []eventcontract.Event {
+	if s != nil && s.config.PrivateApplication {
+		return nil
+	}
 	if s == nil || s.root == nil || current == nil {
 		return nil
 	}

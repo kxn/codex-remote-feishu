@@ -19,25 +19,34 @@ type NativeUpgradeInstall struct {
 	Result            *codexupgrade.TrackedInstallResult `json:"result,omitempty"`
 }
 type NativeUpgrade struct {
-	HostBootIdentity        string                    `json:"host_boot_identity"`
-	ResumeStage             string                    `json:"resume_stage,omitempty"`
-	ID                      string                    `json:"id"`
-	HostID                  string                    `json:"host_id"`
-	TargetVersion           string                    `json:"target_version"`
-	InstallationFingerprint string                    `json:"installation_fingerprint"`
-	PrincipalID             string                    `json:"principal_id"`
-	Source                  PrivateActionSource       `json:"source"`
-	Installation            codexupgrade.Installation `json:"installation"`
-	Stage                   string                    `json:"stage"`
-	FrozenWorkers           []work.WorkerSession      `json:"workers"`
-	Global                  NativeUpgradeInstall      `json:"global"`
-	Private                 NativeUpgradeInstall      `json:"private"`
-	ManagedVersion          string                    `json:"managed_version,omitempty"`
-	ManagedBinary           string                    `json:"managed_binary,omitempty"`
-	LastError               string                    `json:"last_error,omitempty"`
-	Revision                int64                     `json:"revision"`
-	CreatedAt               time.Time                 `json:"created_at"`
-	UpdatedAt               time.Time                 `json:"updated_at"`
+	HostBootIdentity        string                      `json:"host_boot_identity"`
+	ResumeStage             string                      `json:"resume_stage,omitempty"`
+	ID                      string                      `json:"id"`
+	HostID                  string                      `json:"host_id"`
+	TargetVersion           string                      `json:"target_version"`
+	InstallationFingerprint string                      `json:"installation_fingerprint"`
+	PrincipalID             string                      `json:"principal_id"`
+	Source                  PrivateActionSource         `json:"source"`
+	PrivateSource           *NativeUpgradePrivateSource `json:"private_source,omitempty"`
+	Installation            codexupgrade.Installation   `json:"installation"`
+	Stage                   string                      `json:"stage"`
+	FrozenWorkers           []work.WorkerSession        `json:"workers"`
+	Global                  NativeUpgradeInstall        `json:"global"`
+	Private                 NativeUpgradeInstall        `json:"private"`
+	ManagedVersion          string                      `json:"managed_version,omitempty"`
+	ManagedBinary           string                      `json:"managed_binary,omitempty"`
+	LastError               string                      `json:"last_error,omitempty"`
+	Revision                int64                       `json:"revision"`
+	CreatedAt               time.Time                   `json:"created_at"`
+	UpdatedAt               time.Time                   `json:"updated_at"`
+}
+
+// NativeUpgradePrivateSource identifies the committed private application
+// command that authorized a shared host maintenance request.
+type NativeUpgradePrivateSource struct {
+	Tenant, AppID, Gateway, Surface, Chat, User string
+	Generation                                  int64
+	EffectID                                    string
 }
 
 func (t *Tx) GetNativeUpgrade(id string) (NativeUpgrade, error) {
@@ -103,16 +112,19 @@ func (t *Tx) AssertNativeUpgradeAvailable(backend work.Backend, host string) err
 	return fmt.Errorf("Codex host upgrade %s retains admission fence (%s)", v.ID, v.Stage)
 }
 func (t *Tx) NativeUpgradeWorkers(host string) ([]work.WorkerSession, error) {
-	rows, err := t.tx.QueryContext(t.ctx, `SELECT w.payload FROM workers w JOIN locations l ON l.id=json_extract(w.payload,'$.location_id') WHERE json_extract(l.payload,'$.host_id')=? AND json_extract(w.payload,'$.backend')='codex' AND json_extract(w.payload,'$.state')<>'retired' ORDER BY w.id`, host)
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT w.payload,coalesce(json_extract(l.payload,'$.host_id'),'') FROM workers w LEFT JOIN locations l ON l.id=json_extract(w.payload,'$.location_id') WHERE (json_extract(l.payload,'$.host_id')=? OR coalesce(json_extract(l.payload,'$.host_id'),'')='') AND json_extract(w.payload,'$.backend')='codex' AND json_extract(w.payload,'$.state')<>'retired' ORDER BY w.id`, host)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var values []work.WorkerSession
 	for rows.Next() {
-		var raw string
-		if err = rows.Scan(&raw); err != nil {
+		var raw, workerHost string
+		if err = rows.Scan(&raw, &workerHost); err != nil {
 			return nil, err
+		}
+		if workerHost == "" {
+			return nil, fmt.Errorf("Codex worker has no attributable host; maintenance requires recovery evidence")
 		}
 		var v work.WorkerSession
 		if err = json.Unmarshal([]byte(raw), &v); err != nil {

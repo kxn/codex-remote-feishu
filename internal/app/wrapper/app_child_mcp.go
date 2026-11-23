@@ -3,11 +3,13 @@ package wrapper
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	acpadapter "github.com/kxn/codex-remote-feishu/internal/adapter/acp"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
@@ -21,7 +23,7 @@ func (a *App) buildCodexChildLaunch(baseArgs []string) ([]string, []string) {
 	args := append([]string{}, baseArgs...)
 	env := childEnvWithProxy(a.config.ChildProxyEnv, args)
 	args, env = a.applyCodexFeishuMCPPublication(args, env)
-	if a.work != nil {
+	if a.work != nil || a.privateNative != nil {
 		args = append(args, "-c", "features.memories=false", "-c", "memories.use_memories=false", "-c", "memories.generate_memories=false")
 	}
 	if a.work != nil && a.work.snapshot.ReadOnly {
@@ -99,6 +101,12 @@ func (a *App) readFeishuMCPPublicationInfo() (toolservicecontract.ServiceInfo, b
 		return toolservicecontract.ServiceInfo{}, false
 	}
 	info.URL = urlWithCaller
+	if a.privateNative != nil {
+		info.Token = toolservicecontract.PrivateBearer(os.Getenv(agentproto.PrivateNativeCredentialEnv))
+		if info.Token == "" {
+			return toolservicecontract.ServiceInfo{}, false
+		}
+	}
 	if tokenType := strings.TrimSpace(info.TokenType); tokenType != "" && !strings.EqualFold(tokenType, "bearer") {
 		a.debugf("feishu mcp publication skipped: unsupported token type=%s", tokenType)
 		return toolservicecontract.ServiceInfo{}, false

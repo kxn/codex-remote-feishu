@@ -964,3 +964,11 @@ func (r *claudeBackendRuntime) currentResumeTarget() *claudeLaunchResumeTarget {
 		CWD:      strings.TrimSpace(runtime.CWD),
 	}
 }
+
+// PrivateThreadListLink exposes the translator's explicit coalescing decision;
+// callers must persist and verify the source frame before trusting it.
+func (r *codexBackendRuntime) PrivateThreadListLink(waiter string) (string, string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.translator.PrivateThreadListLink(waiter)
+}

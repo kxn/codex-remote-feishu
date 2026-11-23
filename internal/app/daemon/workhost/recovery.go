@@ -125,7 +125,7 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 	case work.OperationPrepared:
 		if same {
 			carrier = workstore.CarrierRegistration{Incarnation: previous.CarrierIncarnation, OriginInstanceID: previous.InstanceID, Owner: record.Snapshot.Owner, Backend: previous.Backend, InstanceGeneration: previous.InstanceGeneration, ProcessGeneration: previous.ProcessGeneration, LocationGeneration: previous.LocationGeneration}
-			if err = h.config.Registry.RegisterCarrier(ctx, carrier); err != nil {
+			if err = h.registerLaunchCarrier(ctx, carrier); err != nil {
 				return existingPreparation{}, err
 			}
 			token, err := h.issueToken(record.Snapshot.Owner)
@@ -133,6 +133,11 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 				return existingPreparation{}, err
 			}
 			return existingPreparation{}, h.startPrepared(ctx, *previous, operation, record, settings, token)
+		}
+		if upgradeID, _ := ctx.Value(upgradeLaunchKey{}).(string); upgradeID != "" {
+			// A maintenance replacement is bound to one frozen next carrier;
+			// never silently replace it with a third generation on replay.
+			return existingPreparation{}, workstore.ErrConflict
 		}
 		// Supersede the provably unsent launch only in the transaction that
 		// replaces its reservation. A failed replacement leaves it prepared.
@@ -217,6 +222,9 @@ func rebuildID(worker work.WorkerSession) string {
 	return idFor("rebuild", worker.ID, fmt.Sprint(worker.Generation))
 }
 
+// RebuildOperationID identifies the exact durable stop/inspection operation.
+func RebuildOperationID(worker work.WorkerSession) string { return rebuildID(worker) }
+
 func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, carrier workstore.CarrierRegistration, reuseNativeSession bool) error {
 	id := rebuildID(*worker)
 	var operation work.Operation
@@ -285,6 +293,9 @@ func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, c
 		return err
 	}
 	if operation.State == work.OperationConfirmed {
+		if h.config.AfterCarrierStop != nil {
+			return h.config.AfterCarrierStop(ctx, *worker, carrier)
+		}
 		return nil
 	}
 	if operation.State != work.OperationPrepared {
@@ -361,6 +372,9 @@ func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, c
 	if err != nil {
 		return err
 	}
+	if stopErr == nil && h.config.AfterCarrierStop != nil {
+		return h.config.AfterCarrierStop(ctx, *worker, carrier)
+	}
 	return stopErr
 }
 
@@ -392,7 +406,7 @@ func (h *Host) resumeCarrierStop(ctx context.Context, worker work.WorkerSession,
 	if err = h.config.StopCarrier(ctx, worker); err != nil {
 		return err
 	}
-	return h.store.Within(ctx, func(tx *workstore.Tx) error {
+	err = h.store.Within(ctx, func(tx *workstore.Tx) error {
 		op, e := tx.GetOperation(operation.ID)
 		if e != nil {
 			return e
@@ -407,4 +421,11 @@ func (h *Host) resumeCarrierStop(ctx context.Context, worker work.WorkerSession,
 		_, _, e = tx.PutOperation(op, operation.Revision)
 		return e
 	})
+	if err != nil {
+		return err
+	}
+	if h.config.AfterCarrierStop != nil {
+		return h.config.AfterCarrierStop(ctx, worker, carrier)
+	}
+	return nil
 }

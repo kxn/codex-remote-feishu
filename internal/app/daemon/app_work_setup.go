@@ -22,6 +22,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workteamadmission"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workteamhome"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worktransport"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workupgrade"
@@ -53,6 +54,11 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err = store.Within(ctx, func(tx *workstore.Tx) error { return tx.CancelObsoletePrivateControlInputs() }); err != nil {
 		return err
 	}
+	// Startup owns the store before any ingress or sender starts. An interrupted
+	// send is uncertain; it must not be replayed by the busy-message lane.
+	if err = store.Within(ctx, func(tx *workstore.Tx) error { return tx.RecoverProjectAdmissionsAfterRestart() }); err != nil {
+		return err
+	}
 	signer, err := workauth.LoadOrCreate(filepath.Join(paths.StateDir, "team-work.key"), nil)
 	if err != nil {
 		return err
@@ -75,18 +81,26 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		QueueLocationPicker: a.queueBootstrapLocationPicker,
 		VerifyMembership:    a.verifyWorkMembership,
 	})
-	driver, err := worktransport.New(store, a.relay)
+	r := &teamRuntime{app: a, store: store, reconcileWake: make(chan struct{}, 1), pending: make(map[string]bool), signer: signer}
+	driver, err := worktransport.New(store, a.relay, r.beginPersonalSourceActivity)
 	if err != nil {
 		return err
 	}
 	service = service.WithNativeDispatcher(driver)
-	r := &teamRuntime{app: a, store: store, service: service, driver: driver, reconcileWake: make(chan struct{}, 1), pending: make(map[string]bool), signer: signer}
+	r.service, r.driver = service, driver
+	r.teamAdmission, err = workteamadmission.New(store, service, driver, paths.StateDir)
+	if err != nil {
+		return err
+	}
 	hostname, err := os.Hostname()
 	if err != nil {
 		return err
 	}
 	hostID := teamID("host", hostname+":"+paths.StateDir)
 	service.WithArtifactHost(hostID)
+	if err = service.WithMemberWorkspaceHost(paths.StateDir, hostID); err != nil {
+		return err
+	}
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return err
@@ -96,6 +110,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		StateDir:               paths.StateDir, HostID: hostID, Driver: driver,
 		SendReceipt: a.relay.SendEventReceipt, EnqueueReconcile: r.enqueueReconcile,
 		AuthorizeControl: authorizeControl, ApplyNativeRequest: workrequests.Apply,
+		PersonalSourceActivity: r.beginPersonalSourceActivity,
 	}
 	if a.finalBlockPreviewer != nil {
 		options.PreviewPrivateFinal = a.previewWorkPrivateFinal
@@ -104,7 +119,15 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err = r.coordinator.RecoverConnectionsOnStartup(ctx); err != nil {
 		return err
 	}
-	driver.BindRegistrar(r.coordinator)
+	var commandRegistrar worktransport.Registrar = r.coordinator
+	var carrierRegistry workhost.CarrierRegistry = r.coordinator
+	if a.applications != nil {
+		if err = a.configureApplicationNative(store, r.coordinator, hostID); err != nil {
+			return err
+		}
+		commandRegistrar, carrierRegistry = a.applications.teamOwners, a.applications.teamOwners
+	}
+	driver.BindRegistrar(commandRegistrar)
 	r.stops = workcontrol.NewStops(store, driver)
 	_, port, err := net.SplitHostPort(a.apiServer.Addr)
 	if err != nil {
@@ -120,16 +143,24 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		binary, _ := resolvedCodexRealBinarySetting(current)
 		return binary, nil
 	}
-	r.host, err = workhost.New(store, service, signer, workhost.Config{SettingsAdmission: settingsAdmission, MaxLiveCarriers: 8, MaxConcurrentLaunches: 4, ControlReservedCarriers: 1, Paths: paths, BinaryPath: a.headlessRuntime.BinaryPath, ConfigPath: a.headlessRuntime.ConfigPath, HostID: hostID, ToolEndpoint: "http://" + net.JoinHostPort("127.0.0.1", port), Start: a.startHeadless, Settings: settings, Registry: r.coordinator, Runtime: driver, StopCarrier: a.stopWorkCarrier, ResolveConfiguredCodexBinary: resolveCodexBinary})
+	r.host, err = workhost.New(store, service, signer, workhost.Config{SettingsAdmission: settingsAdmission, MaxLiveCarriers: 8, MaxConcurrentLaunches: 4, ControlReservedCarriers: 1, Paths: paths, BinaryPath: a.headlessRuntime.BinaryPath, ConfigPath: a.headlessRuntime.ConfigPath, HostID: hostID, ToolEndpoint: "http://" + net.JoinHostPort("127.0.0.1", port), Start: a.startHeadless, Settings: settings, Registry: carrierRegistry, Runtime: driver, StopCarrier: a.stopWorkCarrier, ResolveConfiguredCodexBinary: resolveCodexBinary})
 	if err != nil {
 		return err
+	}
+	if a.applications != nil {
+		r.host.EnableSharedRelayCredential()
+		r.host.SetAfterCarrierStop(a.applications.teamOwners.RetireStoppedCarrier)
 	}
 	codexBinary, _ := resolvedCodexRealBinarySetting(loaded)
 	r.codexUpgradeHostID = hostID
-	r.codexUpgrader, err = workupgrade.New(store, workupgrade.Config{HostID: hostID, StateDir: paths.StateDir, ConfiguredBinary: codexBinary, Drain: a.shutdownWorkCarrier, Restart: r.host.PrepareAfterUpgrade, ResolveConfiguredBinary: resolveCodexBinary})
+	upgradeCoordinator, err := workupgrade.New(store, workupgrade.Config{HostID: hostID, StateDir: paths.StateDir, ConfiguredBinary: codexBinary, Drain: a.shutdownWorkCarrier, Restart: r.host.PrepareAfterUpgrade, ResolveConfiguredBinary: resolveCodexBinary})
 	if err != nil {
 		return err
 	}
+	if a.applications != nil {
+		upgradeCoordinator.SetMaintenance(&sharedCodexMaintenance{app: a, registry: a.applications.registry, private: a.applications.native, store: store, team: upgradeCoordinator, teamOwners: a.applications.teamOwners})
+	}
+	r.codexUpgrader = upgradeCoordinator
 	r.engine, err = workengine.New(store, workengine.Config{SettingsAdmission: settingsAdmission, MaxConcurrent: 8, ControlReservedSlots: 1, MaxInputsPerAttempt: 16, Provisioner: r.host}, r.host, driver)
 	if err != nil {
 		return err
@@ -142,6 +173,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err != nil {
 		return err
 	}
+	r.publisher.SetActivityGuard(r.beginPersonalSourceActivity)
 	r.provision, err = workprovision.New(store, workprovision.Options{Resolver: workprovision.GatewayResolver(directory.gateway), Execution: teamExecutionPreparation{store: store, settings: settings}})
 	if err != nil {
 		return err

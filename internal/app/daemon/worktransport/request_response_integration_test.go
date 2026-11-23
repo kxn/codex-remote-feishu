@@ -38,7 +38,7 @@ func responseIntegrationFixture(t *testing.T, question bool, controlOption ...bo
 	}
 	t.Cleanup(func() { store.Close() })
 	f := &nativeResponseFixture{transportFixture: &transportFixture{t: t, store: store, relay: &fakeRelay{}}, translator: codex.NewTranslator("instance")}
-	f.driver, err = New(store, f.relay)
+	f.driver, err = New(store, f.relay, fixtureSourceActivity(store))
 	if err != nil {
 		t.Fatal(err)
 	}

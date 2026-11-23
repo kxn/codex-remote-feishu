@@ -163,6 +163,11 @@ func Queue(tx *workstore.Tx, view workstore.UIView, card json.RawMessage) (works
 	} else if !errors.Is(e, workstore.ErrNotFound) {
 		return view, e
 	}
+	// Frozen personal sources cannot acquire new views or pending publications.
+	// Existing exact views above remain readable for reconciliation.
+	if err = tx.AssertPersonalMigrationOpen(view.ScopeID); err != nil {
+		return view, err
+	}
 	if err = tx.PutContent(content); err != nil {
 		return view, err
 	}

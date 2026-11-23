@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/profilecontextstate"
+	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -175,7 +176,9 @@ func (a *App) handleOpenCodeProfileReferences(w http.ResponseWriter, r *http.Req
 		err = fmt.Errorf("profile_not_found")
 	}
 	if err == nil {
+		a.profileReferenceGate.RLock()
 		references = a.openCodeProfileReferencesLocked(profileID)
+		a.profileReferenceGate.RUnlock()
 	}
 	a.adminConfigMu.Unlock()
 	if err != nil {
@@ -189,6 +192,8 @@ func (a *App) handleOpenCodeProfileReferences(w http.ResponseWriter, r *http.Req
 }
 
 func (a *App) createOpenCodeProfileLocked(input config.OpenCodeAPIProfileInput) (adminOpenCodeProfileView, error) {
+	a.profileReferenceGate.Lock()
+	defer a.profileReferenceGate.Unlock()
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return adminOpenCodeProfileView{}, fmt.Errorf("config_unavailable: %w", err)
@@ -207,6 +212,8 @@ func (a *App) createOpenCodeProfileLocked(input config.OpenCodeAPIProfileInput) 
 }
 
 func (a *App) updateOpenCodeProfileLocked(profileID, expectedETag string, req opencodeProfileWriteRequest) (adminOpenCodeProfileView, string, error) {
+	a.profileReferenceGate.Lock()
+	defer a.profileReferenceGate.Unlock()
 	profileID = config.NormalizeOpenCodeProfileID(profileID)
 	if profileID == config.OpenCodeDefaultProfileID {
 		return adminOpenCodeProfileView{}, "", fmt.Errorf("opencode_profile_read_only")
@@ -251,6 +258,8 @@ func (a *App) updateOpenCodeProfileLocked(profileID, expectedETag string, req op
 }
 
 func (a *App) deleteOpenCodeProfileLocked(profileID, expectedETag string) (adminOpenCodeProfileView, string, error) {
+	a.profileReferenceGate.Lock()
+	defer a.profileReferenceGate.Unlock()
 	profileID = config.NormalizeOpenCodeProfileID(profileID)
 	if profileID == config.OpenCodeDefaultProfileID {
 		return adminOpenCodeProfileView{}, "", fmt.Errorf("opencode_profile_read_only")
@@ -418,9 +427,31 @@ func findOpenCodeProfileView(profiles []adminOpenCodeProfileView, profileID stri
 
 func (a *App) openCodeProfileReferencesLocked(profileID string) []opencodeProfileReference {
 	profileID = config.NormalizeOpenCodeProfileID(profileID)
+	privateOwned := a.privateServiceOwned.Load()
+	var status privatechat.RuntimeStatus
+	var durable []privatechat.OpenCodeReference
+	if privateOwned {
+		var err error
+		status, durable, err = a.privateOpenCodeReferenceSnapshot()
+		if err != nil {
+			return []opencodeProfileReference{{Kind: "private_state_unavailable", Reason: "private references could not be verified"}}
+		}
+	}
+	team, err := a.teamOpenCodeProfileReferences(profileID)
+	if err != nil {
+		return []opencodeProfileReference{{Kind: "team_state_unavailable", Reason: "team references could not be verified"}}
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	references := make([]opencodeProfileReference, 0)
+	for _, ref := range durable {
+		if config.NormalizeOpenCodeProfileID(ref.ProfileID) == profileID {
+			references = append(references, opencodeProfileReference{Kind: ref.Kind, Name: ref.Name, Reason: "retained in private state"})
+		}
+	}
+	for _, ref := range team {
+		references = append(references, opencodeProfileReference{Kind: "team_worker", Name: ref.WorkerID, Reason: "active team worker launch"})
+	}
 	if a.botCapabilitySettingsState.store != nil {
 		for _, record := range a.botCapabilitySettingsState.store.Entries() {
 			if agentproto.NormalizeBackend(record.Backend) == agentproto.BackendOpenCode && config.NormalizeOpenCodeProfileID(record.OpenCodeProfileID) == profileID {
@@ -428,7 +459,12 @@ func (a *App) openCodeProfileReferencesLocked(profileID string) []opencodeProfil
 			}
 		}
 	}
-	for _, surface := range a.service.Surfaces() {
+	surfaces, instances := status.Surfaces, status.Instances
+	if !privateOwned {
+		surfaces = a.service.Surfaces()
+		instances = a.service.Instances()
+	}
+	for _, surface := range surfaces {
 		if surface == nil {
 			continue
 		}
@@ -452,7 +488,7 @@ func (a *App) openCodeProfileReferencesLocked(profileID string) []opencodeProfil
 			references = append(references, opencodeProfileReference{Kind: kind, Name: xutil.FirstNonEmpty(item.ID, surface.SurfaceSessionID), Reason: "queued prompt admission"})
 		}
 	}
-	for _, inst := range a.service.Instances() {
+	for _, inst := range instances {
 		if inst == nil {
 			continue
 		}

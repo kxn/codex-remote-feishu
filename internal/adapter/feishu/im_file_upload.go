@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -10,6 +11,35 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
+
+func (g *LiveGateway) uploadFileBytes(ctx context.Context, name string, content []byte) (string, string, error) {
+	name = strings.TrimSpace(filepath.Base(name))
+	if name == "" || name == "." {
+		return "", "", fmt.Errorf("invalid file name")
+	}
+	fileType, err := imFileTypeForSemantic(name, imUploadedFileSemanticAttachment)
+	if err != nil {
+		return "", "", err
+	}
+	resp, err := DoSDK(ctx, g.broker, CallSpec{GatewayID: g.config.GatewayID, API: "im.v1.file.create", Class: CallClassIMSend, Priority: CallPriorityInteractive, Retry: RetryRateLimitOnly, Permission: PermissionCooldownOnly}, func(callCtx context.Context, client *lark.Client) (*larkim.CreateFileResp, error) {
+		body := larkim.NewCreateFileReqBodyBuilder().FileType(fileType).FileName(name).File(bytes.NewReader(content)).Build()
+		response, e := client.Im.V1.File.Create(callCtx, larkim.NewCreateFileReqBuilder().Body(body).Build())
+		if e != nil {
+			return response, e
+		}
+		if !response.Success() {
+			return response, newAPIError("im.v1.file.create", response.ApiResp, response.CodeError)
+		}
+		return response, nil
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if resp.Data == nil || strings.TrimSpace(xutil.StringValue(resp.Data.FileKey)) == "" {
+		return "", "", fmt.Errorf("upload file failed: missing file key")
+	}
+	return strings.TrimSpace(xutil.StringValue(resp.Data.FileKey)), name, nil
+}
 
 type imUploadedFileSemantic string
 

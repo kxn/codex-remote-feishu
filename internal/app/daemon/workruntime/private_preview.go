@@ -2,6 +2,7 @@ package workruntime
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 
@@ -48,9 +49,31 @@ func (c *Coordinator) RunPrivatePreviews(ctx context.Context, limit int) error {
 func (c *Coordinator) WaitPrivatePreviews() { c.previewWorkers.Wait() }
 
 func (c *Coordinator) preparePrivateFinalPreview(ctx context.Context, displayID string) error {
+	var scope string
+	if err := c.store.Within(ctx, func(tx *workstore.Tx) error {
+		v, err := tx.GetPrivateExecutionDisplay(displayID)
+		if err != nil {
+			return err
+		}
+		scope = v.Binding.ScopeID
+		return nil
+	}); err != nil {
+		return err
+	}
+	if c.options.PersonalSourceActivity != nil {
+		end, err := c.options.PersonalSourceActivity(ctx, scope)
+		if errors.Is(err, workstore.ErrPersonalMigrationFenced) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		defer end()
+	}
 	var req *previewpkg.FinalBlockPreviewRequest
 	var sourceText string
 	var bot work.RoleBotBinding
+	deferredForMigration := false
 	err := c.store.Within(ctx, func(tx *workstore.Tx) error {
 		v, err := tx.GetPrivateExecutionDisplay(displayID)
 		if err != nil {
@@ -58,6 +81,12 @@ func (c *Coordinator) preparePrivateFinalPreview(ctx context.Context, displayID 
 		}
 		if v.PreviewTerminal == nil || (v.PreviewState != "queued" && v.PreviewState != "started") {
 			return nil
+		}
+		if e := tx.AssertPersonalMigrationOpen(v.Binding.ScopeID); errors.Is(e, workstore.ErrPersonalMigrationFenced) {
+			deferredForMigration = true
+			return nil
+		} else if e != nil {
+			return e
 		}
 		old := v.Revision
 		if v.PreviewState == "started" {
@@ -110,6 +139,9 @@ func (c *Coordinator) preparePrivateFinalPreview(ctx context.Context, displayID 
 	})
 	if err != nil {
 		return err
+	}
+	if deferredForMigration {
+		return nil
 	}
 	if req != nil {
 		result, previewErr := c.options.PreviewPrivateFinal(ctx, bot, *req)

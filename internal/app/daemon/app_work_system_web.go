@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -69,9 +70,28 @@ func (a *App) runTeamSystemHostJobs(ctx context.Context) error {
 }
 
 func (a *App) executeSystemWebJob(ctx context.Context, id string) error {
+	var scopeID string
+	if err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+		op, err := tx.GetOperation(id)
+		if err != nil {
+			return err
+		}
+		scopeID = op.ScopeID
+		return nil
+	}); err != nil {
+		return err
+	}
+	end, err := a.teamRuntime.beginPersonalSourceActivity(ctx, scopeID)
+	if errors.Is(err, workstore.ErrPersonalMigrationFenced) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer end()
 	var request systemWebRequest
 	send := false
-	err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		op, err := tx.GetOperation(id)
 		if err != nil {
 			return err
@@ -165,6 +185,19 @@ func (a *App) presentSystemWebJob(ctx context.Context, id string) error {
 		op, err := tx.GetOperation(id)
 		if err != nil {
 			return err
+		}
+		if fenceErr := tx.AssertPersonalMigrationOpen(op.ScopeID); errors.Is(fenceErr, workstore.ErrPersonalMigrationFenced) {
+			if op.State == work.OperationSending {
+				before := op.Revision
+				op.Revision++
+				op.State = work.OperationUnknown
+				op.LastError = "先前生成链接的过程已中断，可能已创建通道或链接"
+				_, _, err = tx.PutOperation(op, before)
+				return err
+			}
+			return nil
+		} else if fenceErr != nil {
+			return fenceErr
 		}
 		for _, step := range op.Steps {
 			if step.ID == "ui_result" {

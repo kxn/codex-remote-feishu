@@ -28,9 +28,30 @@ type Resolver interface {
 	Resolve(context.Context, work.RoleBotBinding) (Sender, error)
 }
 type Publisher struct {
-	store    *workstore.Store
-	resolver Resolver
-	now      func() time.Time
+	store            *workstore.Store
+	resolver         Resolver
+	now              func() time.Time
+	confirmedView    func(context.Context, string) error
+	confirmedMessage func(context.Context, string) error
+	activityGuard    func(context.Context, string) (func(), error)
+}
+
+// SetActivityGuard fences source-owner sends across their complete network and
+// receipt transaction. It must be installed before the publication lane starts.
+func (p *Publisher) SetActivityGuard(guard func(context.Context, string) (func(), error)) {
+	p.activityGuard = guard
+}
+
+// SetConfirmedViewHook installs the neutral ownership projection before the
+// publisher starts. The team receipt is committed before this hook runs.
+func (p *Publisher) SetConfirmedViewHook(hook func(context.Context, string) error) {
+	p.confirmedView = hook
+}
+
+// SetConfirmedMessageHook projects confirmed non-card messages for reply,
+// reaction and recall routing without trusting callback-supplied ownership.
+func (p *Publisher) SetConfirmedMessageHook(hook func(context.Context, string) error) {
+	p.confirmedMessage = hook
 }
 
 func New(store *workstore.Store, resolver Resolver, now func() time.Time) (*Publisher, error) {
@@ -93,6 +114,24 @@ func (p *Publisher) RetryUnknown(ctx context.Context, outboxID string) error {
 }
 
 func (p *Publisher) send(ctx context.Context, id string, recovery bool) error {
+	if p.activityGuard != nil {
+		var scope string
+		if err := p.store.Within(ctx, func(tx *workstore.Tx) error {
+			item, e := tx.GetOutbox(id)
+			if e != nil {
+				return e
+			}
+			scope = item.ScopeID
+			return nil
+		}); err != nil {
+			return err
+		}
+		done, err := p.activityGuard(ctx, scope)
+		if err != nil {
+			return err
+		}
+		defer done()
+	}
 	job, err := p.claim(ctx, id, recovery)
 	if err != nil {
 		return err
@@ -138,7 +177,7 @@ func (p *Publisher) send(ctx context.Context, id string, recovery bool) error {
 }
 
 func (p *Publisher) finish(ctx context.Context, job publication, receipt feishu.ProjectPublishReceipt, sendErr error, notSent bool) error {
-	return p.store.Within(ctx, func(tx *workstore.Tx) error {
+	err := p.store.Within(ctx, func(tx *workstore.Tx) error {
 		op, err := tx.GetOperation(job.Operation.ID)
 		if err != nil {
 			return err
@@ -244,4 +283,14 @@ func (p *Publisher) finish(ctx context.Context, job publication, receipt feishu.
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if sendErr == nil && job.Projection.UIViewID != "" && p.confirmedView != nil {
+		return p.confirmedView(context.WithoutCancel(ctx), job.Projection.UIViewID)
+	}
+	if sendErr == nil && job.Projection.UIViewID == "" && p.confirmedMessage != nil {
+		return p.confirmedMessage(context.WithoutCancel(ctx), job.Outbox.ID)
+	}
+	return nil
 }

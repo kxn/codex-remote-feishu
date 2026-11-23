@@ -97,6 +97,8 @@ func persistedStateWriteError[T persistedStore](label string, runtime persistedS
 }
 
 func (a *App) commitFeishuBotIdentityTransition(transition feishuBotIdentityTransition) error {
+	a.profileReferenceGate.RLock()
+	defer a.profileReferenceGate.RUnlock()
 	if transition.Kind == feishuBotIdentityUnchanged {
 		return nil
 	}

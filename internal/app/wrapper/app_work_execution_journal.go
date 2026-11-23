@@ -16,6 +16,10 @@ type workFrameReference struct {
 }
 
 func (a *App) prepareJournalCommand(command agentproto.Command) (bool, error) {
+	if a.privateNative != nil {
+		_, duplicate, err := a.privateNative.journal.PreparePrivateCommand(command)
+		return duplicate, err
+	}
 	if a.work == nil || a.work.journal == nil {
 		return false, nil
 	}
@@ -27,6 +31,9 @@ func (a *App) prepareJournalCommand(command agentproto.Command) (bool, error) {
 }
 
 func (a *App) runtimeCommandReceipt(commandID string) (*agentproto.RuntimeCommandReceipt, error) {
+	if a.privateNative != nil {
+		return a.privateNative.journal.CommandReceipt(commandID)
+	}
 	if a.work == nil || a.work.journal == nil {
 		return nil, nil
 	}
@@ -34,6 +41,9 @@ func (a *App) runtimeCommandReceipt(commandID string) (*agentproto.RuntimeComman
 }
 
 func (a *App) journalProtocolVersion() int {
+	if a.privateNative != nil {
+		return agentproto.JournalProtocolVersion
+	}
 	if a.work != nil && a.work.journal != nil {
 		return agentproto.JournalProtocolVersion
 	}
@@ -41,6 +51,9 @@ func (a *App) journalProtocolVersion() int {
 }
 
 func (a *App) carrierIncarnation() string {
+	if a.privateNative != nil {
+		return a.privateNative.snapshot.Owner.CarrierIncarnation
+	}
 	if a.journalProtocolVersion() != 0 {
 		return a.work.snapshot.CarrierIncarnation
 	}

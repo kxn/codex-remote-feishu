@@ -24,6 +24,10 @@ func (c *Coordinator) commitNativeOutcome(tx *workstore.Tx, attempt work.Executi
 	if err != nil {
 		return err
 	}
+	superseded, err := tx.TaskAttemptSuperseded(attempt)
+	if err != nil {
+		return err
+	}
 	state := work.AttemptCompleted
 	if len(turns) == 0 {
 		state = work.AttemptFailed
@@ -55,14 +59,19 @@ func (c *Coordinator) commitNativeOutcome(tx *workstore.Tx, attempt work.Executi
 		return err
 	}
 	report, err := tx.GetProcessingReport(attempt.ID)
-	if errors.Is(err, workstore.ErrNotFound) && stopped {
+	if errors.Is(err, workstore.ErrNotFound) && (stopped || superseded) {
 		state = work.AttemptInterrupted
 		wc, e := tx.GetContext(attempt.ContextID)
 		if e != nil {
 			return e
 		}
 		ref := "private-stop-outcome:" + attempt.ID
-		if e = tx.PutContent(work.NewContent(ref, attempt.ScopeID, "text/plain", []byte("私人执行已收到停止请求。尚未处理的原输入已取消。"), c.options.Clock())); e != nil {
+		text := "私人执行已收到停止请求。尚未处理的原输入已取消。"
+		if superseded {
+			ref = "task-revised-outcome:" + attempt.ID
+			text = "任务要求或负责人已经变更，旧执行已完成停止核验。保留已有成果和未处理输入，按当前任务版本接续；不据此确认任务成功。"
+		}
+		if e = tx.PutContent(work.NewContent(ref, attempt.ScopeID, "text/plain", []byte(text), c.options.Clock())); e != nil {
 			return e
 		}
 		report = workstore.ProcessingReport{AttemptID: attempt.ID, RunRef: attempt.RunRef, OutcomeRef: ref, Checkpoint: wc.Checkpoint}

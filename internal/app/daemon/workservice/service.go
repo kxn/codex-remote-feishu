@@ -16,6 +16,8 @@ import (
 
 type Service struct {
 	artifactHost         string
+	memberWorkspaceRoot  string
+	memberWorkspaceHost  string
 	resourceCalls        *resourceCallActivity
 	nativeDispatcher     NativeCommandDispatcher
 	store                *workstore.Store
@@ -74,6 +76,11 @@ func (s *Service) withWorkerMode(ctx context.Context, token, runRef string, rece
 		worker, err := tx.GetWorker(claims.WorkerID)
 		if err != nil {
 			return workauth.ErrUnauthorized
+		}
+		if !receiptOnly {
+			if err = tx.AssertPersonalMigrationOpen(worker.ScopeID); err != nil {
+				return err
+			}
 		}
 		attempt, err := tx.GetAttemptByRunRef(runRef)
 		if err != nil || attempt.RunRef.WorkerID != worker.ID {

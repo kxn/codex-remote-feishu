@@ -15,14 +15,19 @@ import (
 )
 
 type ServerCallbacks struct {
-	OnHello      func(context.Context, ConnectionMeta, agentproto.Hello)
-	OnEvents     func(context.Context, ConnectionMeta, string, []agentproto.Event)
-	OnCommandAck func(context.Context, ConnectionMeta, string, agentproto.CommandAck)
-	OnDisconnect func(context.Context, ConnectionMeta, string)
+	// AuthorizeHello runs before a connection can claim or replace an instance.
+	// It must reject protected instance IDs unless their private credential matches.
+	AuthorizeHello func(agentproto.Hello, string) error
+	OnHello        func(context.Context, ConnectionMeta, agentproto.Hello)
+	OnEvents       func(context.Context, ConnectionMeta, string, []agentproto.Event)
+	OnCommandAck   func(context.Context, ConnectionMeta, string, agentproto.CommandAck)
+	OnDisconnect   func(context.Context, ConnectionMeta, string)
 }
 
 type ConnectionMeta struct {
-	ConnectionID uint64
+	ConnectionID         uint64
+	PrivateAuthenticated bool
+	CarrierAuthenticated bool
 }
 
 type Server struct {
@@ -39,9 +44,10 @@ type Server struct {
 }
 
 type serverConn struct {
-	id   uint64
-	conn *websocket.Conn
-	mu   sync.Mutex
+	authenticated bool
+	id            uint64
+	conn          *websocket.Conn
+	mu            sync.Mutex
 }
 
 func NewServer(callbacks ServerCallbacks) *Server {
@@ -69,7 +75,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	go s.serveConn(ctx, cancel, conn)
+	credential := r.Header.Get(PrivateCredentialHeader)
+	go s.serveConn(ctx, cancel, conn, credential)
 }
 
 func (s *Server) Close() error {
@@ -89,6 +96,9 @@ func (s *Server) SendCommand(instanceID string, command agentproto.Command) erro
 	s.mu.RUnlock()
 	if current == nil {
 		return errors.New("instance offline")
+	}
+	if current.authenticated {
+		return errors.New("authenticated carrier requires connection identity")
 	}
 	payload, err := agentproto.MarshalEnvelope(agentproto.Envelope{
 		Type:    agentproto.EnvelopeCommand,
@@ -115,7 +125,7 @@ func (s *Server) CloseConnection(instanceID string, connectionID uint64) bool {
 	return true
 }
 
-func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn) {
+func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, credential string) {
 	defer conn.Close()
 	defer cancel()
 	meta := ConnectionMeta{ConnectionID: atomic.AddUint64(&s.nextConn, 1)}
@@ -181,12 +191,25 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 				})
 				return
 			}
+			if instanceID != "" {
+				return
+			}
 			hello := *envelope.Hello
+			if s.callbacks.AuthorizeHello != nil {
+				if s.callbacks.AuthorizeHello(hello, credential) != nil {
+					return
+				}
+			} else if hello.PrivateNativeProtocolVersion != 0 || credential != "" {
+				return
+			}
+			meta.PrivateAuthenticated = hello.PrivateNativeProtocolVersion != 0 && s.callbacks.AuthorizeHello != nil
+			meta.CarrierAuthenticated = s.callbacks.AuthorizeHello != nil && credential != "" && (hello.PrivateNativeProtocolVersion != 0 || hello.WorkerProtocolVersion != 0)
+			credential = "" // never retain the secret beyond authentication
 			probeOnly := hello.Probe
 			var current *serverConn
 			if !probeOnly {
 				instanceID = hello.Instance.InstanceID
-				current = &serverConn{id: meta.ConnectionID, conn: conn}
+				current = &serverConn{id: meta.ConnectionID, conn: conn, authenticated: meta.CarrierAuthenticated}
 				s.mu.Lock()
 				if previous := s.conns[instanceID]; previous != nil && previous.conn != conn {
 					_ = previous.conn.Close()
@@ -219,14 +242,14 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 				s.callbacks.OnHello(ctx, meta, hello)
 			}
 		case agentproto.EnvelopeEventBatch:
-			if envelope.EventBatch == nil {
+			if envelope.EventBatch == nil || instanceID == "" || envelope.EventBatch.InstanceID != instanceID {
 				continue
 			}
 			if s.callbacks.OnEvents != nil {
 				s.callbacks.OnEvents(ctx, meta, envelope.EventBatch.InstanceID, envelope.EventBatch.Events)
 			}
 		case agentproto.EnvelopeCommandAck:
-			if envelope.CommandAck == nil {
+			if envelope.CommandAck == nil || instanceID == "" || (envelope.CommandAck.InstanceID != "" && envelope.CommandAck.InstanceID != instanceID) {
 				continue
 			}
 			if instanceID == "" {

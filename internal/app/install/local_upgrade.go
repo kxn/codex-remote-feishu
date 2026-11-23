@@ -14,9 +14,11 @@ import (
 )
 
 type LocalBinaryUpgradeOptions struct {
-	StatePath    string
-	SourceBinary string
-	Slot         string
+	StatePath                                                         string
+	SourceBinary                                                      string
+	Slot                                                              string
+	GatewayID, SurfaceSessionID, ChatID, ActorUserID, SourceMessageID string
+	PrivateRequestID, SourceSHA256                                    string
 }
 
 func LocalUpgradeArtifactPath(stateValue InstallState) string {
@@ -92,6 +94,13 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		TargetSlot:       resolvedSlot,
 		TargetBinaryPath: filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), resolvedSlot, xutil.ExecutableName(runtime.GOOS)),
 		RequestedAt:      &now,
+		GatewayID:        opts.GatewayID,
+		SurfaceSessionID: opts.SurfaceSessionID,
+		ChatID:           opts.ChatID,
+		ActorUserID:      opts.ActorUserID,
+		SourceMessageID:  opts.SourceMessageID,
+		PrivateRequestID: opts.PrivateRequestID,
+		SourceSHA256:     opts.SourceSHA256,
 	}
 	if err := WriteState(statePath, stateValue); err != nil {
 		return "", err

@@ -66,6 +66,12 @@ func ResolveFeishuCommandDisplayGroup(groupID string, interactive bool, ctx Cata
 
 func resolveFeishuCommandDisplayFamily(family FeishuCommandDisplayFamily, interactive bool, ctx CatalogContext) (FeishuCommandDisplayResolution, bool) {
 	ctx = NormalizeCatalogContext(ctx)
+	if ctx.PrivateApplication {
+		switch family.FamilyID {
+		case FeishuCommandCron, FeishuCommandVSCodeMigrate, FeishuCommandFollow:
+			return FeishuCommandDisplayResolution{}, false
+		}
+	}
 	for _, variant := range family.Variants {
 		current, ok := resolveFeishuCommandDisplayVariant(variant, interactive, ctx)
 		if ok {

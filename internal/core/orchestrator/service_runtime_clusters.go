@@ -806,3 +806,67 @@ func (r *serviceProgressRuntime) purgeSurface(surfaceID string, instanceIDs map[
 		}
 	}
 }
+
+func (r *serviceTurnRuntime) forEachPrivateCompact(surface string, fn func(*compactTurnBinding)) {
+	for _, b := range r.compactTurns {
+		if b != nil && b.SurfaceSessionID == surface {
+			fn(b)
+		}
+	}
+}
+func (r *serviceTurnRuntime) forEachPrivatePendingReview(surface string, fn func(string)) {
+	for command, id := range r.pendingReview {
+		if id == surface {
+			fn(command)
+		}
+	}
+}
+
+func (r *serviceProgressRuntime) forEachPrivateText(instance string, fn func(string, *completedTextItem)) {
+	for _, item := range r.pendingTurnText {
+		if item != nil && item.InstanceID == instance {
+			fn("pending_turn_text", item)
+		}
+	}
+	for _, item := range r.pendingPlanProposal {
+		if item != nil && item.InstanceID == instance {
+			fn("pending_plan_text", item)
+		}
+	}
+}
+
+func (r *serviceProgressRuntime) forEachPrivateAggregate(instance string, fn func(string, string, string, any)) {
+	for key, value := range r.turnFileChanges {
+		parts := strings.Split(key, "\x00")
+		if len(parts) == 3 && parts[0] == instance && value != nil {
+			fn("turn_file_changes", parts[1], parts[2], value)
+		}
+	}
+	for key, value := range r.turnDiffSnapshots {
+		parts := strings.Split(key, "\x00")
+		if len(parts) == 3 && parts[0] == instance && value != nil {
+			fn("turn_diff", parts[1], parts[2], value)
+		}
+	}
+}
+func (r *serviceProgressRuntime) restorePrivateFileChanges(instance, thread, turn string, value *turnFileChangeSummary) {
+	r.turnFileChanges[turnRenderKey(instance, thread, turn)] = value
+}
+func (r *serviceProgressRuntime) restorePrivateTurnDiff(instance, thread, turn string, value *control.TurnDiffSnapshot) {
+	r.turnDiffSnapshots[turnRenderKey(instance, thread, turn)] = value
+}
+
+func (s *Service) privatePickerWatermarks() PrivatePickerWatermarks {
+	r := s.pickers
+	return PrivatePickerWatermarks{r.nextPathPickerID, r.nextTargetPickerID, r.nextThreadHistoryID, r.nextReviewPickerID, r.nextCompactFlowID, r.nextPlanProposalID, r.nextLauncherFlowID}
+}
+func (s *Service) seedPrivatePickerWatermarks(w PrivatePickerWatermarks) {
+	r := s.pickers
+	r.nextPathPickerID = max(r.nextPathPickerID, w.Path)
+	r.nextTargetPickerID = max(r.nextTargetPickerID, w.Target)
+	r.nextThreadHistoryID = max(r.nextThreadHistoryID, w.History)
+	r.nextReviewPickerID = max(r.nextReviewPickerID, w.Review)
+	r.nextCompactFlowID = max(r.nextCompactFlowID, w.Compact)
+	r.nextPlanProposalID = max(r.nextPlanProposalID, w.Plan)
+	r.nextLauncherFlowID = max(r.nextLauncherFlowID, w.Launcher)
+}

@@ -39,6 +39,61 @@ func (t *Tx) ValidateAttemptInputAdmissionCommand(command agentproto.Command) er
 	if !reflect.DeepEqual(canonical, command) {
 		return ErrIdempotencyConflict
 	}
+	for _, step := range op.Steps {
+		if step.ID != "project_message_source" {
+			continue
+		}
+		var proof struct {
+			Source    work.SourceRef     `json:"source"`
+			Selection ProjectInputSource `json:"selection"`
+		}
+		if err := json.Unmarshal([]byte(step.Receipt), &proof); err != nil {
+			return err
+		}
+		input, err := t.GetInbox(proof.Selection.InputID)
+		if err != nil {
+			return err
+		}
+		if input.Revision != proof.Selection.InputRevision+1 || input.MessageID != proof.Source.ID {
+			return ErrConflict
+		}
+		msg, err := t.GetMessage(input.MessageID)
+		if err != nil {
+			return err
+		}
+		if msg.Revision != proof.Selection.MessageRevision || msg.RecalledEvidenceRef != "" || msg.BodyRef != proof.Source.EvidenceRef {
+			return ErrConflict
+		}
+		scope, err := t.GetScope(input.ScopeID)
+		if err != nil {
+			return err
+		}
+		if scope.Kind != work.ScopeProject {
+			return ErrScopeDenied
+		}
+		if _, err = t.authorizeProjectMessageSource(scope, input, msg, time.Now().UTC()); err != nil {
+			return err
+		}
+		if err = t.requireProjectReady(scope.ProjectID, input.RecipientRoleID); err != nil {
+			return err
+		}
+		if err = t.requireRoleInScope(scope.ID, input.RecipientRoleID); err != nil {
+			return err
+		}
+		if input.TaskID != "" {
+			task, e := t.GetTask(input.TaskID)
+			if e != nil {
+				return e
+			}
+			attempt, e := t.GetAttempt(v.AttemptID)
+			if e != nil {
+				return e
+			}
+			if task.Revision != proof.Selection.TaskRevision || task.OwnerRoleID != input.RecipientRoleID || task.RequirementsRevision != attempt.FrozenRequirementsRevision || task.AssignmentGeneration != attempt.FrozenAssignmentGeneration || task.State == work.TaskDone || task.State == work.TaskCancelled {
+				return ErrConflict
+			}
+		}
+	}
 	for _, id := range v.InputIDs {
 		input, e := t.GetInbox(id)
 		if e != nil {
@@ -191,7 +246,7 @@ func (t *Tx) MarkAttemptInputAdmissionUnknown(commandID, reason string) error {
 		if err != nil {
 			return err
 		}
-		if v.State == work.InputAdmissionConfirmed || v.State == work.InputAdmissionRejected || v.State == work.InputAdmissionQuiescedUnknown {
+		if v.State == work.InputAdmissionConfirmed || v.State == work.InputAdmissionRejected || v.State == work.InputAdmissionNotSent || v.State == work.InputAdmissionQuiescedUnknown {
 			return nil
 		}
 		v.State = work.InputAdmissionUnknown

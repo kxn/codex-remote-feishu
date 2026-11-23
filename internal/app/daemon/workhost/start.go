@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
@@ -60,12 +61,20 @@ func (h *Host) startPrepared(ctx context.Context, worker work.WorkerSession, op 
 	}
 	env := launchEnvironment(settings.Environment, map[string]string{
 		config.WorkLaunchSnapshotEnv: path, config.WorkSessionTokenEnv: token,
+		agentproto.TeamRelayCredentialEnv:    "",
 		config.WorkTeamBinaryEnv:             h.config.BinaryPath,
 		config.CodexRemoteInstanceBackendEnv: string(worker.Backend),
 		"CODEX_REMOTE_INSTANCE_ID":           worker.InstanceID, "CODEX_REMOTE_INSTANCE_SOURCE": "headless",
 		"CODEX_REMOTE_INSTANCE_MANAGED": "1", "CODEX_REMOTE_LIFETIME": "daemon-owned",
 		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME": worker.RoleID,
 	})
+	if record.SharedRelayCredential {
+		credential, e := h.signer.RelayCredential(record.Snapshot.CarrierIncarnation, worker.InstanceID, string(worker.Backend))
+		if e != nil {
+			return e
+		}
+		env = config.UpsertEnvValue(env, agentproto.TeamRelayCredentialEnv, credential)
+	}
 	mode := relayruntime.HeadlessLaunchModeAppServer
 	if worker.Backend == work.BackendClaude {
 		mode = relayruntime.HeadlessLaunchModeClaudeAppServer

@@ -35,6 +35,7 @@ func (s *Service) buildConfigCommandViewState(
 	view := control.FeishuCatalogView{
 		Config: s.applyCommandConfigCardState(&base, cardState),
 	}
+	view.Config.PrivateApplication = s.config.PrivateApplication
 
 	ctx := s.buildCatalogContext(surface)
 	if view.Config.CatalogBackend == "" {

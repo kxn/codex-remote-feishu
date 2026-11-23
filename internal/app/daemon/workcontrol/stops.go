@@ -36,6 +36,30 @@ type stopDispatch struct {
 }
 
 func (s *Stops) RunOnce(ctx context.Context) error {
+	return s.runOnce(ctx, "")
+}
+
+// RunScope drives only an explicitly selected personal source owner.
+func (s *Stops) RunScope(ctx context.Context, scopeID string) error {
+	if scopeID == "" {
+		return fmt.Errorf("scope required")
+	}
+	if err := s.store.Within(ctx, func(tx *workstore.Tx) error {
+		scope, e := tx.GetScope(scopeID)
+		if e != nil {
+			return e
+		}
+		if scope.Kind != work.ScopePersonal {
+			return workstore.ErrScopeDenied
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return s.runOnce(ctx, scopeID)
+}
+
+func (s *Stops) runOnce(ctx context.Context, scopeID string) error {
 	var pending []stopDispatch
 	err := s.store.Within(ctx, func(tx *workstore.Tx) error {
 		scopes, e := tx.ListScopes()
@@ -43,15 +67,15 @@ func (s *Stops) RunOnce(ctx context.Context) error {
 			return e
 		}
 		for _, scope := range scopes {
+			if scopeID != "" && (scope.ID != scopeID || scope.Kind != work.ScopePersonal) {
+				continue
+			}
 			if e = s.finishObservedStops(tx, scope.ID); e != nil {
 				return e
 			}
 			gates, e := tx.ListPauseGates(scope.ID)
 			if e != nil {
 				return e
-			}
-			if len(gates) == 0 && scope.Kind != work.ScopePersonal {
-				continue
 			}
 			attempts, e := tx.ListOccupiedAttempts(scope.ID)
 			if e != nil {
@@ -72,10 +96,7 @@ func (s *Stops) RunOnce(ctx context.Context) error {
 					return e
 				}
 				if allowed {
-					if scope.Kind != work.ScopePersonal {
-						continue
-					}
-					stopped, e := tx.PrivateAttemptStopped(attempt)
+					stopped, e := tx.AttemptStopRequested(attempt)
 					if e != nil {
 						return e
 					}

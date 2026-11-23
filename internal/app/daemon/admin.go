@@ -163,6 +163,7 @@ type adminFeishuAppView struct {
 
 type runtimeStatusPayload struct {
 	Authority          string                          `json:"authority"`
+	PrivateReadError   string                          `json:"privateReadError,omitempty"`
 	Work               *runtimeWorkStatus              `json:"work,omitempty"`
 	Instances          []*state.InstanceRecord         `json:"instances"`
 	Surfaces           []*state.SurfaceConsoleRecord   `json:"surfaces"`
@@ -699,6 +700,9 @@ func redactAdminConfig(cfg config.AppConfig) adminConfigView {
 }
 
 func (a *App) runtimeStatusPayload(ctx context.Context) runtimeStatusPayload {
+	if a.applications != nil && a.applications.processor != nil {
+		return a.applicationRuntimeStatus(ctx)
+	}
 	a.mu.Lock()
 	if a.legacyWorkRetired() {
 		runtime, gateways := a.teamRuntime, gatewayStatuses(a.gateway)

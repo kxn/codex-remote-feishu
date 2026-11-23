@@ -9,8 +9,10 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/profilecontextstate"
+	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -67,13 +69,31 @@ type codexContextPreferenceWriteRequest struct {
 	Mode string `json:"mode"`
 }
 
-func (a *App) handleCodexProfilesList(w http.ResponseWriter, _ *http.Request) {
+func (a *App) handleCodexProfilesList(w http.ResponseWriter, r *http.Request) {
+	var observed []*state.InstanceRecord
+	if a.applications != nil && a.applications.processor != nil {
+		status, err := a.applications.processor.ReadRuntimeStatus(r.Context())
+		if err != nil {
+			writeCodexProfileServiceError(w, err)
+			return
+		}
+		observed = status.Instances
+	}
 	a.adminConfigMu.Lock()
 	defer a.adminConfigMu.Unlock()
 	profiles, err := a.codexProfileSummariesLocked()
 	if err != nil {
 		writeCodexProfileServiceError(w, err)
 		return
+	}
+	if a.applications != nil && a.applications.processor != nil {
+		applyCodexProfileObservedContext(profiles, observed)
+	} else {
+		a.mu.Lock()
+		if a.service != nil {
+			applyCodexProfileObservedContext(profiles, a.service.Instances())
+		}
+		a.mu.Unlock()
 	}
 	writeJSON(w, http.StatusOK, codexProfilesResponse{Profiles: profiles})
 }
@@ -171,7 +191,9 @@ func (a *App) handleCodexProfileReferences(w http.ResponseWriter, r *http.Reques
 		err = fmt.Errorf("profile_not_found")
 	}
 	if err == nil {
+		a.profileReferenceGate.RLock()
 		references = a.codexProfileReferencesLocked(profileID)
+		a.profileReferenceGate.RUnlock()
 	}
 	a.adminConfigMu.Unlock()
 	if err != nil {
@@ -261,16 +283,12 @@ func (a *App) codexProfileSummariesLocked() ([]state.CodexProfileSummary, error)
 		}
 		profiles = append(profiles, codexAPIProfileSummary(current, preference))
 	}
-	a.applyCodexProfileObservedContext(profiles)
 	return profiles, nil
 }
 
-func (a *App) applyCodexProfileObservedContext(profiles []state.CodexProfileSummary) {
-	if a == nil || a.service == nil {
-		return
-	}
+func applyCodexProfileObservedContext(profiles []state.CodexProfileSummary, instances []*state.InstanceRecord) {
 	for index := range profiles {
-		requested, effective, status, ok := a.service.CodexProfileContextEvidence(profiles[index].ID, profiles[index].ContextPreference.Revision)
+		requested, effective, status, ok := orchestrator.CodexProfileContextEvidence(instances, profiles[index].ID, profiles[index].ContextPreference.Revision)
 		if !ok {
 			continue
 		}
@@ -281,6 +299,8 @@ func (a *App) applyCodexProfileObservedContext(profiles []state.CodexProfileSumm
 }
 
 func (a *App) createCodexProfileLocked(input config.CodexAPIProfileInput) (state.CodexProfileSummary, error) {
+	a.profileReferenceGate.Lock()
+	defer a.profileReferenceGate.Unlock()
 	if err := a.profileCatalogMutationError(); err != nil {
 		return state.CodexProfileSummary{}, err
 	}
@@ -317,6 +337,8 @@ func (a *App) createCodexProfileLocked(input config.CodexAPIProfileInput) (state
 }
 
 func (a *App) updateCodexProfileLocked(profileID, expectedETag string, input config.CodexAPIProfileInput) (state.CodexProfileSummary, string, error) {
+	a.profileReferenceGate.Lock()
+	defer a.profileReferenceGate.Unlock()
 	if err := a.profileCatalogMutationError(); err != nil {
 		return state.CodexProfileSummary{}, "", err
 	}
@@ -355,7 +377,15 @@ func (a *App) updateCodexProfileLocked(profileID, expectedETag string, input con
 	}
 	if changed {
 		updated := loaded.Config
-		updated.Codex.Profiles[index] = config.PruneCodexAPIProfileHistory(record, a.codexProfileRetainedDefinitionRevisionsLocked(profileID))
+		retained, err := a.codexProfileRetainedDefinitionRevisionsLocked(profileID)
+		if err != nil {
+			return state.CodexProfileSummary{}, currentETag, err
+		}
+		if _, unknown := retained[0]; unknown {
+			updated.Codex.Profiles[index] = record
+		} else {
+			updated.Codex.Profiles[index] = config.PruneCodexAPIProfileHistory(record, retained)
+		}
 		updated.Codex.Providers = nil
 		if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
 			return state.CodexProfileSummary{}, currentETag, fmt.Errorf("config_write_failed: %w", err)
@@ -368,6 +398,8 @@ func (a *App) updateCodexProfileLocked(profileID, expectedETag string, input con
 }
 
 func (a *App) deleteCodexProfileLocked(profileID, expectedETag string) (state.CodexProfileSummary, string, error) {
+	a.profileReferenceGate.Lock()
+	defer a.profileReferenceGate.Unlock()
 	if err := a.profileCatalogMutationError(); err != nil {
 		return state.CodexProfileSummary{}, "", err
 	}
@@ -415,9 +447,31 @@ func (a *App) deleteCodexProfileLocked(profileID, expectedETag string) (state.Co
 
 func (a *App) codexProfileReferencesLocked(profileID string) []codexProfileReference {
 	profileID = strings.TrimSpace(profileID)
+	var privateStatus privatechat.RuntimeStatus
+	var durable []privatechat.CodexReference
+	privateOwned := a.privateServiceOwned.Load()
+	if privateOwned {
+		var err error
+		privateStatus, durable, err = a.privateCodexReferenceSnapshot()
+		if err != nil {
+			return []codexProfileReference{{Kind: "private_state_unavailable", Reason: "private references could not be verified"}}
+		}
+	}
+	teamRefs, teamErr := a.teamCodexProfileReferences(profileID)
+	if teamErr != nil {
+		return []codexProfileReference{{Kind: "team_state_unavailable", Reason: "team references could not be verified"}}
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	references := make([]codexProfileReference, 0)
+	for _, ref := range teamRefs {
+		references = append(references, codexProfileReference{Kind: "team_worker", Name: ref.WorkerID, Reason: "active team worker launch"})
+	}
+	for _, ref := range durable {
+		if ref.Admission.ProfileRef.ID == profileID {
+			references = append(references, codexProfileReference{Kind: ref.Kind, Name: ref.Name, Reason: "retained in private checkpoint"})
+		}
+	}
 	if a.botCapabilitySettingsState.store != nil {
 		for _, record := range a.botCapabilitySettingsState.store.Entries() {
 			if strings.TrimSpace(record.CodexProfileID) == profileID {
@@ -435,7 +489,13 @@ func (a *App) codexProfileReferencesLocked(profileID string) []codexProfileRefer
 			}
 		}
 	}
-	for _, surface := range a.service.Surfaces() {
+	surfaces := privateStatus.Surfaces
+	instances := privateStatus.Instances
+	if !privateOwned {
+		surfaces = a.service.Surfaces()
+		instances = a.service.Instances()
+	}
+	for _, surface := range surfaces {
 		if surface == nil {
 			continue
 		}
@@ -456,7 +516,7 @@ func (a *App) codexProfileReferencesLocked(profileID string) []codexProfileRefer
 			references = append(references, codexProfileReference{Kind: kind, Name: xutil.FirstNonEmpty(item.ID, surface.SurfaceSessionID), Reason: "queued prompt admission"})
 		}
 	}
-	for _, inst := range a.service.Instances() {
+	for _, inst := range instances {
 		if inst == nil || codexAdmissionRefProfileID(inst.CodexAdmissionRef) != profileID {
 			continue
 		}
@@ -465,46 +525,75 @@ func (a *App) codexProfileReferencesLocked(profileID string) []codexProfileRefer
 	return references
 }
 
-func (a *App) codexProfileRetainedDefinitionRevisionsLocked(profileID string) map[uint64]struct{} {
+func (a *App) codexProfileRetainedDefinitionRevisionsLocked(profileID string) (map[uint64]struct{}, error) {
 	retained := map[uint64]struct{}{}
-	a.visitCodexAdmissionRefsLocked(profileID, func(ref state.CodexAdmissionRef) {
-		retained[ref.ProfileRef.Revision] = struct{}{}
-	})
-	return retained
+	err := a.visitCodexAdmissionRefsLocked(profileID, func(ref state.CodexAdmissionRef) { retained[ref.ProfileRef.Revision] = struct{}{} })
+	return retained, err
 }
-
-func (a *App) codexProfileRetainedPreferenceRevisionsLocked(profileID string) map[uint64]struct{} {
+func (a *App) codexProfileRetainedPreferenceRevisionsLocked(profileID string) (map[uint64]struct{}, error) {
 	retained := map[uint64]struct{}{}
-	a.visitCodexAdmissionRefsLocked(profileID, func(ref state.CodexAdmissionRef) {
-		retained[ref.ContextPreferenceRef.Revision] = struct{}{}
-	})
-	return retained
+	err := a.visitCodexAdmissionRefsLocked(profileID, func(ref state.CodexAdmissionRef) { retained[ref.ContextPreferenceRef.Revision] = struct{}{} })
+	return retained, err
 }
-
-func (a *App) visitCodexAdmissionRefsLocked(profileID string, visit func(state.CodexAdmissionRef)) {
+func (a *App) visitCodexAdmissionRefsLocked(profileID string, visit func(state.CodexAdmissionRef)) error {
 	profileID = strings.TrimSpace(profileID)
 	if profileID == "" || visit == nil {
-		return
+		return nil
 	}
 	visitRef := func(ref *state.CodexAdmissionRef) {
-		ref = state.NormalizeCodexAdmissionRef(ref)
-		if ref == nil || ref.ProfileRef.ID != profileID {
+		if ref != nil && ref.ProfileRef.ID == profileID && ref.ProfileRef.Revision == 0 {
+			visit(*ref)
 			return
 		}
-		visit(*ref)
+		ref = state.NormalizeCodexAdmissionRef(ref)
+		if ref != nil && ref.ProfileRef.ID == profileID {
+			visit(*ref)
+		}
+	}
+	teamRefs, err := a.teamCodexProfileReferences(profileID)
+	if err != nil {
+		return err
+	}
+	if len(teamRefs) > 0 {
+		visit(state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: profileID}})
+	}
+	privateOwned := a.privateServiceOwned.Load()
+	var surfaces []*state.SurfaceConsoleRecord
+	var instances []*state.InstanceRecord
+	if privateOwned {
+		status, refs, err := a.privateCodexReferenceSnapshot()
+		if err != nil {
+			return err
+		}
+		surfaces, instances = status.Surfaces, status.Instances
+		for _, ref := range refs {
+			copy := ref.Admission
+			visitRef(&copy)
+		}
+	} else {
+		a.mu.Lock()
+		surfaces = a.service.Surfaces()
+		instances = a.service.Instances()
+		defer a.mu.Unlock()
+	}
+	if privateOwned {
+		a.mu.Lock()
 	}
 	if a.surfaceResumeRuntime.store != nil {
 		for _, entry := range a.surfaceResumeRuntime.store.Entries() {
 			visitRef(entry.CodexAdmissionRef)
 		}
 	}
-	for _, surface := range a.service.Surfaces() {
+	if privateOwned {
+		a.mu.Unlock()
+	}
+	for _, surface := range surfaces {
 		if surface == nil {
 			continue
 		}
 		visitRef(surface.CodexAdmissionRef)
-		if pending := surface.PendingHeadless; pending != nil {
-			visitRef(pending.CodexAdmissionRef)
+		if surface.PendingHeadless != nil {
+			visitRef(surface.PendingHeadless.CodexAdmissionRef)
 		}
 		for _, item := range surface.QueueItems {
 			if item != nil {
@@ -512,11 +601,12 @@ func (a *App) visitCodexAdmissionRefsLocked(profileID string, visit func(state.C
 			}
 		}
 	}
-	for _, inst := range a.service.Instances() {
+	for _, inst := range instances {
 		if inst != nil {
 			visitRef(inst.CodexAdmissionRef)
 		}
 	}
+	return nil
 }
 
 func codexAdmissionRefProfileID(ref *state.CodexAdmissionRef) string {
@@ -528,6 +618,8 @@ func codexAdmissionRefProfileID(ref *state.CodexAdmissionRef) string {
 }
 
 func (a *App) updateCodexContextPreferenceLocked(profileID, mode, expectedETag string) (state.ProfileContextPreference, string, error) {
+	a.profileReferenceGate.Lock()
+	defer a.profileReferenceGate.Unlock()
 	if err := a.profileCatalogMutationError(); err != nil {
 		return state.ProfileContextPreference{}, "", err
 	}
@@ -554,8 +646,14 @@ func (a *App) updateCodexContextPreferenceLocked(profileID, mode, expectedETag s
 	if err != nil {
 		return current, current.ETag, err
 	}
-	if err := preferenceStore.PruneCodexHistory(profileID, a.codexProfileRetainedPreferenceRevisionsLocked(profileID)); err != nil {
+	retained, err := a.codexProfileRetainedPreferenceRevisionsLocked(profileID)
+	if err != nil {
 		return updated, updated.ETag, err
+	}
+	if _, unknown := retained[0]; !unknown {
+		if err := preferenceStore.PruneCodexHistory(profileID, retained); err != nil {
+			return updated, updated.ETag, err
+		}
 	}
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
@@ -669,6 +767,10 @@ func (a *App) refreshCodexSurfaceRuntimeContractsLocked(cfg config.AppConfig) {
 			oauth := profile
 			resolver.OAuthState = &oauth
 		}
+	}
+	if a.privateServiceOwned.Load() {
+		a.publishPrivateCodexContractsLocked(cfg, preferenceStore, nativeEvidence, resolver)
+		return
 	}
 	for _, surface := range a.service.Surfaces() {
 		if surface == nil {

@@ -122,16 +122,16 @@ func (a *App) applyWorkChildEnv(base []string) []string {
 			if a.work != nil || a.config.WorkLaunchSnapshot != nil {
 				continue
 			}
-		case config.WorkLaunchSnapshotEnv, config.WorkSessionTokenEnv, config.WorkToolEndpointEnv, config.WorkSessionCredentialRefEnv, config.WorkOwnerBindingEnv, config.WorkTeamBinaryEnv:
+		case agentproto.PrivateNativeCredentialEnv, agentproto.PrivateNativeLaunchEnv, agentproto.TeamRelayCredentialEnv, config.WorkLaunchSnapshotEnv, config.WorkSessionTokenEnv, config.WorkToolEndpointEnv, config.WorkSessionCredentialRefEnv, config.WorkOwnerBindingEnv, config.WorkTeamBinaryEnv:
 			continue
 		}
 		env = append(env, item)
 	}
+	if (a.work != nil || a.privateNative != nil) && a.config.Backend == agentproto.BackendClaude {
+		env = upsertEnvValue(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1")
+	}
 	if a.work == nil {
 		return env
-	}
-	if a.config.Backend == agentproto.BackendClaude {
-		env = upsertEnvValue(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1")
 	}
 	owner, _ := json.Marshal(a.work.snapshot.Owner)
 	env = append(env,

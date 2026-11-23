@@ -42,6 +42,7 @@ const (
 )
 
 type CatalogContext struct {
+	PrivateApplication            bool
 	Backend                       agentproto.Backend
 	ProductMode                   string
 	MenuStage                     string
@@ -138,6 +139,7 @@ func NormalizeCatalogContext(ctx CatalogContext) CatalogContext {
 		caps = ctx.Capabilities
 	}
 	return CatalogContext{
+		PrivateApplication:            ctx.PrivateApplication,
 		Backend:                       backend,
 		ProductMode:                   productMode,
 		MenuStage:                     string(menuStage),

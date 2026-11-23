@@ -158,14 +158,9 @@ func (a *App) registerTeamLocationCandidates(ctx context.Context) error {
 	}
 	hostID := teamID("host", hostname+":"+a.headlessRuntime.Paths.StateDir)
 	paths := map[string]bool{}
-	if a.service != nil {
-		for path := range a.service.RecentPersistedWorkspaces(100) {
+	if snapshot := a.privateCatalogSnapshot.Load(); snapshot != nil {
+		for _, path := range *snapshot {
 			paths[path] = true
-		}
-		for _, instance := range a.service.Instances() {
-			if instance != nil && instance.WorkspaceRoot != "" {
-				paths[instance.WorkspaceRoot] = true
-			}
 		}
 	}
 	candidates := []string{}

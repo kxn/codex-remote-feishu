@@ -22,6 +22,9 @@ type Service struct {
 	Store    *workstore.Store
 	Resolver workpublish.Resolver
 	Now      func() time.Time
+	// ActivityGuard serializes source-fence admission with the complete HTTP
+	// attempt, including durable receipt or uncertain outcome recording.
+	ActivityGuard func(context.Context, string) (func(), error)
 }
 
 func (s *Service) now() time.Time {
@@ -47,7 +50,21 @@ func (s *Service) RunOnce(ctx context.Context, limit int) error {
 	}
 	var failures []error
 	for _, v := range pending {
-		if err := s.advance(ctx, v.ID); err != nil && !errors.Is(err, workstore.ErrConflict) {
+		end := func() {}
+		if s.ActivityGuard != nil {
+			var e error
+			end, e = s.ActivityGuard(ctx, v.ScopeID)
+			if errors.Is(e, workstore.ErrPersonalMigrationFenced) {
+				continue
+			}
+			if e != nil {
+				failures = append(failures, e)
+				continue
+			}
+		}
+		err := s.advance(ctx, v.ID)
+		end()
+		if err != nil && !errors.Is(err, workstore.ErrConflict) && !errors.Is(err, workstore.ErrPersonalMigrationFenced) {
 			failures = append(failures, err)
 		}
 		if ctx.Err() != nil {

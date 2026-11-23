@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	RuntimeInspectionProtocolVersion             = 1
-	CommandRuntimeInspect            CommandKind = "runtime.inspect"
-	EventRuntimeInspectionCompleted  EventKind   = "runtime.inspection.completed"
+	RuntimeInspectionProtocolVersion                   = 1
+	PrivateNativeInspectionProtocolVersion             = 1
+	CommandRuntimeInspect                  CommandKind = "runtime.inspect"
+	EventRuntimeInspectionCompleted        EventKind   = "runtime.inspection.completed"
 )
 
 type RuntimeInspectionRequest struct {

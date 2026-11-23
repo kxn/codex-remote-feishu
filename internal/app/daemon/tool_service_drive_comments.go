@@ -58,9 +58,7 @@ func (a *App) readDriveFileCommentsTool(ctx context.Context, arguments map[strin
 		return nil, apiErr
 	}
 
-	a.mu.Lock()
-	resolved, resolveErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
-	a.mu.Unlock()
+	resolved, resolveErr := a.resolveToolCallerSurfaceContext(ctx)
 	if resolveErr != nil {
 		return nil, resolveErr
 	}

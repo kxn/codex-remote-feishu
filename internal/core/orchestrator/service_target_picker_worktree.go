@@ -27,11 +27,25 @@ func (s *Service) buildTargetPickerWorktreeState(record *activeTargetPickerRecor
 	if baseWorkspaceKey == "" {
 		return worktreeState
 	}
-	preview, err := gitmeta.PreviewWorktree(gitmeta.WorktreeCreateRequest{
+	request := gitmeta.WorktreeCreateRequest{
 		BaseWorkspacePath: baseWorkspaceKey,
 		BranchName:        strings.TrimSpace(record.WorktreeBranchName),
 		DirectoryName:     strings.TrimSpace(record.WorktreeDirectoryName),
-	})
+	}
+	var preview gitmeta.WorktreePreviewResult
+	var err error
+	if s.config.PrivateApplication {
+		if s.privateWorktreeObservation == nil || s.privateWorktreeObservation.Request != request {
+			s.privateWorktreeObservationMissing = true
+			return worktreeState
+		}
+		preview = s.privateWorktreeObservation.Result
+		if s.privateWorktreeObservation.ErrorCode != "" {
+			err = &gitmeta.WorktreeCreateError{Code: s.privateWorktreeObservation.ErrorCode, DestinationPath: s.privateWorktreeObservation.ErrorDestination}
+		}
+	} else {
+		preview, err = gitmeta.PreviewWorktree(request)
+	}
 	if err == nil {
 		if strings.TrimSpace(preview.DestinationPath) != "" {
 			worktreeState.FinalPath = normalizeWorkspaceClaimKey(preview.DestinationPath)

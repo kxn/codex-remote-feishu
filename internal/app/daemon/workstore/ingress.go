@@ -98,7 +98,7 @@ func (t *Tx) ListPendingIngressAt(now time.Time, limit int) ([]work.IngressRecor
 	if limit < 1 || limit > 1000 {
 		return nil, fmt.Errorf("ingress limit must be 1..1000")
 	}
-	rows, err := t.tx.QueryContext(t.ctx, "SELECT payload FROM raw_ingress WHERE state='pending' AND (json_extract(payload,'$.next_attempt_at') IS NULL OR julianday(json_extract(payload,'$.next_attempt_at'))<=julianday(?)) ORDER BY sequence LIMIT ?", now.UTC().Format(time.RFC3339Nano), limit)
+	rows, err := t.tx.QueryContext(t.ctx, "SELECT payload FROM raw_ingress WHERE state='pending' AND NOT EXISTS (SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=json_extract(raw_ingress.payload,'$.route.scope_id')) AND (json_extract(payload,'$.next_attempt_at') IS NULL OR julianday(json_extract(payload,'$.next_attempt_at'))<=julianday(?)) ORDER BY sequence LIMIT ?", now.UTC().Format(time.RFC3339Nano), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +151,11 @@ func (t *Tx) ListIngressObservations(id string) ([]work.IngressObservation, erro
 	return values, rows.Err()
 }
 func (t *Tx) PutPrivateCommand(v work.TypedCommandEnvelope, expected int64) error {
+	if v.State == "sending" {
+		if err := t.AssertPersonalMigrationOpen(v.ScopeID); err != nil {
+			return err
+		}
+	}
 	if expected > 0 {
 		old, e := t.GetPrivateCommand(v.ID)
 		if e != nil {

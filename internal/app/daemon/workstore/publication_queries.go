@@ -22,6 +22,7 @@ func (t *Tx) ListPendingPublicationOutbox(scopeID string) ([]work.Outbox, error)
 		SELECT item.id, item.payload FROM outbox AS item
 		JOIN operations AS op ON op.id=item.operation_id AND op.scope_id=item.scope_id
 		WHERE item.scope_id=? AND item.state IN ('pending','retryable') AND op.kind='feishu.publish'
+		AND NOT EXISTS (SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=item.scope_id)
 	)`, "", scopeID)
 }
 

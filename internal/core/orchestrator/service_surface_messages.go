@@ -16,6 +16,12 @@ func (s *Service) RecordPageTrackingMessage(surfaceID, trackingKey, messageID st
 	if messageID == "" || trackingKey == "" {
 		return
 	}
+	if s.config.PrivateApplication {
+		if runtime := s.surfaceUIRuntimeState(surface); runtime != nil && runtime.PrivateUpgradeFlow != nil && runtime.PrivateUpgradeFlow.ID == trackingKey {
+			runtime.PrivateUpgradeFlow.MessageID = messageID
+			return
+		}
+	}
 	if flow := s.activeOwnerCardFlow(surface); flow != nil && strings.TrimSpace(flow.FlowID) == trackingKey {
 		s.RecordOwnerCardFlowMessage(surfaceID, trackingKey, messageID)
 		return

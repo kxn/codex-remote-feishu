@@ -22,6 +22,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workteamadmission"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workteamhome"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worktransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -29,40 +30,44 @@ import (
 )
 
 type teamRuntime struct {
-	laneMu              sync.Mutex
-	laneWakes           map[string]chan struct{}
-	humanActionsMu      sync.Mutex
-	humanActionsPending map[string]bool
-	catalogMu           sync.Mutex
-	catalogPending      map[string]bool
-	catalogViewCursor   string
-	runContext          context.Context
-	active              atomic.Bool
-	legacyFenced        atomic.Bool
-	migration           *workmigration.Coordinator
-	app                 *App
-	runCancel           context.CancelFunc
-	runDone             chan struct{}
-	requests            *workrequests.Service
-	signer              *workauth.Signer
-	handler             http.Handler
-	store               *workstore.Store
-	teamMaterials       *workteamhome.Service
-	service             *workservice.Service
-	engine              *workengine.Engine
-	host                *workhost.Host
-	codexUpgrader       teamCodexUpgrader
-	codexUpgradeHostID  string
-	stops               *workcontrol.Stops
-	ingress             *workingress.Ingress
-	provision           *workprovision.Service
-	publisher           *workpublish.Publisher
-	coordinator         *workruntime.Coordinator
-	driver              *worktransport.Driver
-	reconcileWake       chan struct{}
-	pendingMu           sync.Mutex
-	pending             map[string]bool
-	workers             sync.WaitGroup
+	personalMigrationMu      sync.Mutex
+	personalMigrationActive  map[string]int
+	personalMigrationChanged chan struct{}
+	laneMu                   sync.Mutex
+	laneWakes                map[string]chan struct{}
+	humanActionsMu           sync.Mutex
+	humanActionsPending      map[string]bool
+	catalogMu                sync.Mutex
+	catalogPending           map[string]bool
+	catalogViewCursor        string
+	runContext               context.Context
+	active                   atomic.Bool
+	legacyFenced             atomic.Bool
+	migration                *workmigration.Coordinator
+	app                      *App
+	runCancel                context.CancelFunc
+	runDone                  chan struct{}
+	requests                 *workrequests.Service
+	signer                   *workauth.Signer
+	handler                  http.Handler
+	store                    *workstore.Store
+	teamMaterials            *workteamhome.Service
+	teamAdmission            *workteamadmission.Service
+	service                  *workservice.Service
+	engine                   *workengine.Engine
+	host                     *workhost.Host
+	codexUpgrader            teamCodexUpgrader
+	codexUpgradeHostID       string
+	stops                    *workcontrol.Stops
+	ingress                  *workingress.Ingress
+	provision                *workprovision.Service
+	publisher                *workpublish.Publisher
+	coordinator              *workruntime.Coordinator
+	driver                   *worktransport.Driver
+	reconcileWake            chan struct{}
+	pendingMu                sync.Mutex
+	pending                  map[string]bool
+	workers                  sync.WaitGroup
 }
 
 func (r *teamRuntime) enqueueReconcile(attemptID string) {
@@ -94,6 +99,7 @@ func (r *teamRuntime) run(ctx context.Context) {
 		}
 		r.wakeLane("private-commands")
 		r.wakeLane("scheduler")
+		r.wakeLane("team-inbox")
 		r.wakeLane("private-reactions")
 		if e := r.app.presentTeamSelections(ctx, result.Selections); e != nil {
 			laneErrors = append(laneErrors, e)
@@ -131,6 +137,11 @@ func (r *teamRuntime) run(ctx context.Context) {
 	r.every(ctx, "model-catalog-views", time.Second, r.app.advanceTeamModelCatalogViews)
 	r.every(ctx, "settings", 5*time.Second, func(ctx context.Context) error { return r.app.syncWorkRoles(ctx, r.store) })
 	r.every(ctx, "scheduler", time.Second, r.tickScheduler)
+	if r.teamAdmission != nil {
+		r.every(ctx, "team-inbox", time.Second, func(ctx context.Context) error {
+			return r.teamAdmission.Tick(ctx, 32)
+		})
+	}
 	r.every(ctx, "idle-carrier-recovery", 2*time.Second, func(ctx context.Context) error { return r.coordinator.ReconcileIdleCarriers(ctx, 8) })
 	r.every(ctx, "startup-recovery", 2*time.Second, r.host.ReconcileStartupFailures)
 	r.every(ctx, "project-lifecycle", time.Second, r.app.runTeamProjectLifecycle)

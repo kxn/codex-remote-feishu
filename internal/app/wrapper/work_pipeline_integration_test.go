@@ -347,7 +347,21 @@ func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, gro
 	defer relayServer.Close()
 	defer relay.Close()
 	wsURL := "ws" + strings.TrimPrefix(relayServer.URL, "http")
-	actualDriver, e := worktransport.New(store, relay)
+	// This standalone wrapper fixture has no daemon teamRuntime; retain the
+	// durable fence check and activity lifetime through the actual socket write.
+	var sourceMu sync.Mutex
+	activeSources := map[string]int{}
+	activityGuard := func(ctx context.Context, scope string) (func(), error) {
+		sourceMu.Lock()
+		defer sourceMu.Unlock()
+		if err := store.Within(ctx, func(tx *workstore.Tx) error { return tx.AssertPersonalMigrationOpen(scope) }); err != nil {
+			return nil, err
+		}
+		activeSources[scope]++
+		var once sync.Once
+		return func() { once.Do(func() { sourceMu.Lock(); defer sourceMu.Unlock(); activeSources[scope]-- }) }, nil
+	}
+	actualDriver, e := worktransport.New(store, relay, activityGuard)
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -17,7 +17,7 @@ func (s *Service) refreshMergedThreadVisibility(surface *state.SurfaceConsoleRec
 	view.CompatibleAnyVisibleInst = nil
 	view.CompatibleFreeVisibleInst = nil
 	for _, inst := range instances {
-		if !visibleInstanceMatchesMergedThread(inst, view) || state.EffectiveInstanceBackend(inst) != view.Backend {
+		if !visibleInstanceMatchesMergedThread(inst, view) || state.EffectiveInstanceBackend(inst) != view.Backend || !s.threadVisibleForSurface(surface, view.Backend, inst.InstanceID, view.ThreadID) {
 			continue
 		}
 		thread := inst.Threads[view.ThreadID]

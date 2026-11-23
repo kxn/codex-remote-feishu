@@ -135,7 +135,7 @@ func verifyRetiredCarrierFence(ctx context.Context, store *workstore.Store, stat
 	var snapshot agentproto.RuntimeLaunchSnapshot
 	var process agentproto.RuntimeProcessIdentity
 	err := store.Within(ctx, func(tx *workstore.Tx) error {
-		if observation.CanonicalCommandWatermark <= 0 || observation.NativeWriteWatermark <= 0 || observation.InspectionCommandID == "" {
+		if observation.CanonicalCommandWatermark <= 0 || observation.NativeWriteWatermark < 0 || observation.InspectionCommandID == "" {
 			return fmt.Errorf("retirement requires both durable watermarks")
 		}
 		index, err := tx.NativeCommandWatermark(observation.InspectionCommandID)

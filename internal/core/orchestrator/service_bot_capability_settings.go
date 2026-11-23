@@ -224,6 +224,10 @@ func (s *Service) rejectInvalidBotCapabilitySettings(surface *state.SurfaceConso
 }
 
 func (s *Service) projectBotCapabilitySettingsToGatewaySurfaces(current *state.SurfaceConsoleRecord, record state.BotCapabilitySettingsRecord) {
+	if s.config.PrivateApplication && current != nil {
+		s.projectBotCapabilitySettingsToSurface(current, record)
+		return
+	}
 	key := state.BotCapabilitySettingsKey(record.GatewayID)
 	projectedCurrent := false
 	for _, surface := range s.root.Surfaces {

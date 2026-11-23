@@ -97,6 +97,8 @@ func (a *App) resolveWorkBotSettings(record state.BotCapabilitySettingsRecord, c
 func (a *App) syncWorkRoles(ctx context.Context, store *workstore.Store) error {
 	a.adminConfigMu.Lock()
 	defer a.adminConfigMu.Unlock()
+	a.profileReferenceGate.RLock()
+	defer a.profileReferenceGate.RUnlock()
 	return a.syncWorkRolesLocked(ctx, store, "")
 }
 
@@ -107,6 +109,8 @@ func (a *App) workSettingsAdmission(store *workstore.Store) workengine.SettingsA
 		defer a.feishuApplyMu.Unlock()
 		a.adminConfigMu.Lock()
 		defer a.adminConfigMu.Unlock()
+		a.profileReferenceGate.RLock()
+		defer a.profileReferenceGate.RUnlock()
 		if err := a.syncWorkRolesLocked(ctx, store, roleID); err != nil {
 			return err
 		}
@@ -180,6 +184,14 @@ func (a *App) syncWorkRolesLocked(ctx context.Context, store *workstore.Store, o
 }
 
 func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.WorkScope, role work.Role, wc work.WorkContext) (workhost.LaunchSettings, error) {
+	r.app.adminConfigMu.Lock()
+	defer r.app.adminConfigMu.Unlock()
+	return r.ResolveLaunchUnderAdmission(ctx, scope, role, wc)
+}
+
+// ResolveLaunchUnderAdmission is used only while SettingsAdmission already
+// holds adminConfigMu and the profile reference read gate.
+func (r teamSettingsResolver) ResolveLaunchUnderAdmission(ctx context.Context, scope work.WorkScope, role work.Role, wc work.WorkContext) (workhost.LaunchSettings, error) {
 	var result workhost.LaunchSettings
 	location, err := r.location(ctx, scope, wc)
 	if err != nil {
@@ -190,8 +202,6 @@ func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.Work
 		return result, err
 	}
 	a := r.app
-	a.adminConfigMu.Lock()
-	defer a.adminConfigMu.Unlock()
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return result, err
@@ -270,6 +280,12 @@ func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.Work
 		if e == nil && projection != nil {
 			result.CodexResume = orchestrator.CodexResumePolicyFromContract(&projection.Connection, &projection.Thread)
 		}
+	}
+	if err == nil {
+		result.Environment = stableEffectiveLaunchEnvironment(result.Environment)
+		// Namespace is an independent frozen history identity; legacy launches
+		// remain usable when it cannot be established.
+		result.NativeHistoryNamespace, _ = nativeHistoryNamespace(agentproto.Backend(result.Backend), result.Environment, result.Location.Cwd, r.hostID)
 	}
 	return result, err
 }

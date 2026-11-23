@@ -23,18 +23,19 @@ import (
 )
 
 type LaunchSettings struct {
-	ConnectionIdentity  string
-	NativeBinaryPath    string
-	NativeBinaryVersion string
-	ReadOnly            bool
-	PreferencesRevision int64
-	Backend             work.Backend
-	Location            work.ExecutionLocation
-	ProfileID           string
-	Environment         []string // ephemeral secrets; deliberately absent from LaunchRecord
-	LaunchArgs          []string // host process configuration; never model-visible content
-	Overrides           agentproto.PromptOverrides
-	CodexResume         *agentproto.CodexResumePolicy
+	ConnectionIdentity     string
+	NativeHistoryNamespace string
+	NativeBinaryPath       string
+	NativeBinaryVersion    string
+	ReadOnly               bool
+	PreferencesRevision    int64
+	Backend                work.Backend
+	Location               work.ExecutionLocation
+	ProfileID              string
+	Environment            []string // ephemeral secrets; deliberately absent from LaunchRecord
+	LaunchArgs             []string // host process configuration; never model-visible content
+	Overrides              agentproto.PromptOverrides
+	CodexResume            *agentproto.CodexResumePolicy
 }
 type SettingsResolver interface {
 	ResolveLaunch(context.Context, work.WorkScope, work.Role, work.WorkContext) (LaunchSettings, error)
@@ -49,17 +50,19 @@ type Config struct {
 	MaxLiveCarriers              int // includes prepared and uncertain launches until exact exit
 	MaxConcurrentLaunches        int // bounds concurrent preparation; engine bounds admitted carriers
 
-	Runtime      workruntime.Driver
-	StopCarrier  func(context.Context, work.WorkerSession) error
-	Paths        relayruntime.Paths
-	BinaryPath   string
-	ConfigPath   string
-	HostID       string
-	ToolEndpoint string
-	Start        func(relayruntime.HeadlessLaunchOptions) (int, error)
-	Settings     SettingsResolver
-	Registry     CarrierRegistry
-	Now          func() time.Time
+	Runtime               workruntime.Driver
+	StopCarrier           func(context.Context, work.WorkerSession) error
+	AfterCarrierStop      func(context.Context, work.WorkerSession, workstore.CarrierRegistration) error
+	SharedRelayCredential bool
+	Paths                 relayruntime.Paths
+	BinaryPath            string
+	ConfigPath            string
+	HostID                string
+	ToolEndpoint          string
+	Start                 func(relayruntime.HeadlessLaunchOptions) (int, error)
+	Settings              SettingsResolver
+	Registry              CarrierRegistry
+	Now                   func() time.Time
 }
 type Host struct {
 	preparations preparationLocks
@@ -70,7 +73,18 @@ type Host struct {
 	config       Config
 }
 
+// SetAfterCarrierStop installs the ownership retirement hook before workers
+// start; it must not be changed while the host is serving.
+func (h *Host) SetAfterCarrierStop(hook func(context.Context, work.WorkerSession, workstore.CarrierRegistration) error) {
+	h.config.AfterCarrierStop = hook
+}
+
+// EnableSharedRelayCredential must run before launch workers start.
+func (h *Host) EnableSharedRelayCredential() { h.config.SharedRelayCredential = true }
+
 type LaunchRecord struct {
+	SharedRelayCredential  bool                             `json:"shared_relay_credential,omitempty"`
+	NativeHistoryNamespace string                           `json:"native_history_namespace,omitempty"`
 	ConnectionIdentity     string                           `json:"connection_identity,omitempty"`
 	PreferencesRevision    int64                            `json:"preferences_revision,omitempty"`
 	WorkerID               string                           `json:"worker_id"`
@@ -120,6 +134,10 @@ func opaqueID(prefix string) (string, error) {
 }
 func launchID(worker work.WorkerSession) string {
 	return idFor("launch", worker.ID, fmt.Sprint(worker.Generation))
+}
+
+func LaunchOperationID(workerID string, generation int64) string {
+	return idFor("launch", workerID, fmt.Sprint(generation))
 }
 
 func (h *Host) readLaunch(tx *workstore.Tx, worker work.WorkerSession) (LaunchRecord, error) {

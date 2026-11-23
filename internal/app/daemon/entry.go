@@ -9,11 +9,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/desktopsession"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
@@ -70,7 +72,12 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 	if err != nil {
 		return fmt.Errorf("acquire service runtime lock: %w", err)
 	}
-	defer lock.Release()
+	var app *App
+	defer func() {
+		if err := releaseApplicationRuntimeLock(lock, app); err != nil {
+			log.Printf("runtime lock retained until process exit: %v", err)
+		}
+	}()
 
 	legacySnapshot, err := captureTeamLegacyFiles(paths.StateDir)
 	if err != nil {
@@ -97,12 +104,16 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 	envOverrideActive := (strings.TrimSpace(os.Getenv(config.FeishuAppIDEnv)) != "" || strings.TrimSpace(os.Getenv(config.FeishuAppSecretEnv)) != "") &&
 		strings.TrimSpace(cfg.FeishuGatewayID) != ""
 
-	app := New(
+	app = New(
 		net.JoinHostPort(cfg.RelayHost, cfg.RelayPort),
 		net.JoinHostPort(startup.AdminBindHost, cfg.RelayAPIPort),
 		gateway,
 		identity,
 	)
+	if err := app.prepareApplicationCore(); err != nil {
+		return err
+	}
+	defer app.applications.close()
 	baseEnv := buildDaemonHeadlessBaseEnv(os.Environ(), capturedProxyEnv)
 	syncProcessPATHFromEnv(baseEnv)
 	codexRealBinary := strings.TrimSpace(loadedConfig.Config.Wrapper.CodexRealBinary)
@@ -118,8 +129,11 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		Paths:             paths,
 		MinIdle:           1,
 	})
-	// Persistent teams expose their run-scoped CLI service on the daemon API.
-	// Retired instance/surface MCP endpoints must not publish a second sender.
+	// Private tools use carrier-scoped authentication; teams keep their scoped CLI.
+	app.SetToolRuntime(toolruntime.Config{
+		ListenAddr: net.JoinHostPort(loadedConfig.Config.Tool.ListenHost, strconv.Itoa(loadedConfig.Config.Tool.ListenPort)),
+		StateFile:  paths.ToolServiceFile,
+	})
 
 	app.SetFinalBlockPreviewer(finalBlockPreviewer)
 	app.SetDebugRelayFlow(cfg.DebugRelayFlow)
@@ -149,6 +163,9 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		return err
 	}
 	if err := app.activateWorkRuntime(ctx, legacySnapshot); err != nil {
+		return err
+	}
+	if err := app.configureApplicationIngress(ctx, controller, lock); err != nil {
 		return err
 	}
 	if err := app.applyRuntimeFeishuConfigs(loadedConfig.Config); err != nil {

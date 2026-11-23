@@ -48,6 +48,10 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 	}
 	delete(t.pendingRPC, requestID)
 	if errorPayload, ok := frame["error"]; ok && errorPayload != nil {
+		if pending.Command.NativeBinding != nil {
+			problem := normalizeOpenCodeRPCError(errorPayload, agentproto.ErrorInfo{Layer: "wrapper", Stage: "observe_server", Operation: pending.Kind, CommandID: pending.Command.CommandID})
+			result.Events = append(result.Events, agentproto.Event{Kind: agentproto.EventNativeCommandRejected, CommandID: pending.Command.CommandID, RequestID: requestID, Status: "failed", Action: "native.rpc.rejected", Problem: &problem})
+		}
 		return t.observeRPCError(pending, errorPayload, result), nil
 	}
 	payload, _ := frame["result"].(map[string]any)
@@ -60,10 +64,17 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 			return result, fmt.Errorf("model discovery response missing sessionId")
 		}
 		session := t.upsertSession(sessionID, t.commandCWD(pending.Command), payload)
-		t.currentSessionID = sessionID
+		if pending.Command.NativeBinding == nil {
+			t.currentSessionID = sessionID
+		}
 		event, _ := modelCatalogEventForConfigOptions(session, pending.Command.CommandID)
+		if pending.Command.NativeBinding != nil {
+			event.ThreadID = sessionID
+		}
 		event.RequestID = requestID
 		if event.ModelCatalog == nil || len(event.ModelCatalog.Entries) == 0 {
+			event.Kind = agentproto.EventModelCatalogUpdated
+			event.CommandID = pending.Command.CommandID
 			event.ModelCatalog = &agentproto.ModelCatalogSnapshot{Unsupported: true, ErrorMessage: "OpenCode native session did not expose model config options", RefreshedAt: time.Now().UTC()}
 		}
 		result.Events = append(result.Events, event)
@@ -73,11 +84,30 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 	case "session/set_config_option":
 		return t.observeSetConfigOptionResponse(pending, result)
 	case "session/prompt":
+		// For private ownership, the matching ACP response is native evidence
+		// that the actual prompt request was accepted; TurnStarted is emitted
+		// earlier, before the outbound frame is written, and is not evidence.
+		if pending.Command.NativeBinding != nil && pending.Turn != nil && !pending.Turn.PrivateObserved {
+			result.Events = append(result.Events, agentproto.Event{Kind: agentproto.EventNativeTurnBindingObserved, CommandID: pending.Command.CommandID, RequestID: requestID, ThreadID: pending.Turn.ThreadID, TurnID: pending.Turn.TurnID, Status: "accepted"})
+			pending.Turn.PrivateObserved = true
+		}
 		return t.observePromptResponse(pending, payload, result), nil
 	case "session/list":
-		return t.observeSessionListResponse(pending, payload, result), nil
+		out := t.observeSessionListResponse(pending, payload, result)
+		if pending.Command.NativeBinding != nil {
+			for i := len(result.Events); i < len(out.Events); i++ {
+				out.Events[i].RequestID = requestID
+			}
+		}
+		return out, nil
 	case "session/load":
-		return t.observeSessionLoadResponse(pending, payload, result), nil
+		out := t.observeSessionLoadResponse(pending, payload, result)
+		if pending.Command.NativeBinding != nil {
+			for i := len(result.Events); i < len(out.Events); i++ {
+				out.Events[i].RequestID = requestID
+			}
+		}
+		return out, nil
 	case "session/close":
 		return result, nil
 	default:
@@ -388,7 +418,25 @@ func (t *Translator) observeSessionUpdate(params map[string]any, result Result) 
 		}
 		return result, nil
 	}
-	switch strings.TrimSpace(xutil.LookupStringFromAny(update["sessionUpdate"])) {
+	kind := strings.TrimSpace(xutil.LookupStringFromAny(update["sessionUpdate"]))
+	if kind == "agent_message_chunk" || kind == "agent_thought_chunk" || kind == "tool_call" || kind == "tool_call_update" {
+		var candidate pendingRPC
+		request := ""
+		for id, pending := range t.pendingRPC {
+			if pending.Kind == "session/prompt" && pending.Command.NativeBinding != nil && pending.Turn != nil && pending.Turn.ThreadID == sessionID && !pending.Turn.Completed {
+				if request != "" {
+					request = ""
+					break
+				}
+				candidate, request = pending, id
+			}
+		}
+		if request != "" && t.activeTurns[sessionID] == candidate.Turn && !candidate.Turn.PrivateObserved {
+			result.Events = append(result.Events, agentproto.Event{Kind: agentproto.EventNativeTurnBindingObserved, CommandID: candidate.Command.CommandID, RequestID: request, ThreadID: sessionID, TurnID: candidate.Turn.TurnID, Status: "accepted"})
+			candidate.Turn.PrivateObserved = true
+		}
+	}
+	switch kind {
 	case "agent_message_chunk":
 		result.Events = append(result.Events, t.observeTextChunk(sessionID, update, "agent_message")...)
 	case "agent_thought_chunk":

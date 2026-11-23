@@ -81,11 +81,11 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 		err := cmd.Wait()
 		if scope != nil {
 			scope.MarkWaitObserved()
-			if a.work != nil {
-				a.work.inspection.mu.Lock()
-				a.work.inspection.dirty = true
-				a.work.inspection.mu.Unlock()
-				_ = a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner)
+			if inspection := a.inspectionState(); inspection != nil {
+				inspection.mu.Lock()
+				inspection.dirty = true
+				inspection.mu.Unlock()
+				_ = a.persistInspection()
 			}
 		}
 		waitErr <- err

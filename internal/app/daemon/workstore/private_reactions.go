@@ -62,6 +62,9 @@ func (t *Tx) PutPrivateReaction(v PrivateReaction, expected int64) error {
 		return err
 	}
 	if expected == 0 {
+		if err = t.AssertPersonalMigrationOpen(v.ScopeID); err != nil {
+			return err
+		}
 		_, err = t.tx.ExecContext(t.ctx, "INSERT INTO team_private_reactions(id,input_id,finished,next_at,updated_at,payload) VALUES(?,?,?,?,?,?)", v.ID, v.InputID, v.Finished, privateReactionTime(v.NextAt), privateReactionTime(v.UpdatedAt), string(raw))
 		return err
 	}
@@ -74,6 +77,11 @@ func (t *Tx) PutPrivateReaction(v PrivateReaction, expected int64) error {
 	}
 	if old.InputID != v.InputID || old.ScopeID != v.ScopeID || old.Binding != v.Binding || old.Message != v.Message {
 		return ErrIdempotencyConflict
+	}
+	if old.InFlightAction == "" && v.InFlightAction != "" {
+		if err = t.AssertPersonalMigrationOpen(v.ScopeID); err != nil {
+			return err
+		}
 	}
 	result, err := t.tx.ExecContext(t.ctx, "UPDATE team_private_reactions SET finished=?,next_at=?,updated_at=?,payload=? WHERE id=? AND json_extract(payload,'$.revision')=?", v.Finished, privateReactionTime(v.NextAt), privateReactionTime(v.UpdatedAt), string(raw), v.ID, expected)
 	if err != nil {
@@ -96,6 +104,11 @@ func (t *Tx) registerPrivateInputReaction(input work.Inbox) error {
 	}
 	if scope.Kind != work.ScopePersonal {
 		return nil
+	}
+	if err = t.AssertPersonalMigrationOpen(scope.ID); errors.Is(err, ErrPersonalMigrationFenced) {
+		return nil
+	} else if err != nil {
+		return err
 	}
 	message, err := t.GetMessage(input.MessageID)
 	if err != nil {
@@ -143,7 +156,7 @@ func (t *Tx) registerPrivateInputReaction(input work.Inbox) error {
 // Backfill only live input on deployment. Historical completed messages must
 // not acquire fresh acknowledgements merely because this feature was enabled.
 func (t *Tx) BackfillPrivateInputReactions(limit int) error {
-	rows, err := t.tx.QueryContext(t.ctx, `SELECT i.payload FROM inbox i JOIN scopes s ON s.id=json_extract(i.payload,'$.scope_id') JOIN messages m ON m.id=json_extract(i.payload,'$.message_id') JOIN role_bot_bindings b ON b.id=json_extract(i.payload,'$.recipient_role_id') WHERE json_extract(s.payload,'$.kind')='personal' AND json_extract(m.payload,'$.source.kind')='principal' AND json_extract(m.payload,'$.platform_key.message_id') IS NOT NULL AND coalesce(json_extract(i.payload,'$.control_of_input_id'),'')='' AND json_extract(i.payload,'$.state') IN ('pending','claimed') AND EXISTS(SELECT 1 FROM json_each(json_extract(m.payload,'$.observations')) o WHERE json_extract(o.value,'$.app_id')=json_extract(b.payload,'$.app_id') AND json_extract(o.value,'$.identity_generation')=json_extract(b.payload,'$.identity_generation')) AND NOT EXISTS(SELECT 1 FROM team_private_reactions r WHERE r.input_id=i.id) ORDER BY i.id LIMIT ?`, limit)
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT i.payload FROM inbox i JOIN scopes s ON s.id=json_extract(i.payload,'$.scope_id') JOIN messages m ON m.id=json_extract(i.payload,'$.message_id') JOIN role_bot_bindings b ON b.id=json_extract(i.payload,'$.recipient_role_id') WHERE json_extract(s.payload,'$.kind')='personal' AND NOT EXISTS(SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=s.id) AND json_extract(m.payload,'$.source.kind')='principal' AND json_extract(m.payload,'$.platform_key.message_id') IS NOT NULL AND coalesce(json_extract(i.payload,'$.control_of_input_id'),'')='' AND json_extract(i.payload,'$.state') IN ('pending','claimed') AND EXISTS(SELECT 1 FROM json_each(json_extract(m.payload,'$.observations')) o WHERE json_extract(o.value,'$.app_id')=json_extract(b.payload,'$.app_id') AND json_extract(o.value,'$.identity_generation')=json_extract(b.payload,'$.identity_generation')) AND NOT EXISTS(SELECT 1 FROM team_private_reactions r WHERE r.input_id=i.id) ORDER BY i.id LIMIT ?`, limit)
 	if err != nil {
 		return err
 	}
@@ -175,7 +188,7 @@ func (t *Tx) BackfillPrivateInputReactions(limit int) error {
 }
 
 func (t *Tx) ListPendingPrivateReactions(now time.Time, limit int) ([]PrivateReaction, error) {
-	rows, err := t.tx.QueryContext(t.ctx, `SELECT payload FROM team_private_reactions WHERE finished=0 AND next_at<=? ORDER BY updated_at,id LIMIT ?`, privateReactionTime(now), limit)
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT r.payload FROM team_private_reactions r WHERE r.finished=0 AND r.next_at<=? AND NOT EXISTS(SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=json_extract(r.payload,'$.scope_id')) ORDER BY r.updated_at,r.id LIMIT ?`, privateReactionTime(now), limit)
 	if err != nil {
 		return nil, err
 	}

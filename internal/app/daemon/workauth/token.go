@@ -135,3 +135,19 @@ func (s *Signer) Verify(token string) (Claims, error) {
 	}
 	return c, nil
 }
+
+// RelayCredential derives a stable, domain-separated carrier handshake secret
+// from the persisted daemon signing key and exact immutable carrier identity.
+// It is independent of the expiring worker tool token.
+func (s *Signer) RelayCredential(incarnation, instance, backend string) (string, error) {
+	if s == nil || incarnation == "" || instance == "" || backend == "" {
+		return "", ErrUnauthorized
+	}
+	body, err := json.Marshal([]string{"team-relay-v1", incarnation, instance, backend})
+	if err != nil {
+		return "", err
+	}
+	mac := hmac.New(sha256.New, s.key)
+	_, _ = mac.Write(body)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}

@@ -15,10 +15,14 @@ func (r *claudeBackendRuntime) RegisterNativeUserUUID(uuid string, command agent
 }
 
 func (r *workExecutionRuntime) stampUserUUIDs(command agentproto.Command, result *runtimeCommandResult) error {
-	if r.Backend() != agentproto.BackendClaude {
+	return stampNativeUserUUIDs(r.backendRuntime, r.work.snapshot.Owner.WorkerSessionID, r.work.snapshot.CarrierIncarnation, command, result)
+}
+
+func stampNativeUserUUIDs(backend backendRuntime, ownerID, incarnation string, command agentproto.Command, result *runtimeCommandResult) error {
+	if backend.Backend() != agentproto.BackendClaude {
 		return nil
 	}
-	registrar, ok := r.backendRuntime.(interface {
+	registrar, ok := backend.(interface {
 		RegisterNativeUserUUID(string, agentproto.Command)
 	})
 	if !ok {
@@ -31,7 +35,7 @@ func (r *workExecutionRuntime) stampUserUUIDs(command agentproto.Command, result
 			if json.Unmarshal(frame, &payload) != nil || payload["type"] != "user" {
 				continue
 			}
-			seed := fmt.Sprintf("%s\x00%s\x00%s\x00%d", r.work.snapshot.Owner.WorkerSessionID, r.work.snapshot.CarrierIncarnation, command.CommandID, ordinal)
+			seed := fmt.Sprintf("%s\x00%s\x00%s\x00%d", ownerID, incarnation, command.CommandID, ordinal)
 			ordinal++
 			sum := sha256.Sum256([]byte(seed))
 			sum[6] = (sum[6] & 15) | 0x50

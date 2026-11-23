@@ -122,6 +122,9 @@ func (t *Tx) acceptMessage(v work.Message, recipients []work.Inbox) (work.Messag
 			}
 		}
 	} else {
+		if err := t.AssertPersonalMigrationOpen(v.ScopeID); err != nil {
+			return canonical, false, err
+		}
 		if err := t.putMessage(canonical, 0); err != nil {
 			return canonical, false, err
 		}
@@ -142,6 +145,9 @@ func (t *Tx) acceptMessage(v work.Message, recipients []work.Inbox) (work.Messag
 			continue
 		}
 		if !errors.Is(err, ErrNotFound) {
+			return canonical, false, err
+		}
+		if err = t.AssertPersonalMigrationOpen(input.ScopeID); err != nil {
 			return canonical, false, err
 		}
 		if err = t.PutInbox(input, 0); err != nil {

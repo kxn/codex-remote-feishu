@@ -36,6 +36,8 @@ type EventKind string
 
 const (
 	EventThreadsSnapshot                 EventKind = "threads.snapshot"
+	EventNativeQueryCompleted            EventKind = "native.query.completed"
+	EventNativeControlResult             EventKind = "native.control.result"
 	EventThreadHistoryRead               EventKind = "thread.history.read"
 	EventThreadDiscovered                EventKind = "thread.discovered"
 	EventThreadFocused                   EventKind = "thread.focused"
@@ -94,6 +96,8 @@ type FileChangeRecord struct {
 }
 
 type Event struct {
+	Live                 *RuntimeLiveIdentity          `json:"live,omitempty"`
+	NativeBinding        *NativeTurnBinding            `json:"nativeBinding,omitempty"`
 	RuntimeMCP           *RuntimeMCPResult             `json:"runtimeMcp,omitempty"`
 	RuntimeInspection    *RuntimeInspectionResult      `json:"runtimeInspection,omitempty"`
 	Journal              *RuntimeEventIdentity         `json:"journal,omitempty"`
@@ -239,6 +243,7 @@ type Input struct {
 }
 
 type Command struct {
+	NativeBinding        *NativeTurnBinding           `json:"nativeBinding,omitempty"`
 	NativeInputAdmission *NativeInputAdmissionCommand `json:"nativeInputAdmission,omitempty"`
 	RuntimeMCP           *RuntimeMCPQuery             `json:"runtimeMcp,omitempty"`
 	Maintenance          *NativeMaintenanceCommand    `json:"maintenance,omitempty"`

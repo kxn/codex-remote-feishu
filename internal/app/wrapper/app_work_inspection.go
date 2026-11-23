@@ -8,25 +8,33 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
+	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/runtimejournal"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 func (a *App) markWorkBootstrap(request, response []byte) {
-	if a.work == nil {
+	s := a.inspectionState()
+	if s == nil {
 		return
 	}
-	s := a.work.inspection
 	s.mu.Lock()
 	s.nativeReady = true
 	s.bootstrap = agentproto.RPCProbe{Request: append([]byte(nil), request...), Response: append([]byte(nil), response...)}
 	s.dirty = true
 	s.mu.Unlock()
-	_ = s.persist(a.work.journal, a.work.snapshot.Owner)
+	_ = a.persistInspection()
 }
 
 func (a *App) inspectionProtocolVersion() int {
-	if a.managedInspectionEnabled() {
+	if a.work != nil && a.managedInspectionEnabled() {
 		return agentproto.RuntimeInspectionProtocolVersion
+	}
+	return 0
+}
+
+func (a *App) privateInspectionProtocolVersion() int {
+	if a.privateNative != nil && a.managedInspectionEnabled() {
+		return agentproto.PrivateNativeInspectionProtocolVersion
 	}
 	return 0
 }
@@ -41,30 +49,81 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 	if !a.managedInspectionEnabled() {
 		return fail("native_inventory_unavailable", "当前 wrapper 缺少可核查的宿主进程与代次绑定。")
 	}
-	work := a.work
-	snapshot := work.snapshot
-	result.CarrierIncarnation = snapshot.CarrierIncarnation
-	result.InstanceGeneration = snapshot.InstanceGeneration
-	result.ProcessGeneration = snapshot.ProcessGeneration
-	result.LocationGeneration = snapshot.LocationGeneration
+	var journal *runtimejournal.Store
+	var incarnation string
+	var instanceGeneration, processGeneration, locationGeneration int64
+	var ownerOnly bool
+	if a.work != nil {
+		snapshot := a.work.snapshot
+		journal = a.work.journal
+		incarnation = snapshot.CarrierIncarnation
+		instanceGeneration = snapshot.InstanceGeneration
+		processGeneration = snapshot.ProcessGeneration
+		locationGeneration = snapshot.LocationGeneration
+		if command.Execution == nil || command.NativeBinding != nil {
+			return fail("native_inspection_owner_mismatch", "inspection owner mismatch")
+		}
+		ownerOnly = command.Execution.AttemptID == "" && command.Execution.RunRef == ""
+	} else {
+		owner := a.privateNative.snapshot.Owner
+		journal = a.privateNative.journal
+		incarnation = owner.CarrierIncarnation
+		instanceGeneration = owner.InstanceGeneration
+		processGeneration = owner.ProcessGeneration
+		locationGeneration = 0
+		if command.NativeBinding == nil || command.Execution != nil || command.NativeBinding.Owner != owner {
+			return fail("native_inspection_owner_mismatch", "inspection owner mismatch")
+		}
+		ownerOnly = command.NativeBinding.ExecutionID == ""
+	}
+	result.CarrierIncarnation = incarnation
+	result.InstanceGeneration = instanceGeneration
+	result.ProcessGeneration = processGeneration
+	result.LocationGeneration = locationGeneration
 	request := command.RuntimeInspection
-	if request == nil || request.Version != agentproto.RuntimeInspectionProtocolVersion || request.ExpectedInstanceGeneration != snapshot.InstanceGeneration || request.ExpectedProcessGeneration != snapshot.ProcessGeneration || request.ExpectedLocationGeneration != snapshot.LocationGeneration {
+	if request == nil || request.Version != agentproto.RuntimeInspectionProtocolVersion || request.ExpectedInstanceGeneration != instanceGeneration || request.ExpectedProcessGeneration != processGeneration || request.ExpectedLocationGeneration != locationGeneration {
 		return fail("native_inspection_generation_mismatch", "检查请求与不可变宿主代次不一致。")
 	}
-	s := work.inspection
+	if a.privateNative != nil && ownerOnly && (command.Target.ThreadID != "" || command.Target.TurnID != "" || request.SubjectCommandID != "") {
+		return fail("native_inspection_owner_mismatch", "owner-wide private inspection cannot name a subject or turn")
+	}
+	s := a.inspectionState()
 	s.mu.Lock()
 	result.Bootstrap = s.bootstrap
 	s.mu.Unlock()
-	ownerOnly := command.Execution.AttemptID == "" && command.Execution.RunRef == ""
-	if !ownerOnly {
+	if !ownerOnly && a.privateNative != nil {
+		if request.SubjectCommandID == "" {
+			return fail("native_inspection_target_unproven", "private subject required")
+		}
+		var proven bool
+		var err error
+		if command.Target.ThreadID != "" && command.Target.TurnID != "" {
+			proven, err = journal.PrivateSubjectOwnsTurn(request.SubjectCommandID, command.Target.ThreadID, command.Target.TurnID, *command.NativeBinding)
+			if err != nil {
+				return fail("native_inspection_target_unproven", err.Error())
+			}
+		}
+		if !proven && command.Target.TurnID == "" {
+			result.NativeRejection, err = journal.PrivateSubjectRejection(request.SubjectCommandID, command.Target.ThreadID, *command.NativeBinding)
+			if err != nil {
+				return fail("native_inspection_target_unproven", err.Error())
+			}
+			proven = result.NativeRejection != nil
+		}
+		if !proven {
+			return fail("native_inspection_target_unproven", "private target lacks exact journaled native association")
+		}
+	}
+
+	if !ownerOnly && a.work != nil {
 		s.mu.Lock()
 		proof, known := s.turns[nativeTurnKey(command.Target.ThreadID, command.Target.TurnID)]
 		s.mu.Unlock()
 		if !known || proof.Binding != *command.Execution {
 			if request.SubjectCommandID != "" {
-				binding, err := work.journal.Binding(request.SubjectCommandID)
+				binding, err := journal.Binding(request.SubjectCommandID)
 				if err == nil && binding != nil && *binding == *command.Execution {
-					rejection, e := work.journal.RejectedEvent(request.SubjectCommandID)
+					rejection, e := journal.RejectedEvent(request.SubjectCommandID)
 					if e == nil {
 						result.NativeRejection = rejection
 					}
@@ -122,7 +181,7 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 				s.mu.Unlock()
 				record.NoNativeInputObserved = !hadInput
 				if terminalTurn != "" {
-					record.StreamTerminal, _ = work.journal.TerminalEvent(session, terminalTurn)
+					record.StreamTerminal, _ = journal.TerminalEvent(session, terminalTurn)
 				}
 			}
 			result.OwnerScope.Sessions = append(result.OwnerScope.Sessions, record)
@@ -140,7 +199,7 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 			}
 		}
 	} else {
-		terminal, err := work.journal.TerminalEvent(command.Target.ThreadID, command.Target.TurnID)
+		terminal, err := journal.TerminalEvent(command.Target.ThreadID, command.Target.TurnID)
 		if err != nil {
 			return fail("native_terminal_lookup_failed", err.Error())
 		}
@@ -159,7 +218,7 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 	if request.StopBackground {
 		deadline := time.Now().Add(2 * time.Second)
 		for {
-			inventory := s.inspectInventory(snapshot)
+			inventory := s.inspectInventoryIdentity(incarnation, processGeneration, locationGeneration)
 			if len(inventory.RunningProcessIDs) == 0 && len(inventory.PendingTaskIDs) == 0 {
 				break
 			}
@@ -173,13 +232,20 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 			}
 		}
 	}
-	result.Background = s.inspectInventory(snapshot)
-	if pending, err := work.journal.PendingNativeInputs(snapshot.Owner); err != nil {
+	result.Background = s.inspectInventoryIdentity(incarnation, processGeneration, locationGeneration)
+	var pending int
+	var pendingErr error
+	if a.work != nil {
+		pending, pendingErr = journal.PendingNativeInputs(a.work.snapshot.Owner)
+	} else {
+		pending, pendingErr = journal.PendingPrivateNativeInputs(a.privateNative.snapshot.Owner)
+	}
+	if pendingErr != nil {
 		result.Background.NativeInputsComplete = false
 	} else if pending > result.Background.PendingNativeInputs {
 		result.Background.PendingNativeInputs = pending
 	}
-	watermark, err := work.journal.NativeWriteWatermark()
+	watermark, err := journal.NativeWriteWatermark()
 	if err != nil {
 		return fail("native_write_watermark_unavailable", err.Error())
 	}
@@ -203,15 +269,25 @@ func (a *App) nativeInspectionProbe(ctx context.Context, command agentproto.Comm
 	}
 	raw = append(raw, '\n')
 	response := make(chan []byte, 1)
-	s := a.work.inspection
+	s := a.inspectionState()
 	s.mu.Lock()
 	s.waiters[requestID] = response
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.waiters, requestID); s.mu.Unlock() }()
-	if err := a.work.registerFrames(command.CommandID, [][]byte{raw}); err != nil {
-		return agentproto.RPCProbe{}, err
+	if a.work != nil {
+		if err := a.work.registerFrames(command.CommandID, [][]byte{raw}); err != nil {
+			return agentproto.RPCProbe{}, err
+		}
+	} else {
+		runtime, ok := a.runtime.(*privateNativeRuntime)
+		if !ok {
+			return agentproto.RPCProbe{}, fmt.Errorf("private runtime unavailable")
+		}
+		if err := runtime.registerFrames(command.CommandID, [][]byte{raw}); err != nil {
+			return agentproto.RPCProbe{}, err
+		}
 	}
-	if err := s.persist(a.work.journal, a.work.snapshot.Owner); err != nil {
+	if err := a.persistInspection(); err != nil {
 		return agentproto.RPCProbe{}, err
 	}
 	select {

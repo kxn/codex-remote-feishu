@@ -119,6 +119,9 @@ func (a *App) presentTeamSelection(ctx context.Context, selection workingress.Se
 		}
 		return errors.Join(err, lookupErr)
 	})
+	if err == nil && persistErr == nil && a.applications != nil && a.applications.teamPublications != nil {
+		persistErr = a.applications.teamPublications.confirm(context.WithoutCancel(ctx), teamPublicationProof{Kind: "team_setup_ingress", ID: notice.IngressID})
+	}
 	return errors.Join(err, persistErr)
 }
 

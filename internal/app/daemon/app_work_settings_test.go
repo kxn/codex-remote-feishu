@@ -138,6 +138,14 @@ func TestTeamClaudeSettingChangesRebuildOnlyAfterWorkerIsIdle(t *testing.T) {
 		return tx.PutWorker(worker, worker.Revision-1)
 	}
 	pickerTx(t, app, func(tx *workstore.Tx) error { return setWorkerState(tx, work.WorkerReady) })
+	for i := 0; i < 5; i++ {
+		if err = host.Prepare(ctx, need); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(launches) != 1 || stops != 0 {
+		t.Fatalf("unchanged effective settings rebuilt carrier: launches=%d stops=%d", len(launches), stops)
+	}
 	pickerTx(t, app, func(tx *workstore.Tx) error { return setWorkerState(tx, work.WorkerBusy) })
 	before := candidate
 	port := teamBotSettingsPort{app: app}

@@ -13,7 +13,11 @@ func (a *App) syncCodexProfilesCatalogLocked(cfg config.AppConfig) {
 	if a == nil || a.service == nil {
 		return
 	}
-	a.service.MaterializeCodexProfiles(a.materializeCodexProfileSummariesLocked(cfg))
+	records := a.materializeCodexProfileSummariesLocked(cfg)
+	a.updatePrivateCodexCatalogLocked(records)
+	if !a.privateServiceOwned.Load() {
+		a.service.MaterializeCodexProfiles(records)
+	}
 }
 
 func (a *App) syncCodexProfilesCatalogFromConfig() {

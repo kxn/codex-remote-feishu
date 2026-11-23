@@ -66,7 +66,7 @@ func (a *App) callerProfileVisionSupported(req *http.Request) bool {
 	if req == nil {
 		return false
 	}
-	return a.callerInstanceProfileVisionSupported(toolCallerInstanceIDFromContext(req.Context()))
+	return a.callerContextProfileVisionSupported(req.Context())
 }
 
 func (a *App) callerInstanceProfileVisionSupported(instanceID string) bool {
@@ -98,6 +98,13 @@ func (a *App) callerInstanceNeedsVisionAssist(instanceID string) bool {
 
 func (a *App) callerRequestNeedsVisionAssist(req *http.Request) bool {
 	if req == nil {
+		return false
+	}
+	if caller, ok := req.Context().Value(privateToolCallerKey{}).(*privateToolCaller); ok {
+		loaded, err := a.loadAdminConfig()
+		return err == nil && visionAssistConfigured(loaded.Config.VisionAssist) && !instanceProfileVisionSupported(loaded.Config, caller.profileInstance())
+	}
+	if a.privateTools != nil {
 		return false
 	}
 	return a.callerInstanceNeedsVisionAssist(toolCallerInstanceIDFromContext(req.Context()))
@@ -173,7 +180,7 @@ func openCodeProfileVisionSupported(cfg config.AppConfig, profileID string) bool
 
 func (a *App) describeImageTool(ctx context.Context, arguments map[string]any) (any, *toolError) {
 	// 防御性校验：声明支持视觉的 profile 不应调用本工具。
-	if a.callerInstanceProfileVisionSupported(toolCallerInstanceIDFromContext(ctx)) {
+	if a.callerContextProfileVisionSupported(ctx) {
 		return nil, &toolError{
 			Code:    "describe_image_not_needed",
 			Message: "当前主模型支持直接看图，不需要调用 describe_image。",

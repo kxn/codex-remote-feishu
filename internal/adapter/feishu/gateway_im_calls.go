@@ -161,14 +161,11 @@ func (g *LiveGateway) createMessage(ctx context.Context, receiveIDType, receiveI
 		Retry:      RetryRateLimitOnly,
 		Permission: PermissionCooldownOnly,
 	}, func(callCtx context.Context, client *lark.Client) (*larkim.CreateMessageResp, error) {
-		resp, err := client.Im.V1.Message.Create(callCtx, larkim.NewCreateMessageReqBuilder().
-			ReceiveIdType(receiveIDType).
-			Body(larkim.NewCreateMessageReqBodyBuilder().
-				ReceiveId(receiveID).
-				MsgType(msgType).
-				Content(content).
-				Build()).
-			Build())
+		body := larkim.NewCreateMessageReqBodyBuilder().ReceiveId(receiveID).MsgType(msgType).Content(content)
+		if id, _ := ctx.Value(privateTransportContextKey{}).(string); id != "" {
+			body.Uuid(id)
+		}
+		resp, err := client.Im.V1.Message.Create(callCtx, larkim.NewCreateMessageReqBuilder().ReceiveIdType(receiveIDType).Body(body.Build()).Build())
 		if err != nil {
 			return resp, err
 		}
@@ -191,13 +188,11 @@ func (g *LiveGateway) replyMessage(ctx context.Context, messageID, msgType, cont
 		Retry:      RetryRateLimitOnly,
 		Permission: PermissionCooldownOnly,
 	}, func(callCtx context.Context, client *lark.Client) (*larkim.ReplyMessageResp, error) {
-		resp, err := client.Im.V1.Message.Reply(callCtx, larkim.NewReplyMessageReqBuilder().
-			MessageId(messageID).
-			Body(larkim.NewReplyMessageReqBodyBuilder().
-				MsgType(msgType).
-				Content(content).
-				Build()).
-			Build())
+		body := larkim.NewReplyMessageReqBodyBuilder().MsgType(msgType).Content(content)
+		if id, _ := ctx.Value(privateTransportContextKey{}).(string); id != "" {
+			body.Uuid(id).ReplyInThread(false)
+		}
+		resp, err := client.Im.V1.Message.Reply(callCtx, larkim.NewReplyMessageReqBuilder().MessageId(messageID).Body(body.Build()).Build())
 		if err != nil {
 			return resp, err
 		}

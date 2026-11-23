@@ -11,6 +11,9 @@ func (s *Service) boundDaemonCommandEvents(surface *state.SurfaceConsoleRecord, 
 	if !ok || binding.DirectDaemonCommand == "" {
 		return nil, false
 	}
+	if s.config.PrivateApplication && binding.DirectDaemonCommand == control.DaemonCommandMCPOAuthLogin {
+		return s.startPrivateMCPOAuth(surface, action), true
+	}
 	command := &control.DaemonCommand{
 		Kind:             binding.DirectDaemonCommand,
 		GatewayID:        surface.GatewayID,

@@ -226,6 +226,13 @@ func (s *Service) handleOpenCodeProfileCommand(surface *state.SurfaceConsoleReco
 		}
 		return notice(surface, "opencode_profile_busy", text)
 	}
+	if s.privateSettingsPreview {
+		s.capturePrivateSettingsProposal(surface, func(record *state.BotCapabilitySettingsRecord) {
+			record.OpenCodeProfileID = target.ID
+			record.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(openCodeAdmissionRefForProfile(target))
+		})
+		return nil
+	}
 
 	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendOpenCode)
 	continuation = s.openCodeProfileSwitchNewThreadContinuation(surface, currentWorkspaceKey, continuation)
@@ -295,6 +302,9 @@ func (s *Service) freezeOpenCodeAdmissionRefForGatewayProfile(current *state.Sur
 	}
 	profileID = state.NormalizeOpenCodeProfileID(profileID)
 	for _, surface := range s.root.Surfaces {
+		if s.config.PrivateApplication && surface != current {
+			continue
+		}
 		if surface == nil || state.BotCapabilitySettingsKey(surface.GatewayID) != gatewayKey {
 			continue
 		}

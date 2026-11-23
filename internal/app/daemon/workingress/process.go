@@ -239,7 +239,7 @@ func (i *Ingress) DispatchPrivateCommands(ctx context.Context, limit int) (int, 
 			command = current
 			return tx.PutPrivateCommand(current, expected)
 		})
-		if errors.Is(err, workstore.ErrConflict) {
+		if errors.Is(err, workstore.ErrConflict) || errors.Is(err, workstore.ErrPersonalMigrationFenced) {
 			continue
 		}
 		if err != nil {

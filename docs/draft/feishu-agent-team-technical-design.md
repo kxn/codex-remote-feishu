@@ -1,8 +1,11 @@
 # 飞书 Agent 团队技术设计：领域、运行合同与代码改造
 
 > Type: `draft`
-> Updated: `2026-11-22`
+> Updated: `2026-11-24`
 > Summary: 明确 Agent 原生 Git 责任、旧私聊命令的委托语义与现行证据入口。
+
+> 架构决议更新（2026-11-23）：单聊与团队改为独立应用，共享原生接入和平台通信。本文中“单聊统一进入团队执行内核”的要求已由[应用分离设计](../inprogress/private-team-application-separation.md)替代；现有行为与迁移状态以该文的实施记录为准，不能把目标设计当成已部署事实。
+
 
 ## 1. 文档地位、依据与结论
 
@@ -10,7 +13,7 @@
 
 代码审计基线：本仓 `dbd006c55ea4195e46e4066c324b75cfd9f76222`；Raft 参考快照：`botiverse/raft-source@5214e34e726ed715f455e78c96fa521791ef2de3`。源码细节见[原生运行合同](./feishu-agent-team-runtime-contracts.md)、[代码复用审计](./feishu-agent-codebase-reuse-assessment.md)、[共享资料接口证据](./feishu-agent-team-materials-design.md)、[Raft 交付机制调查](./feishu-agent-team-human-delivery-design.md)。产品规范优先解释用户行为；当前生产行为仍以 canonical 文档和代码为准，实现时同步它们。
 
-结论：**在原仓库演进，保留原生 Agent 接入、进程与协议、飞书 gateway、配置与安装等基础，重构执行所有权和协作持久层。** 只在现有 surface 上叠角色提示词不足以实现目标，也不应另建一个只服务群的第二运行内核。最终个人／项目共用 WorkContext、WorkerSession、Attempt 与恢复合同。
+结论：**在原仓库演进，保留原生 Agent 接入、进程与协议、飞书 gateway、配置与安装等基础，重构执行所有权和协作持久层。** 只在现有 surface 上叠角色提示词不足以实现目标。私人 core 和群团队是独立应用，分别拥有私人会话／队列与项目 WorkContext／WorkerSession／Attempt；共享原生协议、平台通信、配置和执行载体的唯一归属。
 
 Raft 给出的可参考机制是：稳定 Agent、独立工作区与记忆索引、持久 inbox、CLI 业务操作、原生会话 start/resume/steer/compact/recycle、显式消息与版本成果。它的 Agent workspace 不等于我们的群／项目／repo；本产品采用更明确的 scope 与 workstream，以支持同 Bot 跨项目及单聊。借鉴机制，不复制源码，也不把 Raft recipes 当所有任务必经的硬流水线。
 
@@ -20,22 +23,22 @@ Raft 给出的可参考机制是：稳定 Agent、独立工作区与记忆索引
 
 ```mermaid
 flowchart TD
-    F[飞书消息 / 卡片 / 私聊命令] --> A[Application 用例入口]
-    C[Agent 多身份 CLI] --> A
-    A --> D[协作领域决策与版本校验]
-    D --> S[事务工作库 / operation / outbox]
-    S --> Q[调度 / 恢复 / 控制权协调]
-    Q --> R[Runtime coordinator]
-    R --> W[wrapper / backend adapter]
-    W --> N[Codex app-server / Claude CLI]
-    W --> J[关键事件 journal / receipt]
+    F[可信飞书 SDK 消息 / 卡片 / 菜单] --> I[中立持久入口与冻结归属]
+    I --> P[独立私人应用：session / 队列 / journal]
+    I --> A[群团队应用：领域用例 / 工作库 / inbox]
+    C[团队 CLI] --> A
+    A --> Q[团队调度 / 恢复 / outbox]
+    P --> R[共享载体 registry 与协议适配]
+    Q --> R
+    R --> N[Codex / Claude / OpenCode 原生进程]
+    N --> J[各应用核对原生事件与回执]
+    J --> P
     J --> A
-    S --> P[投影与外部操作 worker]
-    P --> F2[飞书 / 文档 / GitHub connector]
-    N --> C
+    P --> F2[私人展示与平台回执]
+    Q --> F2
 ```
 
-保留 `Service` 的领域状态中心角色，但不能让新领域决策依赖“先改 Service 内存，再 Save JSON”。新增纯领域命令处理与 unit-of-work 边界；daemon 读取必要快照、执行领域校验、事务提交、发布 committed events，最后更新现有 UI 投影。数据库与外部调用不在 `App.mu` 内执行。
+私人 core 的状态由独立 checkpoint、入站 applied 和 effect 事务持久化；团队领域决策使用工作库事务、版本校验及 committed events。daemon 只装配共享宿主和外部副作用，不以一个应用的内存状态作为另一应用的写入权威。
 
 建议包按职责落位，名字可在实施时微调，边界不可混合：
 
@@ -55,15 +58,15 @@ flowchart TD
 | 当前载体 | 处理方式 | 对现有行为的影响 |
 | --- | --- | --- |
 | [SurfaceConsoleRecord](../../internal/core/state/types.go:313) | 拆出执行、queue、pending launch、request 主记录；surface 留显示和选中目标 | 切换／关闭界面不再决定任务生死 |
-| [service_dispatch_core](../../internal/core/orchestrator/service_dispatch_core.go:14)、[service_queue](../../internal/core/orchestrator/service_queue.go:81) | 执行 owner 改 WorkerSession；登记与容量准入分开 | 忙时能接收协作任务；私聊队列仍有明确控制 |
-| [runtime clusters](../../internal/core/orchestrator/service_runtime_clusters.go:323) | 保留每 instance 单活动执行约束，绑定 attempt | 多工作流并行需要多个 carrier，不能只扩 map 后并发同一进程 |
+| [service_dispatch_core](../../internal/core/orchestrator/service_dispatch_core.go:14)、[service_queue](../../internal/core/orchestrator/service_queue.go:81) | 私人 core 保留其会话与队列语义，团队执行另由 WorkerSession 驱动 | 私人队列和团队 inbox 分别持久化 |
+| [runtime clusters](../../internal/core/orchestrator/service_runtime_clusters.go:323) | 私人 core 保留每 instance 单活动执行约束；团队载体绑定团队 attempt | 多工作流并行需要多个 carrier，不能并发同一进程 |
 | [routing claims](../../internal/core/orchestrator/service_routing_claims.go:309) | 资源／native session claim 归 worker/controller，去除 surface selection 失效条件 | 同仓库多项目允许；同写位置仍互斥 |
-| [headless launch](../../internal/app/daemon/app_headless.go:325)、[pool](../../internal/app/daemon/app_headless_pool.go:14) | 保留 spawn/profile/宿主能力；launch 授权由持久 operation 提供 | 不再要求 PendingHeadless surface；不能借同 cwd 的有主会话 |
+| [headless launch](../../internal/app/daemon/app_headless.go:325)、[pool](../../internal/app/daemon/app_headless_pool.go:14) | 保留 spawn/profile/宿主能力；私人启动保留 core PendingHeadless，团队启动使用持久 operation | 均不能借同 cwd 的有主会话 |
 | [detach headless](../../internal/core/orchestrator/service_detach_headless.go:15) | 从“最后 surface 离开即终止”改为 session lifecycle／controller | 私聊 detach 只是查看解绑，工作继续或明确交接 |
 | [request ownership](../../internal/core/orchestrator/service_helpers_request.go:126)、[request handling](../../internal/core/orchestrator/service_request.go:75) | 保留 frozen owner/revision 原则，owner 换 session/attempt/request generation | 无当前 surface 也保存授权请求，选择适用展示入口 |
 | [群恢复](../../internal/app/daemon/app_surface_resume_policy.go:12)、[按需恢复](../../internal/app/daemon/app_group_on_demand_resume.go) | 工作库驱动恢复；旧 resume JSON 用作导入 | 无新用户消息仍能处理持久待办 |
 | [Bot settings](../../internal/core/orchestrator/service_bot_capability_settings.go) | 抽 typed 设置用例，保持配置单写源；控制宿主归 session | 私聊模型配置影响全角色后续执行，暂停和恢复限定具体工作 |
-| [tool caller](../../internal/app/daemon/tool_service.go:419) | 增 worker credential＋run_ref，不从 active surface 猜 | 后台协作、单聊和附件工具均有正确身份 |
+| [tool caller](../../internal/app/daemon/tool_service.go:419) | 团队使用 worker credential＋run_ref；私人使用独立载体 credential 和 lease | 不从 active surface 猜调用身份 |
 | [入站归并](../../internal/app/daemon/app_ingress.go:77) | 新持久接收及事件归并 worker，保留有界内存缓冲 | FIFO 不再被误当崩溃持久性；慢操作移出 App 全局锁 |
 | [旧 primary](../../internal/core/orchestrator/service_feishu_primary_command.go)、room/shared-workspace admission | 对迁移群退出生产路由；公共 transport/request 部分保留 | 旧群 UX 全弃，不牵连私聊和新卡片 |
 | `internal/app/gitworkspace`、旧 worktree picker | 旧 picker 留作迁移和复用参考；团队群与私聊均由 Agent 使用原生 Git | 不建平台自动 worktree 生命周期服务 |
@@ -75,7 +78,7 @@ flowchart TD
 
 ```text
 Role（同事；统一模型策略）
-  WorkScope（personal 或 project）
+  WorkScope（project；旧 personal 仅为迁移来源）
     WorkContext（某条持续工作流；检查点与当前约定）
       WorkerSession（backend、控制权、执行位置、native 绑定代次）
         ExecutionAttempt（一次业务执行及它实际接收的输入）
@@ -83,7 +86,7 @@ Role（同事；统一模型策略）
 SurfaceBinding / Conversation 从外部指向工作，并不拥有上述执行。
 ```
 
-一个 WorkContext 在原生历史损坏、compact 或换模型后仍保留。WorkerSession 是受控执行容器，重建可以换 native binding 并增加 generation；切 backend 建立替代 WorkerSession 关联旧 context。Attempt 不等同业务 Task，也不假定 Claude 合成 turn 与 Codex 原生 turn 同等级。一个 Task 可由多个角色/context 执行、检查、集成；普通私聊可无 Task 但仍有 context/attempt。
+一个 WorkContext 在原生历史损坏、compact 或换模型后仍保留。WorkerSession 是受控执行容器，重建可以换 native binding 并增加 generation；切 backend 建立替代 WorkerSession 关联旧 context。Attempt 不等同业务 Task，也不假定 Claude 合成 turn 与 Codex 原生 turn 同等级。一个 Task 可由多个角色/context 执行、检查、集成；私人对话不创建这些团队对象。
 
 建议默认：负责人每项目一个协调 workstream；专家按需要形成明确实施／检查 workstream；可连续复用同一范围且兼容的空闲 context，不每条消息都建会话。独立并行责任分配独立 WorkerSession，同一 native session 不并发两个主动 run。是否新建 workstream 由调度与角色工作组织决定，不让用户手动选 session。
 
@@ -96,7 +99,7 @@ SurfaceBinding / Conversation 从外部指向工作，并不拥有上述执行�
 | Principal / ExternalIdentity | principal_id、tenant、app_identity_domain、id_type、external_id、generation | 外部别名含 App 范围和 ID 类型；没有证据不跨应用自动合并人 |
 | Role / RoleBotBinding | role_id、description_version、gateway_ref、AppID、identity_generation | RoleID 不随模型变；凭据在现有配置单写源 |
 | Team / TeamMember | team_id、leader_role、成员与状态、资料集合 | 团队共享不是租户全开放 |
-| WorkScope / PersonalScope / Project | kind、principal/team/project refs、生命周期、pause gates | CHECK 区分 personal/project；个人归属不取最后发言人 |
+| WorkScope / Project | 项目、team 引用、生命周期、pause gates | 团队业务事实；旧 personal scope 仅为迁移来源，私人应用使用独立 owner |
 | ProjectChannelBinding / ProjectMember | chat、purpose、binding_generation；role、join_intent、platform_state、runtime_state | 每群仅一个活动主项目；多 Bot 观察合到同一 Project |
 | ProjectResource / ExecutionLocation | source identity、host/cwd、resource_ref、location_generation | 项目可多资源；cwd 不做 ProjectID；位置不存另一套 Git 真相 |
 | WorkContext / WorkerSession | scope/role/workstream、checkpoint；backend/native namespace、instance/process/session/controller generations、desired/applied refs | 每个 active native binding 一个 owner；世代改变旧调用失效 |
@@ -228,7 +231,7 @@ Task 不规定强制流水线。要求和 adopted practices 决定 needed eviden
 
 必须接受的物理边界：native 接收命令与 wrapper 写 journal 之间仍不能跨进程原子提交。journal 让我们知道“已准备／可能已发送”，不能保证任意 shell exactly-once。未知窗口用原生状态、历史、CLI 操作回执与现场检查对账；不足时显示 unknown，不能自动重放副作用。
 
-升级需协议能力协商，如 owner_contract_version、durable_receipts、receipt_strength、maintenance capabilities。旧 wrapper 不满足团队协议时不得承接新 team attempt；给明确升级提示。旧未迁移个人工作可在原协议运行至切换窗口，不让一种 session 同时被两个协议 owner 调度。
+升级需协议能力协商，如 owner_contract_version、durable_receipts、receipt_strength、maintenance capabilities。旧 wrapper 不满足团队协议时不得承接新 team attempt；给明确升级提示。旧团队个人工作在启动准备阶段先持久 fence；已有执行只允许停止与证据结算，不能继续领取新私人工作，也不能由两个 owner 调度。
 
 ## 7. T06 Codex／Claude 会话生命周期与上下文注入
 
@@ -418,10 +421,10 @@ Conversation 先有内部 ID，创建根消息 outbox 成功后取得平台 root
 
 命令解析和别名可以复用 [registry](../../internal/core/control/feishu_commands.go)、[parser](../../internal/core/control/feishu_commands_parse.go)、[capability display](../../internal/core/control/feishu_command_display_profiles.go)。群判断必须在旧 dispatcher 前发生，不能只从 help 隐藏。
 
-- `/new`：在当前明确 scope 创建新 WorkContext／native session，默认个人 scope；不清长期记忆，不改变原项目工作归属。“重建当前会话”另外走 maintenance。
+- `/new`：在私人 core 准备新的私人 native session，不创建团队 WorkContext；不清长期记忆，不改变项目工作归属。“重建当前会话”另外走 maintenance。
 - `/history /list /use /useall`：列表同时可关联已有 native history，但选择只是查看／后续输入目标。可用的未绑定 native session 经明确 adopt/import 检查后绑定，不能按 cwd 偷借。
 - `/detach /follow /mode`：区分观察、controller 和 native 宿主；原入口功能保留，底层改为有证据交接，不再最后 surface detach 就杀后台执行。
-- `/stop /steerall /compact /goal`：按选定 context/session 调运行用例；能力不足给真实说明。`/stop` 在个人工作撤销尚未派发的用户输入并留审计；私聊选中项目工作时走项目暂停语义，保留所有项目 inbox，不撤销其他成员要求。同事结果始终保留。
+- `/stop /steerall /compact /goal`：按选定私人 session 调私人运行用例；能力不足给真实说明。`/stop` 停止私人执行并撤销此前尚未派发的私人用户输入、保留审计；查询项目不会令它暂停项目或改写团队 inbox。项目暂停由群团队入口处理。
 - `/model /reasoning /*profile`：统一 Bot 策略；`/access /plan`：当前 session 控制；不能归为一个全局“设置”对象。
 - `/review /autowhip /autocontinue`：保留原 backend 支持的局部能力，绑定新 owner；不以 native 最后回复改写或停止词作为 Task 完成证明。AutoContinue 只做已归属执行恢复，不与团队 scheduler 再发第二份工作。
 - workspace、sendfile、admin/upgrade/debug 等复用适用功能。人在 `/workspace` 选择允许使用的已有目录；旧私聊目录创建命令在选好目录后交给当前 Agent 处理，执行结果在原工作中回复。`/primary /coworkers` 不移植到 DM；Cron 不因兼容恢复。
@@ -430,7 +433,7 @@ Conversation 先有内部 ID，创建根消息 outbox 成功后取得平台 root
 
 ### 12.3 原生请求与业务决定分开
 
-原生 Request 以 worker/session generation＋attempt/native turn＋native request ID 唯一定位，冻结允许操作者、动作、工具内容与 response contract。没有 surface 时也落库；route policy 选择当前工作话题或适用私聊入口。原生 request 没有相应协议重放能力且重启后失效时标 aborted/unknown，不能批准旧卡去解新 request。
+团队原生 Request 以 worker/session generation＋attempt/native turn＋native request ID 唯一定位，冻结允许操作者、动作、工具内容与 response contract。私人原生请求则按私人 owner、carrier/session 和 request 记录并由私人应用展示；不凭团队路由取得私聊控制权。原生 request 没有相应协议重放能力且重启后失效时标 aborted/unknown，不能批准旧卡去解新 request。
 
 响应时以唯一条件写提交决定，再发给 wrapper；原生收到后才 resolved。用户重复点击返回已登记决定与应用状态；发送失败保留 retry/reconcile，不改成人拒绝。业务“你决定即可”改变 DecisionRequest 责任，不自动回答一个不相关的原生 shell 权限问题。原生既有权限策略按当前 session 配置处理，避免额外造一套每个工具都需人审的产品。
 
@@ -473,9 +476,9 @@ Conversation 先有内部 ID，创建根消息 outbox 成功后取得平台 root
 
 旧存储不支持 SQL 原子切换，因此 **新 durable authority registry 是切换裁决点**：旧路径在所有派发／写执行事实入口和发送前最终 gate 检查 authority generation；发送 gate 与切换共享受控屏障，并登记已接受／在途命令，避免检查后切换又发送。quiescing 必须核实所有在途命令、native continuation 和停止／交接证据；不能把 SQL 撤销记录当作撤回已发给 wrapper 的命令。迁移窗口先令旧 writer quiescent；切换后旧 JSON 即使仍存在也不能再派发。配置唯一 store继续保留，不能把所有旧 JSON 都粗暴删除。
 
-个人 identity 含 tenant/App 域/ID type，不拿 surface.LastActorUserID 或 gateway 槽位导入个人记忆；现有 AppID 切换 purge 逻辑须改为旧绑定失效与资料隔离保留。无法映射时让管理员／本人明确关联，不越权自动继承。只换模型无需身份迁移。
+个人 identity 含 tenant/App 域/ID type，不拿 surface.LastActorUserID 或 gateway 槽位导入个人记忆；现有 AppID 切换 purge 逻辑须改为旧绑定失效与资料隔离保留。先核对可信 SDK 身份和已有冻结来源；仍无法精确映射时保持对应来源待核查，不越权自动继承。只换模型无需身份迁移。
 
-原有单聊命令入口迁到相同用例，旧群 primary、workspace monopoly 与 coworkers 退出；旧 Cron 停止执行／触发／清理，保留计划和历史只读出口，不自动迁成新定时业务。显式继续使用的旧预览先复制／转存为持久 Resource 并验证，再允许清缓存。
+原有单聊命令入口由独立私人应用继续处理，旧群 primary、workspace monopoly 与 coworkers 退出；旧 Cron 停止执行／触发／清理，保留计划和历史只读出口，不自动迁成新定时业务。显式继续使用的旧预览先复制／转存为持久 Resource 并验证，再允许清缓存。
 
 原生会话不兼容时使用 checkpoint fresh rebuild，保留旧历史只读链接。切换前可以回滚旧权威，但保留 durable 缓冲、接收回执和已记录决定；恢复旧执行时经唯一桥接按原 input/decision ID 投递并保存去重证据。旧运行层无法安全消费的输入继续显示等待迁移恢复，不称全部恢复完成。切换后有新输入／操作时禁止拿旧备份覆盖，需要兼容前滚修复或导出迁移，不能承诺降级二进制无损打开新 schema。
 
@@ -517,15 +520,15 @@ Role 移出项目先关闭新 assignment，旧工作交接／中断，保留成�
 
 ### 14.2 完整交付的拒收条件
 
-出现以下任一情况不能收口：靠人再次发消息才能恢复团队；同 cwd 借另一项目 native session；Claude ACK 当已消费；指令 desired 直接当 applied；私聊命令仍写旧 surface owner；所有并行工作实际串行；旧 Cron 仍在跑；旧 preview cleanup 可删正式资料；委托只关通知不转责任；用 turn completed 宣称业务完成；丢失 critical event 后盲重跑；有双权威 store 或旧 writer 未 fencing。
+出现以下任一情况不能收口：靠人再次发消息才能恢复团队；同 cwd 借另一项目 native session；Claude ACK 当已消费；指令 desired 直接当 applied；私人命令仍写旧团队个人业务状态；所有并行工作实际串行；旧 Cron 仍在跑；旧 preview cleanup 可删正式资料；委托只关通知不转责任；用 turn completed 宣称业务完成；丢失 critical event 后盲重跑；有双权威 store 或旧 writer 未 fencing。
 
-本轮只有设计文件变更。现有定向测试用于证明接线基础；本轮 runtime 附录作者重跑了 Codex／Claude／wrapper 的 profile、steer、bootstrap、fork、restart/resume 与 IO fencing 定向测试，均通过，未执行真实 provider／飞书新团队闭环。实施阶段上述证据不足时应补实现和验证，不削减目标。
+当前工作区已接入私人和团队应用及迁移协调；具体测试与尚未验证的真实平台边界见[实施记录](../inprogress/private-team-application-separation.md#9-实施记录)。本技术目标不替代新鲜测试或线上验收证据。
 
 ## 15. 需要重点审阅的架构取舍
 
 本设计已经给出可以实施的默认路线，无需因实现细节等待用户逐项拍板。最值得评审的三个改变是：
 
-1. **Surface 彻底退出执行所有权**，个人也走 WorkContext/WorkerSession。影响 queue、claim、request、headless、resume 和工具身份；只改“群聊天 session”字段不足以完成。
+1. **执行归属明确分离**：私人 owner、checkpoint 与已认证 carrier 保持私人 core 语义；群项目使用 WorkContext/WorkerSession。共享 registry 保证单个载体只有一个应用归属，不能仅按目录或 surface 名借用。
 2. **原生协议保持不同，产品连续性统一**。Claude 固定 cwd、launch env、合成 turn 与不确定输入回执需要明确新合同；Codex 同 thread fast path 和 native Goal 要纳入维护／调度，不把二者包成伪统一 session。
 3. **交付与持久状态成为显式业务能力**。原生 final、飞书消息、资料版本、用户验收各自保留事实；已有自动上传与逐次监督留在适用私聊场景，不能继续承担新团队闭环。
 

@@ -25,8 +25,14 @@ const (
 
 func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 	g.mu.Lock()
+	if g.ingressStarted {
+		g.mu.Unlock()
+		return fmt.Errorf("gateway already started")
+	}
+	g.ingressStarted = true
 	hook := g.rawIngressHook
 	g.mu.Unlock()
+	defer func() { g.mu.Lock(); g.ingressStarted = false; g.mu.Unlock() }()
 	if hook != nil && (hook.Authorize == nil || hook.Receive == nil) {
 		return fmt.Errorf("durable ingress hook is incomplete")
 	}
@@ -199,6 +205,10 @@ func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
 }
 
 func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error {
+	if operation.durableTransportID != "" {
+		ctx = context.WithValue(ctx, privateTransportContextKey{}, operation.durableTransportID)
+	}
+
 	switch operation.Kind {
 	case OperationSendText:
 		msgType, content, err := sendTextPayload(*operation)
@@ -220,6 +230,12 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
+			}
+			if operation.durableTransportID != "" && (resp == nil || resp.Success()) {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("private reply result is unknown")
 			}
 			log.Printf(
 				"feishu text reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
@@ -262,6 +278,12 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
+			}
+			if operation.durableTransportID != "" && (resp == nil || resp.Success()) {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("private reply result is unknown")
 			}
 			log.Printf(
 				"feishu reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
@@ -330,6 +352,12 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 				}
 				return nil
 			}
+			if operation.durableTransportID != "" && (resp == nil || resp.Success()) {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("private reply result is unknown")
+			}
 			log.Printf(
 				"feishu image reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
 				operation.SurfaceSessionID,
@@ -376,6 +404,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		resp, err := g.createReactionFn(ctx, operation.MessageID, operation.EmojiType)
 		if err != nil {
 			if resp != nil && ignoredMissingReactionCreateError(resp.Code, resp.Msg) {
+				operation.ReactionAbsent = true
 				return nil
 			}
 			return err
@@ -383,16 +412,24 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		g.mu.Lock()
 		if resp.Data != nil && resp.Data.ReactionId != nil {
 			g.reactions[reactionKey(operation.MessageID, operation.EmojiType)] = *resp.Data.ReactionId
+			operation.ReactionID = *resp.Data.ReactionId
 		}
 		g.mu.Unlock()
 		return nil
 	case OperationRemoveReaction:
 		g.mu.Lock()
-		reactionID := g.reactions[reactionKey(operation.MessageID, operation.EmojiType)]
+		reactionID := operation.ReactionID
+		if reactionID == "" && operation.durableTransportID == "" {
+			reactionID = g.reactions[reactionKey(operation.MessageID, operation.EmojiType)]
+		}
 		g.mu.Unlock()
 		if reactionID == "" {
+			if operation.durableTransportID != "" && !operation.ReactionAbsent {
+				return fmt.Errorf("private reaction removal lacks durable identity")
+			}
 			return nil
 		}
+		operation.ReactionID = reactionID
 		resp, err := g.deleteReactionFn(ctx, operation.MessageID, reactionID)
 		if err != nil {
 			if resp != nil && ignoredMissingReactionDeleteError(resp.Code, resp.Msg) {

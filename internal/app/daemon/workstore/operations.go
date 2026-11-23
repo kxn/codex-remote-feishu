@@ -41,8 +41,17 @@ func (t *Tx) PutOperation(v work.Operation, expected int64) (work.Operation, boo
 		if e = work.ValidateOperationTransition(old.State, v.State); e != nil {
 			return v, false, e
 		}
+		if v.Kind == "worker.launch" && v.State == work.OperationSending && old.State != work.OperationSending {
+			if e = t.AssertPersonalMigrationOpen(v.ScopeID); e != nil {
+				return v, false, e
+			}
+		}
 	} else if expected != 0 {
 		return v, false, ErrConflict
+	} else if v.Kind == "worker.launch" {
+		if e := t.AssertPersonalMigrationOpen(v.ScopeID); e != nil {
+			return v, false, e
+		}
 	}
 	if err = t.record("operations", v.ID, v.Revision, expected, v); err != nil {
 		return v, false, err
@@ -75,6 +84,15 @@ func (t *Tx) PutOutbox(v work.Outbox, expected int64) error {
 		}
 		if e = validateOutboxTransition(old.State, v.State); e != nil {
 			return e
+		}
+		if v.State == work.OutboxSending {
+			if e = t.AssertPersonalMigrationOpen(v.ScopeID); e != nil {
+				return e
+			}
+		}
+	} else if v.State == work.OutboxSending {
+		if err = t.AssertPersonalMigrationOpen(v.ScopeID); err != nil {
+			return err
 		}
 	}
 	return t.record("outbox", v.ID, v.Revision, expected, v)

@@ -47,6 +47,7 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	slot, err := RunLocalBinaryUpgradeWithStatePath(LocalBinaryUpgradeOptions{
 		StatePath:    statePath,
 		SourceBinary: sourceBinary,
+		GatewayID:    "gateway", SurfaceSessionID: "surface", ChatID: "chat", ActorUserID: "user", SourceMessageID: "card", PrivateRequestID: "request", SourceSHA256: "source-hash",
 	})
 	if err != nil {
 		t.Fatalf("RunLocalBinaryUpgradeWithStatePath: %v", err)
@@ -90,6 +91,9 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	}
 	if updated.PendingUpgrade == nil || updated.PendingUpgrade.Phase != PendingUpgradePhasePrepared {
 		t.Fatalf("pending upgrade = %#v, want prepared", updated.PendingUpgrade)
+	}
+	if updated.PendingUpgrade.GatewayID != "gateway" || updated.PendingUpgrade.SurfaceSessionID != "surface" || updated.PendingUpgrade.ChatID != "chat" || updated.PendingUpgrade.ActorUserID != "user" || updated.PendingUpgrade.SourceMessageID != "card" || updated.PendingUpgrade.PrivateRequestID != "request" || updated.PendingUpgrade.SourceSHA256 != "source-hash" {
+		t.Fatalf("private owner evidence lost: %#v", updated.PendingUpgrade)
 	}
 	if updated.PendingUpgrade.Source != UpgradeSourceLocal {
 		t.Fatalf("pending source = %q, want local", updated.PendingUpgrade.Source)

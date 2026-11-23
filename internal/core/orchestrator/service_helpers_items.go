@@ -172,3 +172,11 @@ func suppressesCompletedTextRender(itemKind string, metadata map[string]any) boo
 	value, ok := metadata["suppressFinalText"].(bool)
 	return ok && value
 }
+
+func (s *Service) forEachItemBuffer(fn func(*itemBuffer)) {
+	for _, b := range s.itemBuffers {
+		if b != nil {
+			fn(b)
+		}
+	}
+}

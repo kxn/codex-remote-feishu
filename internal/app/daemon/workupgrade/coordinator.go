@@ -29,11 +29,28 @@ type Config struct {
 	Now                                func() time.Time
 	Inspect                            func(context.Context, codexupgrade.InspectOptions) codexupgrade.Installation
 	Install                            func(context.Context, string, codexupgrade.TrackedInstallOptions) (codexupgrade.TrackedInstallResult, error)
+	// Maintenance coordinates the backend-wide private/team fence. It must be
+	// supplied by the assembled daemon when both applications share a backend.
+	Maintenance MaintenanceLifecycle
+}
+
+// MaintenanceLifecycle methods are replayed after crashes and must use the
+// exact persisted upgrade identity. None may infer process exit from a socket.
+type MaintenanceLifecycle interface {
+	BeginAndDrainPrivate(context.Context, Record) error
+	BeforeInstall(context.Context, Record) error
+	AfterVerified(context.Context, Record) error
+	AfterTeamRestart(context.Context, Record) error
 }
 type Coordinator struct {
 	store  *workstore.Store
 	config Config
 	mu     sync.Mutex
+}
+
+// SetMaintenance is called only during daemon assembly, before Run starts.
+func (c *Coordinator) SetMaintenance(maintenance MaintenanceLifecycle) {
+	c.config.Maintenance = maintenance
 }
 
 func New(store *workstore.Store, cfg Config) (*Coordinator, error) {

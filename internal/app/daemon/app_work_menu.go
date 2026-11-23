@@ -47,6 +47,14 @@ func (a *App) runTeamMenus(ctx context.Context) error {
 	return errors.Join(problems...)
 }
 func (a *App) advanceTeamMenu(ctx context.Context, menu workstore.MenuInteraction) error {
+	end, err := a.teamRuntime.beginPersonalSourceActivity(ctx, menu.ScopeID)
+	if errors.Is(err, workstore.ErrPersonalMigrationFenced) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer end()
 	if menu.DestinationState != work.OperationConfirmed {
 		err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error { return tx.AdoptKnownMenuDestination(menu.ID, menu.Revision) })
 		if err != nil && !errors.Is(err, workstore.ErrNotFound) {
@@ -110,7 +118,6 @@ func (a *App) advanceTeamMenu(ctx context.Context, menu workstore.MenuInteractio
 	}
 	source := teamHumanSource{NavigationRevision: menu.NavigationRevision, Key: menu.ID, ScopeID: menu.ScopeID, PrincipalID: menu.PrincipalID, RoleID: menu.Gateway.RoleID, Tenant: menu.Envelope.Tenant, ChatID: menu.ChatID, MessageID: menu.MessageID, Gateway: menu.Gateway, SenderIDs: menu.Envelope.SenderIDs, Authority: workstore.PrivateActionSource{PersonalScopeID: menu.ScopeID, MenuInteractionID: menu.ID}}
 	var result string
-	var err error
 	// The shared catalog defines the published command keys and their arguments.
 	// Dispatch those through the same path as literal slash commands so aliases,
 	// direct settings and operation semantics cannot drift between entry points.

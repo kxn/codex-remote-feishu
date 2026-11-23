@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
+	"github.com/kxn/codex-remote-feishu/internal/app/privatestaging"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -418,6 +420,15 @@ func (g *LiveGateway) downloadImage(ctx context.Context, messageID, imageKey str
 	if err != nil {
 		return "", "", err
 	}
+	if store := privatestaging.FromContext(ctx); store != nil {
+		body, err := io.ReadAll(resp.File)
+		if err != nil {
+			return "", "", err
+		}
+		mimeType := http.DetectContentType(body)
+		path, err := store.Create(bytes.NewReader(body), mimeExtension(mimeType))
+		return path, mimeType, err
+	}
 	dir := g.config.TempDir
 	if dir == "" {
 		dir = os.TempDir()
@@ -479,6 +490,9 @@ func (g *LiveGateway) downloadFile(ctx context.Context, messageID, fileKey, file
 	})
 	if err != nil {
 		return "", err
+	}
+	if store := privatestaging.FromContext(ctx); store != nil {
+		return store.Create(resp.File, "")
 	}
 	dir := g.config.TempDir
 	if dir == "" {

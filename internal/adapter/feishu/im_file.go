@@ -21,6 +21,9 @@ type IMFileSendRequest struct {
 	ChatID           string
 	ActorUserID      string
 	Path             string
+	FileName         string
+	Content          []byte
+	IdempotencyKey   string
 }
 
 type IMFileSendResult struct {
@@ -65,6 +68,9 @@ func (e *IMFileSendError) Unwrap() error {
 }
 
 func (g *LiveGateway) SendIMFile(ctx context.Context, req IMFileSendRequest) (IMFileSendResult, error) {
+	if req.IdempotencyKey != "" {
+		ctx = context.WithValue(ctx, privateTransportContextKey{}, req.IdempotencyKey)
+	}
 	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, sendIMFileTimeout)
 	defer cancel()
 
@@ -85,7 +91,13 @@ func (g *LiveGateway) SendIMFile(ctx context.Context, req IMFileSendRequest) (IM
 			Err:  fmt.Errorf("send file failed: missing receive target"),
 		}
 	}
-	fileKey, fileName, err := g.uploadFilePathFn(ctx, req.Path)
+	var fileKey, fileName string
+	var err error
+	if req.Content != nil {
+		fileKey, fileName, err = g.uploadFileBytes(ctx, req.FileName, req.Content)
+	} else {
+		fileKey, fileName, err = g.uploadFilePathFn(ctx, req.Path)
+	}
 	if err != nil {
 		var sendErr *IMFileSendError
 		if errors.As(err, &sendErr) {

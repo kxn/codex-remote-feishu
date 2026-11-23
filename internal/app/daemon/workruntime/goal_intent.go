@@ -12,7 +12,7 @@ func pendingSessionGoalIntent(tx *workstore.Tx, attemptID string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	stopped, err := tx.PrivateAttemptStopped(attempt)
+	stopped, err := tx.AttemptStopRequested(attempt)
 	if err != nil || stopped {
 		return false, err
 	}

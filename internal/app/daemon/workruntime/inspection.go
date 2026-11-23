@@ -209,7 +209,7 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		if err != nil {
 			return err
 		}
-		request.StopBackground, err = tx.PrivateAttemptStopped(attempt)
+		request.StopBackground, err = tx.AttemptStopRequested(attempt)
 		if err != nil {
 			return err
 		}

@@ -216,6 +216,16 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 		}
 		return notice(surface, "surface_mode_busy", "当前仍有执行中的 turn、派发中的请求或排队消息，暂时不能切换模式。请等待完成、/stop，或先 /detach。")
 	}
+	if s.privateSettingsPreview {
+		s.capturePrivateSettingsProposal(surface, func(record *state.BotCapabilitySettingsRecord) {
+			record.ProductMode = target.ProductMode
+			record.Backend = target.Backend
+			if target.Backend == agentproto.BackendOpenCode {
+				record.OpenCodeProfileID = surface.OpenCodeProfileID
+			}
+		})
+		return nil
+	}
 
 	events := s.discardDrafts(surface)
 	pending := surface.PendingHeadless
@@ -385,6 +395,10 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 			})
 		}
 		return notice(surface, "claude_profile_busy", text)
+	}
+	if s.privateSettingsPreview {
+		s.capturePrivateSettingsProposal(surface, func(record *state.BotCapabilitySettingsRecord) { record.ClaudeProfileID = target.ID })
+		return nil
 	}
 
 	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendClaude)

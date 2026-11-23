@@ -40,6 +40,30 @@ func (s *Store) PersistEvents(events []agentproto.Event) ([]agentproto.Event, er
 			rollbacks = append(rollbacks, rollback)
 		}
 	}
+	if s.privateLive {
+		for i := range output {
+			if output[i].Kind != agentproto.EventItemDelta {
+				continue
+			}
+			if output[i].Live != nil || output[i].Journal != nil {
+				return nil, ErrConflict
+			}
+			if s.liveNext == 0 || s.liveNext > s.liveEnd {
+				var end uint64
+				if err := s.db.QueryRow(`INSERT INTO private_live_streams(incarnation,reserved_through) VALUES(?,1024) ON CONFLICT(incarnation) DO UPDATE SET reserved_through=reserved_through+1024 RETURNING reserved_through`, s.incarnation).Scan(&end); err != nil {
+					return nil, err
+				}
+				s.liveNext = end - 1023
+				s.liveEnd = end
+			}
+			digest, err := agentproto.HashRuntimeLiveEvent(output[i])
+			if err != nil {
+				return nil, err
+			}
+			output[i].Live = &agentproto.RuntimeLiveIdentity{Version: agentproto.RuntimeLiveProtocolVersion, CarrierIncarnation: s.incarnation, Sequence: s.liveNext, PayloadHash: digest}
+			s.liveNext++
+		}
+	}
 	critical := false
 	for _, event := range output {
 		if Critical(event) {

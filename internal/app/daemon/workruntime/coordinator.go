@@ -33,6 +33,7 @@ type Options struct {
 	Clock                  func() time.Time
 	AuthorizeControl       func(context.Context, work.Actor, string, string) error
 	PreviewPrivateFinal    func(context.Context, work.RoleBotBinding, previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error)
+	PersonalSourceActivity func(context.Context, string) (func(), error)
 }
 
 func (c *Coordinator) scheduleReconcile(ctx context.Context, attemptID string) error {

@@ -187,6 +187,12 @@ func (t *Tx) RegisterNativeCommand(incarnation string, command agentproto.Comman
 		}
 	}
 	v = NativeCommand{CommandID: command.CommandID, Incarnation: incarnation, Binding: *command.Execution, Kind: command.Kind, RequestRef: operation.RequestRef, SessionID: command.Target.ThreadID}
+	switch command.Kind {
+	case agentproto.CommandPromptSend, agentproto.CommandTurnSteer, agentproto.CommandReviewStart, agentproto.CommandThreadCompactStart, agentproto.CommandThreadShellCommand, agentproto.CommandThreadGoalSet, agentproto.CommandThreadGoalClear, agentproto.CommandRequestRespond, agentproto.CommandMCPOAuthLogin, agentproto.CommandProcessChildRestart:
+		if err = t.AssertPersonalMigrationOpen(command.Execution.ScopeID); err != nil {
+			return v, err
+		}
+	}
 	old, err := t.GetNativeCommand(command.CommandID)
 	if err == nil {
 		oldAck := old.Ack

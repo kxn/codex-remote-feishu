@@ -31,9 +31,16 @@ func (a *App) maybeStartFeishuFactsRefreshLocked(now time.Time) {
 	if !a.feishuFactsState.nextRefresh.IsZero() && now.Before(a.feishuFactsState.nextRefresh) {
 		return
 	}
+	finished, admitted := a.beginApplicationNativeDelivery()
+	if !admitted {
+		return
+	}
 	a.feishuFactsState.refreshInFlight = true
 	a.feishuFactsState.nextRefresh = now.Add(defaultFeishuFactsRefreshEvery)
-	go a.refreshFeishuBotFactsBackground()
+	go func() {
+		defer finished()
+		a.refreshFeishuBotFactsBackground()
+	}()
 }
 
 func (a *App) refreshFeishuBotFactsBackground() {

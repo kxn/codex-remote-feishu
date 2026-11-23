@@ -95,6 +95,9 @@ func (c cardRawComponent) renderCardComponent(_ cardEnvelopeVersion) map[string]
 }
 
 func renderOperationCard(operation Operation, version cardEnvelopeVersion) map[string]any {
+	if operation.frozenCard != nil {
+		return cardkit.CloneMap(operation.frozenCard)
+	}
 	doc := operation.card
 	if doc == nil {
 		doc = rawCardDocumentWithHeader(

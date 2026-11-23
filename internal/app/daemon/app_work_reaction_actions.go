@@ -18,6 +18,13 @@ func (a *App) runTeamPrivateReactionActions(ctx context.Context) error {
 		return err
 	}
 	for _, action := range actions {
+		end, activityErr := a.teamRuntime.beginPersonalSourceActivity(ctx, action.ScopeID)
+		if errors.Is(activityErr, workstore.ErrPersonalMigrationFenced) {
+			continue
+		}
+		if activityErr != nil {
+			return activityErr
+		}
 		var source teamHumanSource
 		eligible := false
 		err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -59,8 +66,10 @@ func (a *App) runTeamPrivateReactionActions(ctx context.Context) error {
 			}
 			return tx.FinishPrivateReactionAction(action.ID, reason)
 		}); e != nil {
+			end()
 			return e
 		}
+		end()
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

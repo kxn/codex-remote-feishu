@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
@@ -97,6 +98,9 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 	if err != nil {
 		return err
 	}
+	// Compare a second resolver result with the original resolver output;
+	// upgrade/review freezing intentionally adds independent host facts later.
+	resolvedSettings := settings
 	if err = h.freezeUpgradeBinary(ctx, &settings); err != nil {
 		return err
 	}
@@ -124,6 +128,11 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 	bundle, err := h.service.BuildInstructions(ctx, wc.ID)
 	if err != nil {
 		return err
+	}
+	if scope.Kind == work.ScopeProject && wc.Purpose != work.PurposeControl && wc.Purpose != work.PurposeReview {
+		if _, err = prepareMemberWorkspace(h.config.Paths.StateDir, scope.ProjectID, wc.RoleID); err != nil {
+			return err
+		}
 	}
 	bundle = composeLaunchInstructions(settings, reviewInstructionBundle(wc, bundle))
 	var rebuilt existingPreparation
@@ -168,7 +177,10 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 	}
 	owner := agentproto.ExecutionBinding{Version: agentproto.WorkerProtocolVersion, ScopeID: scope.ID, ContextID: wc.ID, RoleID: role.ID, WorkerSessionID: worker.ID, SessionGeneration: worker.Generation, ControllerGeneration: worker.ControllerGeneration, BotGeneration: binding.IdentityGeneration}
 	snapshot := agentproto.RuntimeLaunchSnapshot{NativeBinaryPath: settings.NativeBinaryPath, NativeBinaryVersion: settings.NativeBinaryVersion, ReadOnly: settings.ReadOnly, HostID: h.config.HostID, NativeMemoryPolicyVersion: agentproto.NativeMemoryPolicyVersion, Version: agentproto.WorkerProtocolVersion, Owner: owner, CWD: settings.Location.Cwd, InstructionBundle: bundle, ToolEndpoint: h.config.ToolEndpoint, SessionCredentialRef: "env:" + config.WorkSessionTokenEnv, JournalPath: filepath.Join(h.config.Paths.StateDir, "workers", worker.ID, "runtime.db"), CarrierIncarnation: incarnation, InstanceGeneration: worker.InstanceGeneration, ProcessGeneration: worker.ProcessGeneration, LocationGeneration: settings.Location.Generation}
-	record := LaunchRecord{ConnectionIdentity: settings.ConnectionIdentity, PreferencesRevision: settings.PreferencesRevision, WorkerID: worker.ID, ScopeID: scope.ID, Generation: worker.Generation, RoleDescriptionVersion: role.DescriptionVersion, SettingsRevision: role.SettingsRevision, ProfileID: settings.ProfileID, Backend: settings.Backend, Snapshot: snapshot, Overrides: settings.Overrides, CodexResume: settings.CodexResume}
+	if h.config.SharedRelayCredential && settings.NativeHistoryNamespace == "" {
+		return fmt.Errorf("shared team carrier requires frozen native history namespace")
+	}
+	record := LaunchRecord{SharedRelayCredential: h.config.SharedRelayCredential, NativeHistoryNamespace: settings.NativeHistoryNamespace, ConnectionIdentity: settings.ConnectionIdentity, PreferencesRevision: settings.PreferencesRevision, WorkerID: worker.ID, ScopeID: scope.ID, Generation: worker.Generation, RoleDescriptionVersion: role.DescriptionVersion, SettingsRevision: role.SettingsRevision, ProfileID: settings.ProfileID, Backend: settings.Backend, Snapshot: snapshot, Overrides: settings.Overrides, CodexResume: settings.CodexResume}
 	if err = snapshot.Validate(); err != nil {
 		return err
 	}
@@ -250,12 +262,30 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 		_, _, e = tx.PutOperation(op, 0)
 		return e
 	}
-	err = h.config.SettingsAdmission.Within(ctx, role.ID, func() error { return h.store.Within(ctx, reserve) })
+	err = h.config.SettingsAdmission.Within(ctx, role.ID, func() error {
+		if resolver, ok := h.config.Settings.(interface {
+			ResolveLaunchUnderAdmission(context.Context, work.WorkScope, work.Role, work.WorkContext) (LaunchSettings, error)
+		}); ok {
+			fresh, e := resolver.ResolveLaunchUnderAdmission(ctx, scope, role, wc)
+			if e != nil {
+				return e
+			}
+			freshEnv, frozenEnv := fresh.Environment, resolvedSettings.Environment
+			fresh.Environment = nil
+			baseline := resolvedSettings
+			baseline.Environment = nil
+			if !reflect.DeepEqual(fresh, baseline) || !equalLaunchEnvironment(freshEnv, frozenEnv) {
+				return workstore.ErrConflict
+			}
+		}
+		return h.store.Within(ctx, reserve)
+	})
 	if err != nil {
 		return err
 	}
 	carrier := workstore.CarrierRegistration{Incarnation: incarnation, OriginInstanceID: instanceID, Owner: owner, Backend: worker.Backend, InstanceGeneration: worker.InstanceGeneration, ProcessGeneration: worker.ProcessGeneration, LocationGeneration: worker.LocationGeneration}
-	if err = h.config.Registry.RegisterCarrier(ctx, carrier); err != nil {
+	err = h.registerLaunchCarrier(ctx, carrier)
+	if err != nil {
 		return err
 	}
 	token, err := h.signer.Issue(workauth.Claims{Purpose: "worker", RoleID: role.ID, BotGeneration: binding.IdentityGeneration, ScopeID: scope.ID, ContextID: wc.ID, WorkerID: worker.ID, SessionGeneration: worker.Generation, ControllerGeneration: worker.ControllerGeneration}, 30*24*time.Hour)

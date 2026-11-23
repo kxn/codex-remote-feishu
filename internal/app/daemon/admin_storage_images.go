@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/privatestaging"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -55,7 +57,11 @@ type imageStagingScan struct {
 
 func (a *App) handleImageStagingStatus(w http.ResponseWriter, _ *http.Request) {
 	rootDir := a.imageStagingRootDir()
-	activeRefs := a.imageStagingActiveRefs()
+	activeRefs, err := a.imageStagingActiveRefs()
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, apiError{Code: "image_staging_owner_unavailable", Message: "Cannot safely inspect active image ownership", Details: err.Error()})
+		return
+	}
 	scan, err := scanImageStaging(rootDir, activeRefs)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
@@ -102,7 +108,11 @@ func (a *App) handleImageStagingCleanup(w http.ResponseWriter, r *http.Request) 
 	}
 
 	rootDir := a.imageStagingRootDir()
-	activeRefs := a.imageStagingActiveRefs()
+	activeRefs, err := a.imageStagingActiveRefs()
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, apiError{Code: "image_staging_owner_unavailable", Message: "Cannot safely inspect active image ownership", Details: err.Error()})
+		return
+	}
 	scan, err := scanImageStaging(rootDir, activeRefs)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
@@ -161,12 +171,22 @@ func (a *App) imageStagingRootDir() string {
 	return filepath.Join(stateDir, "image-staging")
 }
 
-func (a *App) imageStagingActiveRefs() map[string]struct{} {
+func (a *App) imageStagingActiveRefs() (map[string]struct{}, error) {
+	if a.applications != nil && a.applications.processor != nil {
+		observed, err := a.applications.processor.ReadRuntimeStatus(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		return imageStagingRefsForSurfaces(observed.Surfaces), nil
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return imageStagingRefsForSurfaces(a.service.Surfaces()), nil
+}
 
+func imageStagingRefsForSurfaces(surfaces []*state.SurfaceConsoleRecord) map[string]struct{} {
 	active := map[string]struct{}{}
-	for _, surfaceRecord := range a.service.Surfaces() {
+	for _, surfaceRecord := range surfaces {
 		if surfaceRecord == nil {
 			continue
 		}
@@ -216,6 +236,9 @@ func scanImageStaging(rootDir string, activeRefs map[string]struct{}) (imageStag
 		if err != nil {
 			return err
 		}
+		if d != nil && d.IsDir() && d.Name() == privatestaging.DirectoryName {
+			return filepath.SkipDir
+		}
 		if d == nil || d.IsDir() {
 			return nil
 		}
@@ -263,6 +286,9 @@ func pruneEmptyDirectories(rootDir string) error {
 			return err
 		}
 		if d != nil && d.IsDir() {
+			if d.Name() == privatestaging.DirectoryName {
+				return filepath.SkipDir
+			}
 			dirs = append(dirs, path)
 		}
 		return nil

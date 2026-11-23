@@ -69,10 +69,12 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 		err := cmd.Wait()
 		if scope != nil {
 			scope.MarkWaitObserved()
-			a.work.inspection.mu.Lock()
-			a.work.inspection.dirty = true
-			a.work.inspection.mu.Unlock()
-			_ = a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner)
+			if inspection := a.inspectionState(); inspection != nil {
+				inspection.mu.Lock()
+				inspection.dirty = true
+				inspection.mu.Unlock()
+				_ = a.persistInspection()
+			}
 		}
 		waitErr <- err
 	}()
@@ -92,6 +94,16 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 
 func (a *App) buildOpenCodeChildLaunch() ([]string, []string, error) {
 	args := openCodeChildArgs(a.config.Args, a.config.WorkspaceRoot)
+	// The v2 ACP process obtains its directory from process cwd and the
+	// session request. Do not add our legacy implicit --cwd flag in private
+	// mode; some v2 binaries reject it before the version handshake.
+	if a.privateNative != nil {
+		match, ok := appserverargs.Find(a.config.Args)
+		explicit := ok && hasOpenCodeCWDArg(a.config.Args[match.Index+1:])
+		if !explicit && len(args) >= 2 && args[len(args)-2] == "--cwd" {
+			args = args[:len(args)-2]
+		}
+	}
 	env := config.FilterEnvWithoutProxy(append([]string{}, os.Environ()...))
 	env = append(env, a.config.ChildProxyEnv...)
 	env, err := a.applyWorkOpenCodeEnv(a.applyWorkChildEnv(env))
@@ -176,6 +188,11 @@ func (a *App) bootstrapOpenCodeACP(translator *acpadapter.Translator, childStdin
 				return nil, err
 			}
 			if matched {
+				if a.privateNative != nil {
+					if err := verifyPrivateOpenCodeBootstrap(line); err != nil {
+						return nil, err
+					}
+				}
 				a.markWorkBootstrap(frame, line)
 				if _, err := translator.ObserveServer(line); err != nil {
 					return nil, err

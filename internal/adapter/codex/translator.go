@@ -126,6 +126,7 @@ type codexObservedThread struct {
 }
 
 type suppressedResponseContext struct {
+	PrivateNative      bool
 	ShellOperationID   string
 	ManagedMaintenance bool
 	ExpectedTurnID     string

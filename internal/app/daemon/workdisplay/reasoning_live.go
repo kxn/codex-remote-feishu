@@ -2,6 +2,7 @@ package workdisplay
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
@@ -18,6 +19,11 @@ func FlushPublicReasoning(ctx context.Context, store *workstore.Store, now time.
 			return err
 		}
 		for _, display := range displays {
+			if err := tx.AssertPersonalMigrationOpen(display.Binding.ScopeID); errors.Is(err, workstore.ErrPersonalMigrationFenced) {
+				continue
+			} else if err != nil {
+				return err
+			}
 			if !display.Progress.LastEmittedAt.IsZero() && now.Before(display.Progress.LastEmittedAt.Add(time.Second)) {
 				continue
 			}

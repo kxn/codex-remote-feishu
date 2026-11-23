@@ -243,6 +243,11 @@ func (t *Tx) putTask(v work.Task, expected int64) error {
 	if err := t.record("tasks", v.ID, v.Revision, expected, v); err != nil {
 		return err
 	}
+	if v.State == work.TaskCancelled {
+		if err := t.cancelPendingTaskInputs(v); err != nil {
+			return err
+		}
+	}
 	if expected > 0 {
 		if err := t.refreshTaskParticipation(v); err != nil {
 			return err

@@ -28,7 +28,12 @@ func (c *Coordinator) validateTransport(tx *workstore.Tx, carrier workstore.Carr
 	return fmt.Errorf("event transport does not belong to registered worker history")
 }
 
-func (c *Coordinator) HandleAck(ctx context.Context, currentTransportInstance string, ack agentproto.CommandAck) error {
+type CommittedAck struct {
+	coordinator *Coordinator
+	attemptID   string
+}
+
+func (c *Coordinator) CommitAck(ctx context.Context, currentTransportInstance string, ack agentproto.CommandAck) (*CommittedAck, error) {
 	var attemptID string
 	err := c.store.Within(ctx, func(tx *workstore.Tx) error {
 		command, err := tx.GetNativeCommand(ack.CommandID)
@@ -88,10 +93,23 @@ func (c *Coordinator) HandleAck(ctx context.Context, currentTransportInstance st
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if attemptID != "" {
-		return c.scheduleReconcile(ctx, attemptID)
+	return &CommittedAck{coordinator: c, attemptID: attemptID}, nil
+}
+func (c *Coordinator) PublishCommittedAck(ctx context.Context, ack *CommittedAck) error {
+	if ack == nil || ack.coordinator != c {
+		return fmt.Errorf("ack commit token required")
+	}
+	if ack.attemptID != "" {
+		return c.scheduleReconcile(ctx, ack.attemptID)
 	}
 	return nil
+}
+func (c *Coordinator) HandleAck(ctx context.Context, instance string, ack agentproto.CommandAck) error {
+	committed, err := c.CommitAck(ctx, instance, ack)
+	if err != nil {
+		return err
+	}
+	return c.PublishCommittedAck(ctx, committed)
 }

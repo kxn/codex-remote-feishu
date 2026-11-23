@@ -46,14 +46,20 @@ func (a *App) configureCodexOAuthProfileStateLocked(stateDir string) {
 }
 
 func (a *App) requestCodexOAuthProbe(ctx context.Context, forceAuthGeneration bool) bool {
+	finished, admitted := a.beginApplicationNativeDelivery()
+	if !admitted {
+		return false
+	}
 	a.mu.Lock()
 	task, ok := a.beginCodexOAuthProbeLocked(forceAuthGeneration)
 	a.mu.Unlock()
 	if !ok {
+		finished()
 		return false
 	}
 
 	go func() {
+		defer finished()
 		probeCtx, cancel := context.WithTimeout(ctx, codexOAuthProbeTimeout)
 		defer cancel()
 		_ = a.runCodexOAuthProbeTask(probeCtx, task)

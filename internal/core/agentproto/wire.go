@@ -62,16 +62,18 @@ type InstanceHello struct {
 }
 
 type Hello struct {
-	CarrierProcess                   *RuntimeProcessIdentity `json:"carrierProcess,omitempty"`
-	RuntimeInspectionProtocolVersion int                     `json:"runtimeInspectionProtocolVersion,omitempty"`
-	JournalProtocolVersion           int                     `json:"journalProtocolVersion,omitempty"`
-	CarrierIncarnation               string                  `json:"carrierIncarnation,omitempty"`
-	WorkerProtocolVersion            int                     `json:"workerProtocolVersion,omitempty"`
-	Protocol                         string                  `json:"protocol"`
-	Probe                            bool                    `json:"probe,omitempty"`
-	Instance                         InstanceHello           `json:"instance"`
-	Capabilities                     Capabilities            `json:"capabilities,omitempty"`
-	CapabilitiesDeclared             bool                    `json:"capabilitiesDeclared,omitempty"`
+	PrivateNativeInspectionProtocolVersion int                     `json:"privateNativeInspectionProtocolVersion,omitempty"`
+	PrivateNativeProtocolVersion           int                     `json:"privateNativeProtocolVersion,omitempty"`
+	CarrierProcess                         *RuntimeProcessIdentity `json:"carrierProcess,omitempty"`
+	RuntimeInspectionProtocolVersion       int                     `json:"runtimeInspectionProtocolVersion,omitempty"`
+	JournalProtocolVersion                 int                     `json:"journalProtocolVersion,omitempty"`
+	CarrierIncarnation                     string                  `json:"carrierIncarnation,omitempty"`
+	WorkerProtocolVersion                  int                     `json:"workerProtocolVersion,omitempty"`
+	Protocol                               string                  `json:"protocol"`
+	Probe                                  bool                    `json:"probe,omitempty"`
+	Instance                               InstanceHello           `json:"instance"`
+	Capabilities                           Capabilities            `json:"capabilities,omitempty"`
+	CapabilitiesDeclared                   bool                    `json:"capabilitiesDeclared,omitempty"`
 }
 
 type Welcome struct {

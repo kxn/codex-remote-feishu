@@ -12,7 +12,28 @@ import (
 )
 
 func (a *App) managedInspectionEnabled() bool {
-	return a.work != nil && a.work.journal != nil && a.work.snapshot.InstanceGeneration > 0 && a.work.snapshot.ProcessGeneration > 0 && a.work.snapshot.LocationGeneration >= 0
+	if a.work != nil {
+		return a.work.journal != nil && a.work.snapshot.InstanceGeneration > 0 && a.work.snapshot.ProcessGeneration > 0 && a.work.snapshot.LocationGeneration >= 0
+	}
+	return a.privateNative != nil && a.privateNative.journal != nil && a.privateNative.snapshot.Owner.InstanceGeneration > 0 && a.privateNative.snapshot.Owner.ProcessGeneration > 0
+}
+func (a *App) inspectionState() *workInspectionState {
+	if a.work != nil {
+		return a.work.inspection
+	}
+	if a.privateNative != nil {
+		return a.privateNative.inspection
+	}
+	return nil
+}
+func (a *App) persistInspection() error {
+	if a.work != nil {
+		return a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner)
+	}
+	if a.privateNative != nil {
+		return a.privateNative.inspection.persistPrivate(a.privateNative.journal, a.privateNative.snapshot.Owner)
+	}
+	return nil
 }
 func (a *App) prepareWorkProcess(cmd *exec.Cmd) {
 	if a.managedInspectionEnabled() {
@@ -23,36 +44,47 @@ func (a *App) bindWorkProcess(cmd *exec.Cmd) (*hostinventory.Scope, error) {
 	if !a.managedInspectionEnabled() {
 		return nil, nil
 	}
+	s := a.inspectionState()
 	scope, err := hostinventory.Bind(cmd)
 	if err != nil {
-		a.work.inspection.mu.Lock()
-		a.work.inspection.startupProcessUntracked = true
-		a.work.inspection.mu.Unlock()
+		s.mu.Lock()
+		s.startupProcessUntracked = true
+		if a.privateNative != nil {
+			s.uncertainties["startup_process_untracked"] = true
+			s.dirty = true
+		}
+		s.mu.Unlock()
 		return nil, err
 	}
-	a.work.inspection.mu.Lock()
-	a.work.inspection.scopes = append(a.work.inspection.scopes, scope)
-	a.work.inspection.dirty = true
-	a.work.inspection.nativeReady = false
+	s.mu.Lock()
+	s.scopes = append(s.scopes, scope)
+	s.dirty = true
+	s.nativeReady = false
 	identity := scope.Inspect()
-	a.work.inspection.scopeID = fmt.Sprintf("%d:%s", identity.RootPID, identity.RootIdentity)
-	a.work.inspection.cliSession = ""
-	a.work.inspection.mu.Unlock()
-	if err := a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner); err != nil {
+	s.scopeID = fmt.Sprintf("%d:%s", identity.RootPID, identity.RootIdentity)
+	s.cliSession = ""
+	s.mu.Unlock()
+	if err = a.persistInspection(); err != nil {
 		return scope, err
 	}
 	return scope, nil
 }
 
 func (a *App) carrierProcessIdentity() *agentproto.RuntimeProcessIdentity {
-	if a.work == nil {
+	if a.work == nil && a.privateNative == nil {
 		return nil
 	}
 	identity, err := hostinventory.CaptureProcess(os.Getpid())
 	if err != nil {
 		return nil
 	}
-	return &agentproto.RuntimeProcessIdentity{HostID: a.work.snapshot.HostID, Platform: identity.Platform, PID: identity.PID, StartIdentity: identity.StartIdentity}
+	hostID := ""
+	if a.work != nil {
+		hostID = a.work.snapshot.HostID
+	} else {
+		hostID = a.privateNative.snapshot.Owner.HostID
+	}
+	return &agentproto.RuntimeProcessIdentity{HostID: hostID, Platform: identity.Platform, PID: identity.PID, StartIdentity: identity.StartIdentity}
 }
 
 func abortNativeStartup(cmd *exec.Cmd, cancel context.CancelFunc, scope *hostinventory.Scope, pipes ...io.Closer) {

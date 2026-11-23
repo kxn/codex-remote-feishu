@@ -67,6 +67,11 @@ func ResolveFeishuFrontstageActionContract(action Action) FeishuFrontstageAction
 		contract.RejectsUnstampedCallback = true
 	}
 
+	if action.Kind == ActionPrivateProject {
+		contract.RejectsUnstampedCallback = true
+		contract.CurrentCardMode = FeishuFrontstageCurrentCardInlineView
+		return contract
+	}
 	switch {
 	case inlineReplaceableFeishuUIIntentAction(action):
 		contract.CurrentCardMode = FeishuFrontstageCurrentCardInlineView

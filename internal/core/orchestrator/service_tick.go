@@ -38,11 +38,42 @@ func shouldMaterializeFinalTurnOutput(event agentproto.Event, finalText string) 
 // Keep it limited to in-memory expiry/backoff transitions that must still fire
 // when no new ingress event arrives.
 func (s *Service) Tick(now time.Time) []eventcontract.Event {
+	return s.tickSurface(now, "")
+}
+
+// TickPrivateSurface applies only the requested private owner's timers.
+func (s *Service) TickPrivateSurface(surfaceID string, now time.Time) []eventcontract.Event {
+	if !s.config.PrivateApplication || s.root.Surfaces[surfaceID] == nil {
+		return nil
+	}
+	if _, held := s.privateRecoveryHolds[surfaceID]; held {
+		return nil
+	}
+	events := s.tickSurface(now, surfaceID)
+	// A proof-released migration can contain queued inputs with no active turn.
+	// The old queue dispatcher supplies all normal online, busy, and policy
+	// gates; the host calls this only under the attached carrier's lease.
+	if s.privateMigrationReleased[surfaceID] {
+		surface := s.root.Surfaces[surfaceID]
+		if surface.ActiveQueueItemID == "" && len(surface.QueuedQueueItemIDs) != 0 {
+			events = append(events, s.dispatchNext(surface)...)
+		}
+		if surface.ActiveQueueItemID == "" && len(surface.QueuedQueueItemIDs) == 0 {
+			delete(s.privateMigrationReleased, surfaceID)
+		}
+	}
+	return s.filterEventsForSurfaceVisibility(events)
+}
+
+func (s *Service) tickSurface(now time.Time, only string) []eventcontract.Event {
 	if now.IsZero() {
 		now = s.now()
 	}
 	var events []eventcontract.Event
 	for surfaceID, until := range s.handoffUntil {
+		if only != "" && surfaceID != only {
+			continue
+		}
 		if now.Before(until) {
 			continue
 		}
@@ -66,6 +97,9 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		events = append(events, s.dispatchNext(surface)...)
 	}
 	for surfaceID, until := range s.pausedUntil {
+		if only != "" && surfaceID != only {
+			continue
+		}
 		if now.Before(until) {
 			continue
 		}
@@ -89,6 +123,9 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		events = append(events, s.dispatchNext(surface)...)
 	}
 	for surfaceID, until := range s.abandoningUntil {
+		if only != "" && surfaceID != only {
+			continue
+		}
 		if now.Before(until) {
 			continue
 		}
@@ -110,6 +147,12 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		})
 	}
 	for _, surface := range s.root.Surfaces {
+		if only != "" && surface.SurfaceSessionID != only {
+			continue
+		}
+		if _, held := s.privateRecoveryHolds[surface.SurfaceSessionID]; held {
+			continue
+		}
 		pruneAsyncUserInputs(s.surfaceUIRuntimeState(surface), now)
 		if pending := surface.PendingHeadless; pending != nil && !pending.ExpiresAt.IsZero() && !now.Before(pending.ExpiresAt) {
 			events = append(events, s.expirePendingHeadless(surface, pending)...)
@@ -130,4 +173,63 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		events = append(events, s.tickExecCommandProgressReasoning(surface, now)...)
 	}
 	return s.filterEventsForSurfaceVisibility(events)
+}
+
+// PrivateTickDue conservatively checks every source visited by Tick. It is a
+// scheduling hint only: callers still execute Tick transactionally, and should
+// check again on the next scheduling interval when this returns false.
+func (s *Service) PrivateTickDue(surfaceID string, now time.Time) bool {
+	if !s.config.PrivateApplication {
+		return false
+	}
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil {
+		return false
+	}
+	if _, held := s.privateRecoveryHolds[surfaceID]; held {
+		return false
+	}
+	for _, deadlines := range []map[string]time.Time{s.handoffUntil, s.pausedUntil, s.abandoningUntil} {
+		if until, ok := deadlines[surfaceID]; ok && !now.Before(until) {
+			return true
+		}
+	}
+	if pending := surface.PendingHeadless; pending != nil && !pending.ExpiresAt.IsZero() && !now.Before(pending.ExpiresAt) {
+		return true
+	}
+	if requestCaptureExpired(now, surface.ActiveRequestCapture) {
+		return true
+	}
+	if surface.AutoWhip.Enabled && surface.AutoWhip.PendingReason != "" && !surface.AutoWhip.PendingDueAt.IsZero() && !now.Before(surface.AutoWhip.PendingDueAt) {
+		return true
+	}
+	// The old auto-continue path may retire a mismatched route even before its
+	// deadline, so retain a conservative positive for a scheduled episode.
+	if episode := activeAutoContinueEpisode(surface); episode != nil && surface.AutoContinue.Enabled && episode.State == state.AutoContinueEpisodeScheduled {
+		return true
+	}
+	if surfaceShowsVisibleReasoning(surface.Verbosity) && execCommandProgressReasoningDirty(surface.ActiveExecProgress) && s.execCommandProgressReasoningFlushDue(surface.ActiveExecProgress, now) {
+		return true
+	}
+	if s.privateMigrationReleased[surfaceID] && surface.ActiveQueueItemID == "" {
+		return true
+	}
+	if ui := s.surfaceUIRuntime[surfaceID]; ui != nil {
+		if len(ui.AsyncUserInputs) > asyncUserInputMaxRecords {
+			return true
+		}
+		drafts := 0
+		for _, record := range ui.AsyncUserInputs {
+			if record == nil || !now.Before(record.CreatedAt.Add(asyncUserInputSeenTTL)) || (!record.Submitted && !now.Before(record.CreatedAt.Add(asyncUserInputDraftTTL))) {
+				return true
+			}
+			if !record.Submitted {
+				drafts++
+			}
+		}
+		if drafts > asyncUserInputMaxDrafts {
+			return true
+		}
+	}
+	return false
 }

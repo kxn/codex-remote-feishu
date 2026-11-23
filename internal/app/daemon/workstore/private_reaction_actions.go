@@ -286,7 +286,7 @@ func (t *Tx) ListPreparedPrivateReactionActions(limit int) ([]PrivateReactionAct
 	if err := t.resolveDeferredPrivateReactionSources(limit); err != nil {
 		return nil, err
 	}
-	rows, err := t.tx.QueryContext(t.ctx, "SELECT payload FROM team_private_reaction_actions WHERE state='prepared' ORDER BY id LIMIT ?", limit)
+	rows, err := t.tx.QueryContext(t.ctx, "SELECT a.payload FROM team_private_reaction_actions a WHERE a.state='prepared' AND NOT EXISTS(SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=json_extract(a.payload,'$.scope_id')) ORDER BY a.id LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}

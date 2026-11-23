@@ -147,6 +147,11 @@ func (s *Service) projectForm(ctx context.Context, id string) error {
 		if err != nil {
 			return err
 		}
+		if err = tx.AssertPersonalMigrationOpen(request.Binding.ScopeID); errors.Is(err, workstore.ErrPersonalMigrationFenced) {
+			return nil
+		} else if err != nil {
+			return err
+		}
 		if ended, e := tx.CloseNativeRequestForTerminalTurn(id, time.Now().UTC()); e != nil {
 			return e
 		} else if ended {

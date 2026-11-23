@@ -20,16 +20,16 @@ import (
 // Images remain typed inputs. Other files are referenced by actual local path;
 // their bytes are not silently interpreted as instructions or memory.
 func (s *Service) BuildWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string) ([]agentproto.Input, error) {
-	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, false, "")
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, false, false, "")
 }
 
 // BuildPlannedWorkPrompt prepares a pure candidate before ClaimAttempt exists.
 // It never persists an attempt or consumes input. The engine rechecks all input
 // revisions under the actual claim transaction before sending any prompt.
 func (s *Service) BuildPlannedWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string) ([]agentproto.Input, error) {
-	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, true, false, "")
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, true, false, false, "")
 }
-func (s *Service) buildWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string, planned, steering bool, replyMessageID string) ([]agentproto.Input, error) {
+func (s *Service) buildWorkPrompt(ctx context.Context, attempt work.ExecutionAttempt, attachmentRoot string, planned, steering, allowUnbound bool, replyMessageID string) ([]agentproto.Input, error) {
 	text, err := s.buildWorkInput(ctx, attempt, replyMessageID)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func (s *Service) buildWorkPrompt(ctx context.Context, attempt work.ExecutionAtt
 			if err != nil {
 				return err
 			}
-			if inbox.ScopeID != saved.ScopeID || inbox.RecipientRoleID != worker.RoleID || inbox.TaskID != saved.TaskID || inbox.RecipientContextID != "" && inbox.RecipientContextID != saved.ContextID || (planned || steering) && (inbox.State != work.InboxPending || inbox.ClaimedAttemptID != "" || inbox.ContentState == work.InputContentPending || inbox.AvailableAt.After(s.now())) || !planned && !steering && inbox.ClaimedAttemptID != saved.ID || steering && inbox.RecipientContextID != saved.ContextID {
+			if inbox.ScopeID != saved.ScopeID || inbox.RecipientRoleID != worker.RoleID || inbox.TaskID != saved.TaskID || inbox.RecipientContextID != "" && inbox.RecipientContextID != saved.ContextID || (planned || steering) && (inbox.State != work.InboxPending || inbox.ClaimedAttemptID != "" || inbox.ContentState == work.InputContentPending || inbox.AvailableAt.After(s.now())) || !planned && !steering && inbox.ClaimedAttemptID != saved.ID || steering && inbox.RecipientContextID != saved.ContextID && !(allowUnbound && inbox.RecipientContextID == "") {
 				return workstore.ErrScopeDenied
 			}
 			if inbox.MessageID == "" {
@@ -233,7 +233,7 @@ func (s *Service) BuildSteerWorkPrompt(ctx context.Context, attemptID string, in
 		return nil, err
 	}
 	attempt.InputIDs = append([]string(nil), inputIDs...)
-	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true, "")
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true, false, "")
 }
 
 // BuildPrivateReplySteerPrompt preserves only the reply's own content; quoted
@@ -244,5 +244,16 @@ func (s *Service) BuildPrivateReplySteerPrompt(ctx context.Context, attemptID, i
 		return nil, err
 	}
 	attempt.InputIDs = []string{inputID}
-	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true, messageID)
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true, false, messageID)
+}
+
+// BuildProjectSteerWorkPrompt only prepares bytes; the project admission
+// transaction independently checks the unique destination before claiming.
+func (s *Service) BuildProjectSteerWorkPrompt(ctx context.Context, attemptID, inputID, attachmentRoot string) ([]agentproto.Input, error) {
+	var attempt work.ExecutionAttempt
+	if err := s.store.Within(ctx, func(tx *workstore.Tx) error { var e error; attempt, e = tx.GetAttempt(attemptID); return e }); err != nil {
+		return nil, err
+	}
+	attempt.InputIDs = []string{inputID}
+	return s.buildWorkPrompt(ctx, attempt, attachmentRoot, false, true, true, "")
 }

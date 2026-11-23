@@ -113,15 +113,19 @@ func toolDefinitions() []toolDefinition {
 
 func (a *App) requireToolAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if a.legacyWorkRetired() {
-			writeToolError(w, http.StatusGone, toolError{Code: "legacy_tool_service_retired", Message: "The surface-based tool service is retired. Use the team's run-scoped CLI."})
-			return
-		}
 		if !adminauth.IsLoopbackRequest(r) {
 			writeToolError(w, http.StatusForbidden, toolError{
 				Code:    "loopback_required",
 				Message: "tool service only accepts loopback requests",
 			})
+			return
+		}
+		if a.privateTools != nil {
+			a.authenticatePrivateTool(w, r, next)
+			return
+		}
+		if a.legacyWorkRetired() {
+			writeToolError(w, http.StatusGone, toolError{Code: "legacy_tool_service_retired", Message: "The surface-based tool service is retired. Use the team's run-scoped CLI."})
 			return
 		}
 		expected := strings.TrimSpace(a.toolRuntime.BearerToken)
@@ -204,9 +208,7 @@ func (a *App) sendIMFileTool(ctx context.Context, arguments map[string]any) (map
 		}
 	}
 
-	a.mu.Lock()
-	resolved, apiErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
-	a.mu.Unlock()
+	resolved, apiErr := a.resolveToolCallerSurfaceContext(ctx)
 	if apiErr != nil {
 		return nil, apiErr
 	}
@@ -363,9 +365,7 @@ func (a *App) sendIMMediaTool(ctx context.Context, arguments map[string]any, spe
 		return imMediaSendResult{}, apiErr
 	}
 
-	a.mu.Lock()
-	resolved, apiErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
-	a.mu.Unlock()
+	resolved, apiErr := a.resolveToolCallerSurfaceContext(ctx)
 	if apiErr != nil {
 		return imMediaSendResult{}, apiErr
 	}

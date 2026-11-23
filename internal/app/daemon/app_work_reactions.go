@@ -9,6 +9,6 @@ func (a *App) runTeamPrivateReactions(ctx context.Context) error {
 	if err := a.runTeamPrivateReactionActions(ctx); err != nil {
 		return err
 	}
-	service := workreaction.Service{Store: a.teamRuntime.store, Resolver: teamPublisherResolver{directory: teamDirectory{app: a, store: a.teamRuntime.store}}}
+	service := workreaction.Service{Store: a.teamRuntime.store, Resolver: teamPublisherResolver{directory: teamDirectory{app: a, store: a.teamRuntime.store}}, ActivityGuard: a.teamRuntime.beginPersonalSourceActivity}
 	return service.RunOnce(ctx, 16)
 }

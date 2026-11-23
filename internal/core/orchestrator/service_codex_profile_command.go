@@ -84,6 +84,16 @@ func (s *Service) handleCodexProfileCommand(surface *state.SurfaceConsoleRecord,
 		})
 	}
 	if target.ID == currentProfileID {
+		if s.privateSettingsPreview {
+			s.capturePrivateSettingsProposal(surface, func(record *state.BotCapabilitySettingsRecord) {
+				record.CodexProfileID = target.ID
+				if targetFixedModel {
+					record.PromptOverride.Model = ""
+					record.PromptOverride.ReasoningEffort = ""
+				}
+			})
+			return nil
+		}
 		applySelection()
 		text := fmt.Sprintf("当前已在使用 Codex Profile：%s。", targetLabel)
 		if commandCardOwnsInlineResult(action) {
@@ -120,6 +130,16 @@ func (s *Service) handleCodexProfileCommand(surface *state.SurfaceConsoleRecord,
 			})
 		}
 		return notice(surface, "codex_profile_busy", text)
+	}
+	if s.privateSettingsPreview {
+		s.capturePrivateSettingsProposal(surface, func(record *state.BotCapabilitySettingsRecord) {
+			record.CodexProfileID = target.ID
+			if targetFixedModel {
+				record.PromptOverride.Model = ""
+				record.PromptOverride.ReasoningEffort = ""
+			}
+		})
+		return nil
 	}
 
 	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendCodex)

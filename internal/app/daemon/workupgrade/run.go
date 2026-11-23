@@ -40,6 +40,11 @@ func (c *Coordinator) Run(ctx context.Context, limit int) error {
 }
 func (c *Coordinator) advance(ctx context.Context, v Record) error {
 	if v.Stage == "draining" {
+		if c.config.Maintenance != nil {
+			if err := c.config.Maintenance.BeginAndDrainPrivate(ctx, v); err != nil {
+				return err
+			}
+		}
 		if err := c.assertFrozenPool(ctx, v); err != nil {
 			return err
 		}
@@ -55,6 +60,11 @@ func (c *Coordinator) advance(ctx context.Context, v Record) error {
 				return err
 			}
 			if err := c.verifyExited(ctx, worker.CarrierIncarnation); err != nil {
+				return err
+			}
+		}
+		if c.config.Maintenance != nil {
+			if err := c.config.Maintenance.BeforeInstall(ctx, v); err != nil {
 				return err
 			}
 		}
@@ -109,6 +119,11 @@ func (c *Coordinator) advance(ctx context.Context, v Record) error {
 		if err != nil {
 			return err
 		}
+		if c.config.Maintenance != nil {
+			if err = c.config.Maintenance.AfterVerified(ctx, v); err != nil {
+				return err
+			}
+		}
 		if err = c.mutate(ctx, v.ID, func(r *Record) error {
 			if r.Stage != "verifying" {
 				return workstore.ErrConflict
@@ -125,6 +140,11 @@ func (c *Coordinator) advance(ctx context.Context, v Record) error {
 	if v.Stage == "restarting" {
 		for _, worker := range v.FrozenWorkers {
 			if err := c.config.Restart(ctx, v.ID, worker.ID); err != nil {
+				return err
+			}
+		}
+		if c.config.Maintenance != nil {
+			if err := c.config.Maintenance.AfterTeamRestart(ctx, v); err != nil {
 				return err
 			}
 		}
@@ -301,4 +321,50 @@ func (c *Coordinator) assertFrozenPool(ctx context.Context, v Record) error {
 		}
 		return nil
 	})
+}
+
+// VerifyFrozenPoolExited rechecks the durable team inventory and actual local
+// process evidence for a shared backend maintenance fence. A transport ACK or
+// an absent registry entry is never treated as process exit.
+func (c *Coordinator) VerifyFrozenPoolExited(ctx context.Context, v Record) error {
+	if err := c.assertFrozenPool(ctx, v); err != nil {
+		return err
+	}
+	for _, worker := range v.FrozenWorkers {
+		unsent, err := c.unsent(ctx, worker)
+		if err != nil {
+			return err
+		}
+		if !unsent {
+			if err = c.verifyExited(ctx, worker.CarrierIncarnation); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// VerifyInstalledVersion re-reads both installer receipts and the actual
+// installation. It cannot turn a started-but-unknown installer into success.
+func (c *Coordinator) VerifyInstalledVersion(ctx context.Context, id, target string) error {
+	v, err := c.Status(ctx, id)
+	if err != nil {
+		return err
+	}
+	if v.TargetVersion != target || v.Stage != "verifying" {
+		return workstore.ErrConflict
+	}
+	for _, step := range []workstore.NativeUpgradeInstall{v.Global, v.Private} {
+		if step.RecoveredVerified {
+			continue
+		}
+		if step.Result == nil || step.Result.ExitCode != 0 || !step.Result.Scope.Complete || step.Result.Scope.RootAlive || len(step.Result.Scope.ProcessIDs) != 0 {
+			return fmt.Errorf("installer completion is not proven")
+		}
+	}
+	actual := c.config.Inspect(ctx, codexupgrade.InspectOptions{ConfiguredBinary: v.Installation.ConfiguredBinary, NPMCommand: v.Installation.NPMCommand})
+	if !actual.Upgradeable() || actual.PackageVersion != target || actual.PackageRoot != v.Installation.PackageRoot {
+		return fmt.Errorf("installed Codex version or package path does not match")
+	}
+	return nil
 }

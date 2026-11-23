@@ -70,6 +70,7 @@ var commands = []Command{
 
 func List() []Command {
 	all := append(append([]Command{}, commands...), extendedCommands()...)
+	all = append(all, memberWorkspaceCommands()...)
 	all = append(all, resourceWriteCommands()...)
 	all = append(all, lifecycleCommands()...)
 	all = append(all, projectLifecycleCommands()...)

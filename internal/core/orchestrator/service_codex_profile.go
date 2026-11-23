@@ -62,12 +62,22 @@ func (s *Service) CodexProfiles() []state.CodexProfileSummary {
 }
 
 func (s *Service) CodexProfileContextEvidence(profileID string, preferenceRevision uint64) (int64, int64, string, bool) {
+	if s == nil || s.root == nil {
+		return 0, 0, "", false
+	}
+	return CodexProfileContextEvidence(s.Instances(), profileID, preferenceRevision)
+}
+
+// CodexProfileContextEvidence derives the displayed observation from detached
+// instance records. Callers that share a Service must obtain those records
+// under its owner lock before using this helper.
+func CodexProfileContextEvidence(instances []*state.InstanceRecord, profileID string, preferenceRevision uint64) (int64, int64, string, bool) {
 	profileID = strings.TrimSpace(profileID)
-	if s == nil || s.root == nil || profileID == "" {
+	if profileID == "" {
 		return 0, 0, "", false
 	}
 	var selected *state.ThreadRecord
-	for _, inst := range s.root.Instances {
+	for _, inst := range instances {
 		if inst == nil {
 			continue
 		}

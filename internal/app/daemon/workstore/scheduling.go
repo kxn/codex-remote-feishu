@@ -36,7 +36,7 @@ func (t *Tx) ActiveSlotCount() (int, error) {
 	return count, err
 }
 func (t *Tx) ListSchedulingTargets() ([]SchedulingTarget, error) {
-	rows, err := t.tx.QueryContext(t.ctx, "SELECT DISTINCT scope_id,role_id FROM inbox WHERE state='pending' ORDER BY scope_id,role_id")
+	rows, err := t.tx.QueryContext(t.ctx, "SELECT DISTINCT scope_id,role_id FROM inbox WHERE state='pending' AND NOT EXISTS (SELECT 1 FROM personal_migration_fences f WHERE f.scope_id=inbox.scope_id) ORDER BY scope_id,role_id")
 	if err != nil {
 		return nil, err
 	}

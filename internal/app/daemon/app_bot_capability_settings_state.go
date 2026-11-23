@@ -14,6 +14,10 @@ func (a *App) configureBotCapabilitySettingsStateLocked(stateDir string) {
 }
 
 func (a *App) materializeBotCapabilitySettingsStateLocked() {
+	if a.privateServiceOwned.Load() {
+		a.privateSettingsRevision.Add(1)
+		return
+	}
 	if a.botCapabilitySettingsState.store == nil {
 		return
 	}

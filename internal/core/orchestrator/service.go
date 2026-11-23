@@ -15,6 +15,7 @@ import (
 )
 
 type Config struct {
+	PrivateApplication          bool
 	TurnHandoffWait             time.Duration
 	HeadlessLaunchWait          time.Duration
 	LocalPauseMaxWait           time.Duration
@@ -42,39 +43,46 @@ type PrimaryBotPermissionDecision struct {
 }
 
 type Service struct {
-	now                       func() time.Time
-	config                    Config
-	root                      *state.Root
-	renderer                  *renderer.Planner
-	nextQueueItemID           int
-	nextImageID               int
-	nextFileID                int
-	nextRequestCommandID      int
-	nextHeadlessID            int
-	nextAutoContinueEpisodeID int
-	nextShellBindingSequence  int
-	handoffUntil              map[string]time.Time
-	pausedUntil               map[string]time.Time
-	abandoningUntil           map[string]time.Time
-	itemBuffers               map[string]*itemBuffer
-	threadRefreshes           map[string]bool
-	instanceClaims            map[string]*instanceClaimRecord
-	workspaceClaims           map[string]*workspaceClaimRecord
-	threadClaims              map[string]*threadClaimRecord
-	surfaceUIRuntime          map[string]*surfaceUIRuntimeRecord
-	turns                     *serviceTurnRuntime
-	pickers                   *servicePickerRuntime
-	catalog                   *serviceCatalogRuntime
-	progress                  *serviceProgressRuntime
-	activeNoticeCooldowns     map[string]time.Time
-	goalInterlocks            map[string]*GoalInterlockLease
-	goalInterlockByCommand    map[string]string
-	goalProbeByCommand        map[string]string
-	goalGetByCommand          map[string]string
-	goalPauseBackoff          map[string]time.Time
-	goalPauseNoticeAt         map[string]time.Time
-	goalUserCommands          map[string]goalUserCommand
-	pendingGoalFingerprints   map[string]pendingGoalFingerprint
+	privateThreadPolicies             map[string]PrivateThreadPolicy
+	privateSettingsPreview            bool
+	privateSettingsProposal           *state.BotCapabilitySettingsRecord
+	privateWorktreeObservation        *PrivateWorktreeObservation
+	privateWorktreeObservationMissing bool
+	privateRecoveryHolds              map[string]PrivateCheckpoint
+	privateMigrationReleased          map[string]bool
+	now                               func() time.Time
+	config                            Config
+	root                              *state.Root
+	renderer                          *renderer.Planner
+	nextQueueItemID                   int
+	nextImageID                       int
+	nextFileID                        int
+	nextRequestCommandID              int
+	nextHeadlessID                    int
+	nextAutoContinueEpisodeID         int
+	nextShellBindingSequence          int
+	handoffUntil                      map[string]time.Time
+	pausedUntil                       map[string]time.Time
+	abandoningUntil                   map[string]time.Time
+	itemBuffers                       map[string]*itemBuffer
+	threadRefreshes                   map[string]bool
+	instanceClaims                    map[string]*instanceClaimRecord
+	workspaceClaims                   map[string]*workspaceClaimRecord
+	threadClaims                      map[string]*threadClaimRecord
+	surfaceUIRuntime                  map[string]*surfaceUIRuntimeRecord
+	turns                             *serviceTurnRuntime
+	pickers                           *servicePickerRuntime
+	catalog                           *serviceCatalogRuntime
+	progress                          *serviceProgressRuntime
+	activeNoticeCooldowns             map[string]time.Time
+	goalInterlocks                    map[string]*GoalInterlockLease
+	goalInterlockByCommand            map[string]string
+	goalProbeByCommand                map[string]string
+	goalGetByCommand                  map[string]string
+	goalPauseBackoff                  map[string]time.Time
+	goalPauseNoticeAt                 map[string]time.Time
+	goalUserCommands                  map[string]goalUserCommand
+	pendingGoalFingerprints           map[string]pendingGoalFingerprint
 }
 
 type itemBuffer struct {
@@ -247,20 +255,22 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		planner = renderer.NewPlanner()
 	}
 	svc := &Service{
-		now:                   now,
-		config:                cfg,
-		root:                  state.NewRoot(),
-		renderer:              planner,
-		handoffUntil:          map[string]time.Time{},
-		pausedUntil:           map[string]time.Time{},
-		abandoningUntil:       map[string]time.Time{},
-		itemBuffers:           map[string]*itemBuffer{},
-		threadRefreshes:       map[string]bool{},
-		instanceClaims:        map[string]*instanceClaimRecord{},
-		workspaceClaims:       map[string]*workspaceClaimRecord{},
-		threadClaims:          map[string]*threadClaimRecord{},
-		surfaceUIRuntime:      map[string]*surfaceUIRuntimeRecord{},
-		activeNoticeCooldowns: map[string]time.Time{},
+		privateRecoveryHolds:     map[string]PrivateCheckpoint{},
+		privateMigrationReleased: map[string]bool{},
+		now:                      now,
+		config:                   cfg,
+		root:                     state.NewRoot(),
+		renderer:                 planner,
+		handoffUntil:             map[string]time.Time{},
+		pausedUntil:              map[string]time.Time{},
+		abandoningUntil:          map[string]time.Time{},
+		itemBuffers:              map[string]*itemBuffer{},
+		threadRefreshes:          map[string]bool{},
+		instanceClaims:           map[string]*instanceClaimRecord{},
+		workspaceClaims:          map[string]*workspaceClaimRecord{},
+		threadClaims:             map[string]*threadClaimRecord{},
+		surfaceUIRuntime:         map[string]*surfaceUIRuntimeRecord{},
+		activeNoticeCooldowns:    map[string]time.Time{},
 	}
 	svc.turns = newServiceTurnRuntime(svc)
 	svc.pickers = newServicePickerRuntime(svc)
@@ -315,6 +325,9 @@ func (s *Service) SetPrimaryBotPermissionChecker(checker PrimaryBotPermissionChe
 }
 
 func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Event {
+	if _, held := s.privateRecoveryHolds[action.SurfaceSessionID]; held && !s.privateRecoveryLocalAction(action) {
+		return []eventcontract.Event{{Kind: eventcontract.KindNotice, SurfaceSessionID: action.SurfaceSessionID, GatewayID: action.GatewayID, Notice: &control.Notice{Code: "private_recovery_hold", Title: "会话等待恢复", Text: "正在核对之前的会话和未确认操作，请稍后再试。"}}}
+	}
 	surface := s.ensureSurface(action)
 	if blocked := s.rejectInvalidBotCapabilitySettings(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
@@ -545,6 +558,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	}
 	if isInternalHelperEvent(event) {
 		return nil
+	}
+	if events, handled := s.applyPrivateMCPOAuthEvent(instanceID, event); handled {
+		return events
+	}
+	if events, handled := s.applyPrivateHistoryEvent(instanceID, event); handled {
+		return events
 	}
 	preface := s.flushPendingTurnTextIfTurnContinues(instanceID, event)
 	s.observeRemoteTurnActivity(instanceID, event)

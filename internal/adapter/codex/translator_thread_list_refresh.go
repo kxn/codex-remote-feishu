@@ -8,11 +8,16 @@ import (
 )
 
 type threadListRefreshSession struct {
-	ownerRequestID string
-	ownerVisible   bool
-	pendingReads   map[string]string
-	records        map[string]agentproto.ThreadSnapshotRecord
-	order          []string
+	ownerRequestID   string
+	privateSource    string
+	privateRequestID string
+	privateWaiters   []string
+	privateStatus    string
+	privateError     string
+	ownerVisible     bool
+	pendingReads     map[string]string
+	records          map[string]agentproto.ThreadSnapshotRecord
+	order            []string
 }
 
 func newThreadListRefreshSession(ownerRequestID string, ownerVisible bool) *threadListRefreshSession {
@@ -26,6 +31,30 @@ func newThreadListRefreshSession(ownerRequestID string, ownerVisible bool) *thre
 
 func (t *Translator) beginThreadListRefresh(ownerRequestID string, ownerVisible bool) {
 	t.threadListRefresh = newThreadListRefreshSession(ownerRequestID, ownerVisible)
+}
+
+// PrivateThreadListLink exposes only the explicitly registered shared query.
+func (t *Translator) PrivateThreadListLink(waiter string) (string, string, bool) {
+	r := t.threadListRefresh
+	if r == nil || r.privateSource == "" || r.privateRequestID == "" {
+		return "", "", false
+	}
+	for _, id := range r.privateWaiters {
+		if id == waiter {
+			return r.privateSource, r.privateRequestID, true
+		}
+	}
+	return "", "", false
+}
+func (r *threadListRefreshSession) privateCompletions() []agentproto.Event {
+	var events []agentproto.Event
+	if r.privateStatus == "" {
+		r.privateStatus = "completed"
+	}
+	for _, id := range r.privateWaiters {
+		events = append(events, agentproto.Event{Kind: agentproto.EventNativeQueryCompleted, CommandID: id, RequestID: r.privateRequestID, Action: "thread.list", Status: r.privateStatus, ErrorMessage: r.privateError, Metadata: map[string]any{"sourceCommandId": r.privateSource}})
+	}
+	return events
 }
 
 func (t *Translator) threadListRefreshPendingReadCount() int {
@@ -95,12 +124,11 @@ func (t *Translator) finishThreadListRefresh(suppress bool) Result {
 		return strings.Compare(extras[i].ThreadID, extras[j].ThreadID) < 0
 	})
 	records = append(records, extras...)
-	t.threadListRefresh = nil
-	return Result{
-		Suppress: suppress,
-		Events: []agentproto.Event{{
-			Kind:    agentproto.EventThreadsSnapshot,
-			Threads: records,
-		}},
+	if len(records) == 0 {
+		records = nil
 	}
+	t.threadListRefresh = nil
+	events := []agentproto.Event{{Kind: agentproto.EventThreadsSnapshot, Threads: records}}
+	events = append(events, refresh.privateCompletions()...)
+	return Result{Suppress: suppress, Events: events}
 }

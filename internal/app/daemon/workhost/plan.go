@@ -70,6 +70,13 @@ func (h *Host) Plan(ctx context.Context, candidate workengine.Candidate) (worken
 	if err != nil {
 		return workengine.DispatchPlan{}, err
 	}
+	if candidate.Scope.Kind == work.ScopeProject && candidate.Context.Purpose != work.PurposeControl && candidate.Context.Purpose != work.PurposeReview {
+		path, e := prepareMemberWorkspace(h.config.Paths.StateDir, candidate.Scope.ProjectID, candidate.Context.RoleID)
+		if e != nil {
+			return workengine.DispatchPlan{}, e
+		}
+		inputs = append(inputs, agentproto.Input{Type: agentproto.InputText, Text: "成员项目长期资料目录：" + path + "。此目录独立于执行 cwd；目录不是安全沙箱。用 team member.workspace.inspect --run-ref <本轮引用> 按需分页查找当前工作、旧工作来源与记忆索引；用 memory.list/read 按现有授权读取具体记忆。索引是动态投影，不是可编辑事实。"})
+	}
 	if candidate.Context.Purpose == work.PurposeReview {
 		if candidate.Context.Review == nil {
 			return workengine.DispatchPlan{}, fmt.Errorf("missing frozen review specification")

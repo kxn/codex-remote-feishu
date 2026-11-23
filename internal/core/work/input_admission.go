@@ -12,6 +12,7 @@ const (
 	InputAdmissionUnknown         InputAdmissionState = "unknown"
 	InputAdmissionConfirmed       InputAdmissionState = "confirmed"
 	InputAdmissionRejected        InputAdmissionState = "rejected"
+	InputAdmissionNotSent         InputAdmissionState = "not_sent"
 	InputAdmissionQuiescedUnknown InputAdmissionState = "quiesced_unknown"
 )
 
@@ -45,7 +46,7 @@ func (v AttemptInputAdmission) Validate() error {
 	if err := v.Source.Validate(); err != nil {
 		return err
 	}
-	if !oneOf(v.State, InputAdmissionSending, InputAdmissionUnknown, InputAdmissionConfirmed, InputAdmissionRejected, InputAdmissionQuiescedUnknown) || v.Revision < 1 || v.CreatedAt.IsZero() || v.UpdatedAt.IsZero() || len(v.InputIDs) == 0 {
+	if !oneOf(v.State, InputAdmissionSending, InputAdmissionUnknown, InputAdmissionConfirmed, InputAdmissionRejected, InputAdmissionNotSent, InputAdmissionQuiescedUnknown) || v.Revision < 1 || v.CreatedAt.IsZero() || v.UpdatedAt.IsZero() || len(v.InputIDs) == 0 {
 		return fmt.Errorf("invalid native input admission")
 	}
 	seen := map[string]bool{}

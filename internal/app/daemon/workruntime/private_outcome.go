@@ -185,7 +185,7 @@ func privateOutcomeEffectsSettled(tx *workstore.Tx, attempt work.ExecutionAttemp
 		return false, err
 	}
 	for _, admission := range admissions {
-		if admission.State != work.InputAdmissionConfirmed && admission.State != work.InputAdmissionRejected {
+		if admission.State != work.InputAdmissionConfirmed && admission.State != work.InputAdmissionRejected && admission.State != work.InputAdmissionNotSent {
 			return false, nil
 		}
 	}
