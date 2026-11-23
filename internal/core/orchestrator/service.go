@@ -552,8 +552,11 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) (re
 	if isInternalHelperEvent(event) {
 		return nil
 	}
-	if event.Kind == agentproto.EventThreadPredictionResult {
+	switch event.Kind {
+	case agentproto.EventThreadPredictionResult:
 		return s.filterEventsForSurfaceVisibility(s.applyPredictionResult(instanceID, event))
+	case agentproto.EventThreadPredictionInvalidated:
+		return s.filterEventsForSurfaceVisibility(s.invalidateInstancePredictions(instanceID))
 	}
 	if canceled := s.predictionEventPrelude(instanceID, event); len(canceled) != 0 {
 		defer func() { result = append(canceled, result...) }()

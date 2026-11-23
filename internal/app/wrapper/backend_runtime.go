@@ -263,11 +263,12 @@ func mapOpenCodeResolvedCommandResponses(responses []acpadapter.ResolvedCommandR
 }
 
 type codexBackendRuntime struct {
-	mu              sync.Mutex
-	translator      *codex.Translator
-	shellCommand    *shellCommandRuntime
-	predictions     *predictionRuntime
-	nativeUserAgent string
+	mu                sync.Mutex
+	translator        *codex.Translator
+	shellCommand      *shellCommandRuntime
+	predictions       *predictionRuntime
+	predictionAccount predictionAccountState
+	nativeUserAgent   string
 }
 
 func (r *codexBackendRuntime) Backend() agentproto.Backend {
@@ -305,18 +306,9 @@ func (r *codexBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, 
 func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var notification struct {
-		Method string `json:"method"`
-	}
-	if json.Unmarshal(line, &notification) == nil && (notification.Method == "account/updated" || notification.Method == "account/login/completed" || notification.Method == "accountLoginCompleted") {
-		// Native account status notifications invalidate backend auth, not sample queries.
-		if r.predictions != nil {
-			for _, job := range r.predictions.jobs {
-				if job.authCancel != nil {
-					job.authCancel()
-				}
-			}
-		}
+	accountEvents, accountResponse := r.observePredictionAccountLocked(line)
+	if accountResponse {
+		return runtimeObserveResult{Events: accountEvents, Suppress: true}, nil
 	}
 	if r.observePredictionPreparationLocked(line) {
 		return runtimeObserveResult{Suppress: true}, nil
@@ -326,16 +318,23 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 		return runtimeObserveResult{}, err
 	}
 	r.shellCommand.observeEvents(result.Events)
+	events := accountEvents
 	for _, event := range result.Events {
 		if event.Kind == agentproto.EventThreadPredictionResult && r.predictions != nil {
 			if job := r.predictions.jobs[event.CommandID]; job != nil {
+				if r.predictionAccount.probeID != "" && event.Prediction != nil && event.Prediction.Suggestion != "" {
+					// Keep the original sample deadline while its authenticated principal is verified.
+					job.accountHeld = &event
+					continue
+				}
 				job.cancel()
 				delete(r.predictions.jobs, event.CommandID)
 			}
 		}
+		events = append(events, event)
 	}
 	return runtimeObserveResult{
-		Events:           result.Events,
+		Events:           events,
 		OutboundToChild:  result.OutboundToCodex,
 		OutboundToParent: result.OutboundToParent,
 		Suppress:         result.Suppress,

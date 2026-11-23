@@ -44,6 +44,7 @@ const (
 	EventThreadGoalUpdated               EventKind = "thread.goal.updated"
 	EventThreadGoalCommandResult         EventKind = "thread.goal.command.result"
 	EventThreadPredictionResult          EventKind = "thread.prediction.result"
+	EventThreadPredictionInvalidated     EventKind = "thread.prediction.invalidated"
 	EventThreadSettingsUpdated           EventKind = "thread.settings.updated"
 	EventCapabilityStateUpdated          EventKind = "capability.state.updated"
 	EventProcessChildRestartUpdated      EventKind = "process.child.restart.updated"

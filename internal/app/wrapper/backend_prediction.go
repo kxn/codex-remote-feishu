@@ -21,12 +21,13 @@ const predictionResponseTimeout = 30 * time.Second
 const predictionCanceledRequestLimit = 128
 
 type predictionJob struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	command    agentproto.Command
-	sampled    bool
-	frames     chan<- []byte
-	authCancel context.CancelFunc
+	ctx         context.Context
+	cancel      context.CancelFunc
+	command     agentproto.Command
+	sampled     bool
+	frames      chan<- []byte
+	authCancel  context.CancelFunc
+	accountHeld *agentproto.Event
 }
 
 type predictionRPCResponse struct {
@@ -157,12 +158,16 @@ func (r *codexBackendRuntime) observePredictionPreparationLocked(raw []byte) boo
 
 func (r *codexBackendRuntime) predictionAuthToken(ctx context.Context, frames chan<- []byte, refresh bool) (string, predictionIdentity, error) {
 	raw, err := r.predictionRPC(ctx, frames, "getAuthStatus", map[string]any{"includeToken": true, "refreshToken": refresh})
+	if err != nil {
+		return "", predictionIdentity{}, err
+	}
+	return decodePredictionAuthToken(raw)
+}
+
+func decodePredictionAuthToken(raw json.RawMessage) (string, predictionIdentity, error) {
 	var auth struct {
 		Method string `json:"authMethod"`
 		Token  string `json:"authToken"`
-	}
-	if err != nil {
-		return "", predictionIdentity{}, err
 	}
 	if json.Unmarshal(raw, &auth) != nil || (auth.Method != "chatgpt" && auth.Method != "chatgptAuthTokens") {
 		return "", predictionIdentity{}, errors.New("prediction requires native ChatGPT authentication")
@@ -250,6 +255,7 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 	if err != nil || !r.predictionEnabledForJob(job, identity) {
 		return
 	}
+	r.rememberPredictionPrincipal(job, identity)
 	config, err := r.predictionConfigForJob(job, token, identity, routing)
 	if err != nil || !config.Enabled || config.LiveSampleRate <= r.predictions.sample() {
 		return
@@ -323,6 +329,7 @@ func (r *codexBackendRuntime) CancelPredictions() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.cancelPredictionJobsLocked()
+	r.predictionAccount = predictionAccountState{}
 }
 
 func (r *codexBackendRuntime) queuePredictionCancelLocked(requestID string, frames chan<- []byte) {

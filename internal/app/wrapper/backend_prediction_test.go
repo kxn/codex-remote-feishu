@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -452,6 +453,138 @@ func TestPredictionAccountNotificationDoesNotCancelSampleScope(t *testing.T) {
 	case frame := <-frames:
 		t.Fatalf("auth notification canceled native sample: %s", frame)
 	default:
+	}
+}
+
+func accountPredictionSample(t *testing.T) (*codexBackendRuntime, context.Context, chan []byte, []byte) {
+	t.Helper()
+	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
+	runtime.predictions = newTestPredictionRuntime()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	command := predictionRequest()
+	outbound, err := runtime.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: "official"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sample map[string]any
+	if err := json.Unmarshal(outbound[0], &sample); err != nil {
+		t.Fatal(err)
+	}
+	frames := make(chan []byte, 2)
+	job := &predictionJob{ctx: ctx, cancel: cancel, command: command, sampled: true, frames: frames}
+	runtime.predictions.jobs[command.CommandID] = job
+	runtime.rememberPredictionPrincipal(job, predictionIdentity{UserID: "user", AccountID: "account"})
+	response, err := json.Marshal(map[string]any{"id": sample["id"], "result": map[string]any{"sourceTurnId": "turn", "text": `{"suggestion":"native suggestion"}`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runtime, ctx, frames, response
+}
+
+func TestPredictionAccountLogoutCancelsSampleAndInvalidatesDrafts(t *testing.T) {
+	for _, params := range []string{`{"authMode":null,"planType":null}`, `{}`, `{"authMode":"apikey"}`} {
+		t.Run(params, func(t *testing.T) {
+			runtime, ctx, frames, response := accountPredictionSample(t)
+			observed, err := runtime.ObserveServer([]byte(`{"method":"account/updated","params":` + params + `}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ctx.Err() == nil || !slices.ContainsFunc(observed.Events, func(event agentproto.Event) bool {
+				return event.Kind == agentproto.EventThreadPredictionInvalidated
+			}) {
+				t.Fatalf("account logout must cancel jobs and invalidate drafts: %#v", observed.Events)
+			}
+			if cancellation := predictionFrame(t, frames); cancellation["method"] != "thread/sample/cancel" {
+				t.Fatalf("wrong native cancellation: %#v", cancellation)
+			}
+			observed, err = runtime.ObserveServer(response)
+			if err != nil || len(observed.Events) != 0 || !observed.Suppress {
+				t.Fatalf("old native response must stay private and discarded: %#v %v", observed, err)
+			}
+		})
+	}
+}
+
+func TestPredictionAccountVerifiesPrincipalBeforePublishingSample(t *testing.T) {
+	for _, test := range []struct {
+		name, user, account, notification string
+		changed                           bool
+	}{
+		{"same principal", "user", "account", `{"method":"account/updated","params":{"authMode":"chatgpt"}}`, false},
+		{"different account", "user", "new-account", `{"method":"account/updated","params":{"authMode":"chatgptAuthTokens"}}`, true},
+		{"different user", "new-user", "account", `{"method":"account/login/completed","params":{"success":true}}`, true},
+		{"unverified", "", "", `{"method":"account/updated","params":{"authMode":"chatgpt"}}`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runtime, ctx, frames, response := accountPredictionSample(t)
+			observed, err := runtime.ObserveServer([]byte(test.notification))
+			if err != nil || observed.Suppress {
+				t.Fatalf("native account notification must continue to the client: %#v %v", observed, err)
+			}
+			probe := predictionFrame(t, frames)
+			params, _ := probe["params"].(map[string]any)
+			if probe["method"] != "getAuthStatus" || params["includeToken"] != true || params["refreshToken"] != false {
+				t.Fatalf("account verification must quietly read native identity: %#v", probe)
+			}
+			observed, err = runtime.ObserveServer(response)
+			if err != nil || !observed.Suppress || len(observed.Events) != 0 || ctx.Err() != nil {
+				t.Fatalf("sample must wait for the identity check: %#v %v", observed, err)
+			}
+			authToken := ""
+			if test.user != "" {
+				authToken = predictionToken(t, test.user, test.account)
+			}
+			reply, err := json.Marshal(map[string]any{"id": probe["id"], "result": map[string]any{"authMethod": "chatgpt", "authToken": authToken}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observed, err = runtime.ObserveServer(reply)
+			if err != nil || !observed.Suppress || len(observed.OutboundToParent) != 0 || len(observed.Events) != 1 || ctx.Err() == nil {
+				t.Fatalf("native credential response must stay private and settle the held sample: %#v %v", observed, err)
+			}
+			event := observed.Events[0]
+			if test.changed {
+				if event.Kind != agentproto.EventThreadPredictionInvalidated || event.Prediction != nil {
+					t.Fatalf("old suggestion survived confirmed principal change: %#v", event)
+				}
+			} else {
+				want := "native suggestion"
+				if test.user == "" {
+					want = ""
+				}
+				if event.Kind != agentproto.EventThreadPredictionResult || event.Prediction == nil || event.Prediction.Suggestion != want {
+					t.Fatalf("unexpected suggestion after native principal check: %#v", event)
+				}
+			}
+		})
+	}
+}
+
+func TestPredictionAccountProbeDoesNotBlockFullChildQueue(t *testing.T) {
+	runtime, ctx, frames, response := accountPredictionSample(t)
+	for range cap(frames) {
+		frames <- []byte("ordinary frame")
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := runtime.ObserveServer([]byte(`{"method":"account/updated","params":{"authMode":"chatgpt"}}`))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("full native queue blocked account notification")
+	}
+	if ctx.Err() == nil {
+		t.Fatal("unverifiable in-flight sample was not canceled")
+	}
+	observed, err := runtime.ObserveServer(response)
+	if err != nil || len(observed.Events) != 0 || !observed.Suppress {
+		t.Fatalf("late unverifiable sample must stay private and discarded: %#v %v", observed, err)
 	}
 }
 

@@ -98,6 +98,24 @@ func TestPredictionCompletesAsEditableDraftAndRequiresExplicitSend(t *testing.T)
 	}
 }
 
+func TestPredictionAccountInvalidationRejectsOpenDraft(t *testing.T) {
+	svc, sid, iid := predictionTestSetup(t)
+	request := findAgentCommand(predictionCompleteTurn(t, svc, sid, iid), predictionRequestKind)
+	if request == nil {
+		t.Fatal("expected prediction request")
+	}
+	svc.ApplyAgentEvent(iid, predictionTestResult(t, request.CommandID, "turn-1", "建议"))
+	draft := svc.ApplySurfaceAction(predictionTestAction(t, predictionAcceptKind, sid, request.CommandID, "user-1", ""))
+	if findPageEvent(draft) == nil {
+		t.Fatal("expected open prediction draft")
+	}
+	svc.ApplyAgentEvent(iid, agentproto.Event{Kind: agentproto.EventThreadPredictionInvalidated})
+	sent := svc.ApplySurfaceAction(predictionTestAction(t, predictionSendKind, sid, request.CommandID, "user-1", "别的账号的建议"))
+	if findAgentCommand(sent, agentproto.CommandPromptSend) != nil {
+		t.Fatal("account invalidation must revoke the earlier draft")
+	}
+}
+
 func TestPredictionRejectsWrongActorTargetAndLateResult(t *testing.T) {
 	for _, stale := range []string{"actor", "thread", "instance", "turn", "input", "disconnect", "timeout", "surface"} {
 		t.Run(stale, func(t *testing.T) {
