@@ -331,10 +331,11 @@ func (s *Service) bindPredictionQueueItem(surface *state.SurfaceConsoleRecord, i
 // gateway has returned from publishing the submitted receipt.
 func (s *Service) BindQueuedPredictionPrompt(surfaceID string, ref eventcontract.QueuedPromptRef, command agentproto.Command) bool {
 	surface := s.root.Surfaces[surfaceID]
-	if surface == nil || surface.AttachedInstanceID != ref.InstanceID || surface.ActiveQueueItemID != ref.QueueItemID {
+	if surface == nil || surface.AttachedInstanceID != ref.InstanceID || surface.ActiveQueueItemID != ref.QueueItemID ||
+		surface.SelectedThreadID != command.Target.ThreadID {
 		return false
 	}
-	binding := s.turns.pendingRemoteBinding(ref.InstanceID)
+	binding := s.pendingRemoteBinding(ref.InstanceID, command.Target.ThreadID)
 	if binding == nil || binding.SurfaceSessionID != surfaceID || binding.QueueItemID != ref.QueueItemID ||
 		binding.ThreadID != command.Target.ThreadID || binding.CommandID != "" {
 		return false

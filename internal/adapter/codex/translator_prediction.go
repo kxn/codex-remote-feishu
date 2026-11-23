@@ -8,6 +8,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 // PredictionOptions comes from the same authenticated configuration as the desktop.
@@ -31,8 +32,8 @@ type pendingPrediction struct {
 
 func (t *Translator) TranslatePredictionRequest(command agentproto.Command, options PredictionOptions) ([][]byte, error) {
 	prompt := options.PromptWithSchema
-	if strings.TrimSpace(prompt) == "" {
-		if strings.TrimSpace(options.Prompt) == "" {
+	if xutil.TrimECMAScriptSpace(prompt) == "" {
+		if xutil.TrimECMAScriptSpace(options.Prompt) == "" {
 			return nil, fmt.Errorf("prediction requires official desktop configuration")
 		}
 		prompt = options.Prompt + "\n\nReturn only JSON matching this schema: " + predictionSuggestionSchema + "."
@@ -202,16 +203,5 @@ func parsePredictionSuggestion(text string) (string, error) {
 	if value == nil {
 		return "", nil
 	}
-	return trimPredictionSuggestion(*value), nil
-}
-
-func trimPredictionSuggestion(value string) string {
-	return strings.TrimFunc(value, func(r rune) bool {
-		switch r {
-		case '\t', '\n', '\v', '\f', '\r', ' ', '\u00a0', '\u1680', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000', '\ufeff':
-			return true
-		default:
-			return r >= '\u2000' && r <= '\u200a'
-		}
-	})
+	return xutil.TrimECMAScriptSpace(*value), nil
 }

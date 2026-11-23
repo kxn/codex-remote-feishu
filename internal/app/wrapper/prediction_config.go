@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type predictionIdentity struct {
@@ -156,7 +158,7 @@ func parsePredictionConfig(raw []byte) (predictionConfig, error) {
 	if json.Unmarshal(config.PromptWithSchema, &promptWithSchema) != nil {
 		promptWithSchema = ""
 	}
-	if strings.TrimSpace(promptWithSchema) == "" && strings.TrimSpace(*config.Prompt) == "" {
+	if xutil.TrimECMAScriptSpace(promptWithSchema) == "" && xutil.TrimECMAScriptSpace(*config.Prompt) == "" {
 		return predictionConfig{}, errors.New("invalid official prediction prompt")
 	}
 	rate := 1.0
