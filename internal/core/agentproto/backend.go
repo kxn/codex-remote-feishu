@@ -89,6 +89,9 @@ func EffectiveCapabilitiesForBackend(backend Backend, caps Capabilities) Capabil
 	if caps.ThreadShellCommand {
 		base.ThreadShellCommand = true
 	}
+	if caps.ThreadPrediction {
+		base.ThreadPrediction = true
+	}
 	if caps.RequestRespond {
 		base.RequestRespond = true
 	}

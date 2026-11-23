@@ -41,7 +41,7 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 	if now.IsZero() {
 		now = s.now()
 	}
-	var events []eventcontract.Event
+	events := s.expirePredictions()
 	for surfaceID, until := range s.handoffUntil {
 		if now.Before(until) {
 			continue

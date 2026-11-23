@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -222,8 +223,24 @@ func (c *Client) enqueue(outbox *[]queuedEnvelope, max int, item queuedEnvelope,
 		return context.Canceled
 	default:
 	}
+	var overflowErr error
 	if max > 0 && len(*outbox) >= max {
-		return fullErr
+		batch := item.envelope.EventBatch
+		if batch == nil || !slices.ContainsFunc(batch.Events, func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventThreadPredictionInvalidated
+		}) {
+			return fullErr
+		}
+		// Keep one invalidation behind earlier suggestions even when data is full.
+		// Consecutive overflow invalidations are equivalent for the same instance.
+		if len(batch.Events) > 1 {
+			overflowErr = fullErr
+		}
+		batch.Events = []agentproto.Event{{Kind: agentproto.EventThreadPredictionInvalidated}}
+		if len(*outbox) > max {
+			(*outbox)[len(*outbox)-1] = item
+			return overflowErr
+		}
 	}
 	c.outboundState.markEnqueued()
 	*outbox = append(*outbox, item)
@@ -231,7 +248,7 @@ func (c *Client) enqueue(outbox *[]queuedEnvelope, max int, item queuedEnvelope,
 	case c.outboundReady <- struct{}{}:
 	default:
 	}
-	return nil
+	return overflowErr
 }
 
 func (c *Client) RunOnce(ctx context.Context) error {

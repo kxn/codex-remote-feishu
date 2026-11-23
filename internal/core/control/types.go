@@ -46,6 +46,8 @@ const (
 	ActionPlanProposalDecision        ActionKind = "surface.command.plan_proposal_decision"
 	ActionVerboseCommand              ActionKind = "surface.command.verbose"
 	ActionCodexProfileCommand         ActionKind = "surface.command.codex_profile"
+	ActionPredictionAccept            ActionKind = "surface.prediction.accept"
+	ActionPredictionSend              ActionKind = "surface.prediction.send"
 	ActionGoalCommand                 ActionKind = "surface.command.goal"
 	ActionAutoWhipCommand             ActionKind = "surface.command.auto_whip"
 	ActionAutoContinueCommand         ActionKind = "surface.command.auto_continue"
@@ -151,6 +153,7 @@ type Action struct {
 	CatalogVariantID    string
 	CatalogBackend      agentproto.Backend
 	CommandID           string
+	PredictionID        string
 	GoalOperationID     string
 	ParentCommandText   string
 	InstanceID          string
@@ -458,8 +461,9 @@ const (
 type CommandCatalogFormFieldKind string
 
 const (
-	CommandCatalogFormFieldText         CommandCatalogFormFieldKind = "text"
-	CommandCatalogFormFieldSelectStatic CommandCatalogFormFieldKind = "select_static"
+	CommandCatalogFormFieldText          CommandCatalogFormFieldKind = "text"
+	CommandCatalogFormFieldMultilineText CommandCatalogFormFieldKind = "multiline_text"
+	CommandCatalogFormFieldSelectStatic  CommandCatalogFormFieldKind = "select_static"
 )
 
 type CommandCatalogDisplayStyle string

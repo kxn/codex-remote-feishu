@@ -50,6 +50,9 @@ func (a *App) bootstrapHeadlessCodex(childStdin io.Writer, childStdout io.Reader
 				return nil, err
 			}
 			if matched {
+				if runtime, ok := a.runtime.(*codexBackendRuntime); ok {
+					runtime.observePredictionInitialization(line)
+				}
 				initializedFrame, err := a.syntheticInitializedFrame()
 				if err != nil {
 					return nil, err

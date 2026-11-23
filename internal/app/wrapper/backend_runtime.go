@@ -263,9 +263,12 @@ func mapOpenCodeResolvedCommandResponses(responses []acpadapter.ResolvedCommandR
 }
 
 type codexBackendRuntime struct {
-	mu           sync.Mutex
-	translator   *codex.Translator
-	shellCommand *shellCommandRuntime
+	mu                sync.Mutex
+	translator        *codex.Translator
+	shellCommand      *shellCommandRuntime
+	predictions       *predictionRuntime
+	predictionAccount predictionAccountState
+	nativeUserAgent   string
 }
 
 func (r *codexBackendRuntime) Backend() agentproto.Backend {
@@ -275,6 +278,7 @@ func (r *codexBackendRuntime) Backend() agentproto.Backend {
 func (r *codexBackendRuntime) Capabilities() agentproto.Capabilities {
 	capabilities := agentproto.DefaultCapabilitiesForBackend(agentproto.BackendCodex)
 	capabilities.ModelCatalog = true
+	capabilities.ThreadPrediction = true
 	return capabilities
 }
 
@@ -302,13 +306,38 @@ func (r *codexBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, 
 func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	accountEvents, accountResponse := r.observePredictionAccountLocked(line)
+	if accountResponse {
+		return runtimeObserveResult{Events: accountEvents, Suppress: true}, nil
+	}
+	if preparationEvents, owned := r.observePredictionPreparationLocked(line); owned {
+		return runtimeObserveResult{Events: preparationEvents, Suppress: true}, nil
+	}
 	result, err := r.translator.ObserveServer(line)
 	if err != nil {
 		return runtimeObserveResult{}, err
 	}
 	r.shellCommand.observeEvents(result.Events)
+	events := accountEvents
+	for _, event := range result.Events {
+		if event.Kind == agentproto.EventThreadPredictionResult && r.predictions != nil {
+			if job := r.predictions.jobs[event.CommandID]; job != nil {
+				if !r.predictionResultAllowedLocked(job, event) {
+					events = append(events, r.invalidatePredictionPreferenceLocked())
+					continue
+				}
+				if r.predictionAccount.probeID != "" && predictionHasSuggestion(event) {
+					// Keep the original sample deadline while its authenticated principal is verified.
+					job.accountHeld = &event
+					continue
+				}
+				r.endPredictionJobLocked(job, predictionHasSuggestion(event))
+			}
+		}
+		events = append(events, event)
+	}
 	return runtimeObserveResult{
-		Events:           result.Events,
+		Events:           events,
 		OutboundToChild:  result.OutboundToCodex,
 		OutboundToParent: result.OutboundToParent,
 		Suppress:         result.Suppress,
@@ -354,6 +383,7 @@ func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runt
 }
 
 func (r *codexBackendRuntime) PrepareChildRestart(_ string, _ agentproto.PromptDispatchPlan, policy *agentproto.CodexResumePolicy) error {
+	r.CancelPredictions()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shellCommand.invalidateDetection()
@@ -365,6 +395,7 @@ func (r *codexBackendRuntime) Cleanup() {
 	if r == nil {
 		return
 	}
+	r.CancelPredictions()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shellCommand.cleanupCurrentRuntime()

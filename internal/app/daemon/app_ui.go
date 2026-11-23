@@ -39,6 +39,9 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 				event.Command.CommandID = a.nextCommandID()
 			}
 			instanceID := a.service.AttachedInstanceID(event.SurfaceSessionID)
+			if event.Command.Kind == agentproto.CommandThreadPredictionRequest || event.Command.Kind == agentproto.CommandThreadPredictionCancel {
+				instanceID = event.Command.Prediction.InstanceID
+			}
 			snapshot := a.service.SurfaceSnapshot(event.SurfaceSessionID)
 			a.debugf(
 				"dispatch prepare: surface=%s instance=%s command=%s kind=%s selectedThread=%s route=%s promptThread=%s promptCreate=%t pending=%s active=%s sourceMessage=%s",
@@ -54,7 +57,12 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 				summarizeRemoteStatuses(a.service.ActiveRemoteTurns()),
 				event.Command.Origin.MessageID,
 			)
-			if event.Command.Kind == agentproto.CommandReviewStart {
+			if event.QueuedPrompt != nil {
+				if !a.service.BindQueuedPredictionPrompt(event.SurfaceSessionID, *event.QueuedPrompt, *event.Command) {
+					continue
+				}
+				instanceID = event.QueuedPrompt.InstanceID
+			} else if event.Command.Kind == agentproto.CommandReviewStart {
 				a.service.BindPendingReviewStartCommand(event.SurfaceSessionID, event.Command.CommandID)
 			} else if event.Command.Kind == agentproto.CommandThreadShellCommand {
 				a.service.BindPendingShellCommand(event.SurfaceSessionID, event.Command.CommandID)

@@ -366,12 +366,19 @@ func commandCatalogFormFieldElement(field control.CommandCatalogFormField) map[s
 			element["initial_option"] = value
 		}
 	default:
+		if field.Kind == control.CommandCatalogFormFieldMultilineText {
+			element["input_type"] = "multiline_text"
+			element["width"] = "fill"
+		}
 		if label := strings.TrimSpace(field.Label); label != "" {
 			element["label"] = map[string]any{
 				"tag":     "plain_text",
 				"content": label,
 			}
 			element["label_position"] = "left"
+			if field.Kind == control.CommandCatalogFormFieldMultilineText {
+				element["label_position"] = "top"
+			}
 		}
 		if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
 			element["placeholder"] = map[string]any{

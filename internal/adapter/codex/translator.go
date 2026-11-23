@@ -1,6 +1,8 @@
 package codex
 
 import (
+	"crypto/rand"
+
 	"github.com/kxn/codex-remote-feishu/internal/adapter/adapterkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
@@ -46,6 +48,9 @@ type Translator struct {
 	pendingModelList          map[string]pendingModelList
 	pendingGoalRequests       map[string]pendingGoalRequest
 	pendingThreadReads        map[string]pendingThreadRead
+	pendingPredictions        map[string]pendingPrediction
+	predictionRequestPrefix   string
+	predictionModeration      predictionModerationState
 	lastOwnedGoalMutations    map[string]ownedGoalMutation
 	reasoningSummaryIndexes   map[string]map[int]bool
 }
@@ -170,6 +175,8 @@ func NewTranslator(instanceID string) *Translator {
 		pendingModelList:           map[string]pendingModelList{},
 		pendingGoalRequests:        map[string]pendingGoalRequest{},
 		pendingThreadReads:         map[string]pendingThreadRead{},
+		pendingPredictions:         map[string]pendingPrediction{},
+		predictionRequestPrefix:    PredictionRPCIDPrefix + rand.Text() + ":",
 		lastOwnedGoalMutations:     map[string]ownedGoalMutation{},
 		reasoningSummaryIndexes:    map[string]map[int]bool{},
 	}

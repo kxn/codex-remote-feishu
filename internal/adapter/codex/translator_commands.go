@@ -199,6 +199,10 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		return t.translateThreadGoalCommand(command)
 	case agentproto.CommandThreadRead:
 		return t.translateThreadReadCommand(command)
+	case agentproto.CommandThreadPredictionRequest:
+		return t.TranslatePredictionRequest(command, PredictionOptions{})
+	case agentproto.CommandThreadPredictionCancel:
+		return t.translatePredictionCancel(command)
 	default:
 		return nil, nil
 	}

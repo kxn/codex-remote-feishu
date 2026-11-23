@@ -413,6 +413,9 @@ func (a *App) synchronousCurrentCardActionResultLocked(action control.Action, co
 		if replace != nil {
 			return replace, appendEvents
 		}
+		if action.Kind == control.ActionPredictionAccept || action.Kind == control.ActionPredictionSend {
+			return nil, events
+		}
 		if inlineFallbackReplacementBlockedByActivePicker(events) {
 			return nil, events
 		}

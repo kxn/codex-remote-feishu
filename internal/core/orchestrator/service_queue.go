@@ -222,6 +222,7 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 		item.ReplyToMessagePreview = item.SourceMessagePreview
 	}
 	surface.QueueItems[item.ID] = item
+	s.bindPredictionQueueItem(surface, item)
 	if front {
 		surface.QueuedQueueItemIDs = append([]string{item.ID}, surface.QueuedQueueItemIDs...)
 	} else {
@@ -386,12 +387,15 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 	}
 	command, guardEvents := s.promptSendCommandAndGuardEventsFromQueueItem(surface, item, queuedItemActorUserID(item, surface), originMessageID)
 	events = append(events, guardEvents...)
-	events = append(events, eventcontract.Event{
+	dispatch := eventcontract.Event{
 		Kind:             eventcontract.KindAgentCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Command:          command,
-	})
-	return events
+	}
+	if prediction := s.predictions[surface.SurfaceSessionID]; prediction != nil && prediction.SendQueueItemID == item.ID {
+		dispatch.QueuedPrompt = &eventcontract.QueuedPromptRef{InstanceID: prediction.InstanceID, QueueItemID: item.ID}
+	}
+	return append(events, dispatch)
 }
 
 func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, actorUserID, originMessageID string) *agentproto.Command {
@@ -586,6 +590,9 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	events = append(events, s.releaseCompletedShellCommandAttachments(surface, outcome.ThreadID, outcome.TurnID)...)
 	events = append(events, s.maybeScheduleAutoWhipAfterRemoteTurn(surface, item, outcome.TurnID, outcome.Cause, outcome.FinalText, outcome.Summary)...)
 	s.clearRemoteTurn(outcome.InstanceID, outcome.TurnID)
+	if outcome.Cause == terminalCauseStartupFailed && binding.StartedAt.IsZero() {
+		events = append(events, s.restorePredictionDraftAfterDispatchFailure(surface.SurfaceSessionID, binding.CommandID)...)
+	}
 	return events
 }
 
