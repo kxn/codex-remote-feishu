@@ -2,6 +2,8 @@ package wrapper
 
 import (
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,11 +25,11 @@ func TestPredictionBackendRequestUsesSystemProxyForBothOfficialCalls(t *testing.
 		t.Fatal(err)
 	}
 	p := newTestPredictionRuntime()
-	p.httpClient = predictionHTTPClientWithProxy(func(_ context.Context, origin string) *url.URL {
+	p.httpClient = predictionHTTPClientWithProxy(func(_ context.Context, origin string) (*url.URL, error) {
 		if origin != "https://chatgpt.com" {
 			t.Errorf("proxy received unexpected route %q", origin)
 		}
-		return proxy
+		return proxy, nil
 	})
 	defer p.httpClient.CloseIdleConnections()
 	routing := predictionRouting{BackendOrigin: "https://chatgpt.com"}
@@ -52,21 +54,45 @@ func TestPredictionBackendRequestUsesSystemProxyForBothOfficialCalls(t *testing.
 func TestDecodeMacOSPredictionProxyUsesPreferredRoute(t *testing.T) {
 	for _, tc := range []struct {
 		name, response, want string
+		wantError            bool
 	}{
-		{"HTTPS CONNECT", `[{"type":"kCFProxyTypeHTTPS","host":"127.0.0.1","port":33210}]`, "http://127.0.0.1:33210"},
-		{"SOCKS IPv6", `[{"type":"kCFProxyTypeSOCKS","host":"::1","port":33211}]`, "socks5://[::1]:33211"},
-		{"excluded", `[{"type":"kCFProxyTypeNone"},{"type":"kCFProxyTypeHTTP","host":"host","port":80}]`, ""},
-		{"PAC", `[{"type":"kCFProxyTypeAutoConfigurationURL"}]`, ""},
-		{"invalid endpoint", `[{"type":"kCFProxyTypeHTTPS","host":"host","port":65536}]`, ""},
+		{"HTTPS CONNECT", `[{"type":"kCFProxyTypeHTTPS","host":"127.0.0.1","port":33210}]`, "http://127.0.0.1:33210", false},
+		{"SOCKS IPv6", `[{"type":"kCFProxyTypeSOCKS","host":"::1","port":33211}]`, "socks5://[::1]:33211", false},
+		{"excluded", `[{"type":"kCFProxyTypeNone"},{"type":"kCFProxyTypeHTTP","host":"host","port":80}]`, "", false},
+		{"PAC URL", `[{"type":"kCFProxyTypeAutoConfigurationURL"},{"type":"kCFProxyTypeNone"}]`, "", true},
+		{"PAC JavaScript", `[{"type":"kCFProxyTypeAutoConfigurationJavaScript"}]`, "", true},
+		{"unsupported type", `[{"type":"future-route-type"}]`, "", true},
+		{"invalid endpoint", `[{"type":"kCFProxyTypeHTTPS","host":"host","port":65536}]`, "", true},
+		{"empty", `[]`, "", true},
+		{"malformed", `invalid`, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			proxy, err := decodeMacOSPredictionProxy([]byte(tc.response))
+			if (err != nil) != tc.wantError {
+				t.Fatalf("unexpected route resolution error: %v", err)
+			}
 			got := ""
-			if proxy := decodeMacOSPredictionProxy([]byte(tc.response)); proxy != nil {
+			if proxy != nil {
 				got = proxy.String()
 			}
 			if got != tc.want {
 				t.Fatalf("route = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPredictionHTTPClientDoesNotDialWhenSystemProxyUnresolved(t *testing.T) {
+	client := predictionHTTPClientWithProxy(func(context.Context, string) (*url.URL, error) {
+		return decodeMacOSPredictionProxy([]byte(`[{"type":"kCFProxyTypeAutoConfigurationURL"}]`))
+	})
+	defer client.CloseIdleConnections()
+	client.Transport.(*http.Transport).DialContext = func(context.Context, string, string) (net.Conn, error) {
+		t.Error("unresolved proxy caused a connection attempt")
+		return nil, errors.New("unexpected network request")
+	}
+	_, err := client.Get("https://chatgpt.com/wham/predictions/config")
+	if !errors.Is(err, errPredictionSystemProxyUnresolved) {
+		t.Fatalf("expected unresolved proxy error, got %v", err)
 	}
 }

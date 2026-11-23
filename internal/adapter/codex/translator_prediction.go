@@ -88,9 +88,20 @@ func (t *Translator) DiscardUnsentPrediction(commandID string) {
 }
 
 func (t *Translator) translatePredictionCancel(command agentproto.Command) ([][]byte, error) {
-	commandID := strings.TrimSpace(command.Prediction.RequestCommandID)
+	var frames [][]byte
+	err := t.QueuePredictionCancel(command.Prediction.RequestCommandID, func(frame []byte) bool {
+		frames = append(frames, frame)
+		return true
+	})
+	return frames, err
+}
+
+// QueuePredictionCancel suppresses the original sample and tracks the cancel response
+// only if the nonblocking offer accepts the frame.
+func (t *Translator) QueuePredictionCancel(commandID string, offer func([]byte) bool) error {
+	commandID = strings.TrimSpace(commandID)
 	if commandID == "" {
-		return nil, fmt.Errorf("thread.prediction.cancel requires original request command id")
+		return fmt.Errorf("thread.prediction.cancel requires original request command id")
 	}
 	for requestID, pending := range t.pendingPredictions {
 		if pending.CommandID != commandID || pending.Canceled {
@@ -102,14 +113,16 @@ func (t *Translator) translatePredictionCancel(command agentproto.Command) ([][]
 			"params": map[string]any{"requestId": requestID},
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 		pending.Canceled = true
 		t.pendingPredictions[requestID] = pending
-		t.pendingPredictionCancels[cancelID] = true
-		return [][]byte{append(raw, '\n')}, nil
+		if offer(append(raw, '\n')) {
+			t.pendingPredictionCancels[cancelID] = true
+		}
+		return nil
 	}
-	return nil, nil
+	return nil
 }
 
 func (t *Translator) observePredictionResponse(requestID string, message map[string]any) (Result, bool) {

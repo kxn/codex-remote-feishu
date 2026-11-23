@@ -3,6 +3,7 @@ package wrapper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,10 +22,10 @@ func newPredictionHTTPClient() *http.Client {
 	return predictionHTTPClientWithProxy(macOSPredictionProxy)
 }
 
-func predictionHTTPClientWithProxy(resolve func(context.Context, string) *url.URL) *http.Client {
+func predictionHTTPClientWithProxy(resolve func(context.Context, string) (*url.URL, error)) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = func(req *http.Request) (*url.URL, error) {
-		return resolve(req.Context(), req.URL.Scheme+"://"+req.URL.Host), nil
+		return resolve(req.Context(), req.URL.Scheme+"://"+req.URL.Host)
 	}
 	return &http.Client{Transport: transport}
 }
@@ -48,14 +49,16 @@ function run(args) {
 }
 `
 
-func macOSPredictionProxy(ctx context.Context, origin string) *url.URL {
+var errPredictionSystemProxyUnresolved = errors.New("could not resolve macOS system proxy for prediction")
+
+func macOSPredictionProxy(ctx context.Context, origin string) (*url.URL, error) {
 	endpoint, err := url.Parse(origin)
 	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" {
-		return nil
+		return nil, errPredictionSystemProxyUnresolved
 	}
 	host := endpoint.Hostname()
 	if strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback() {
-		return nil
+		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -63,22 +66,22 @@ func macOSPredictionProxy(ctx context.Context, origin string) *url.URL {
 	cmd.Stdin = strings.NewReader(macOSPredictionProxyScript)
 	raw, err := cmd.Output()
 	if err != nil {
-		return nil
+		return nil, errPredictionSystemProxyUnresolved
 	}
 	return decodeMacOSPredictionProxy(raw)
 }
 
-func decodeMacOSPredictionProxy(raw []byte) *url.URL {
+func decodeMacOSPredictionProxy(raw []byte) (*url.URL, error) {
 	var proxies []struct {
 		Type, Host string
 		Port       int
 	}
 	if json.Unmarshal(raw, &proxies) != nil || len(proxies) == 0 {
-		return nil
+		return nil, errPredictionSystemProxyUnresolved
 	}
 
-	// The first entry is the system's preferred route. Direct and automatic
-	// configuration entries do not describe a fixed proxy endpoint.
+	// Follow the first route. Automatic configuration is not evaluated here.
+	// An unresolved route must not send an authenticated request directly.
 	proxy := proxies[0]
 	scheme := ""
 	switch proxy.Type {
@@ -86,9 +89,13 @@ func decodeMacOSPredictionProxy(raw []byte) *url.URL {
 		scheme = "http"
 	case "kCFProxyTypeSOCKS":
 		scheme = "socks5"
+	case "kCFProxyTypeNone":
+		return nil, nil
+	default:
+		return nil, errPredictionSystemProxyUnresolved
 	}
-	if scheme == "" || proxy.Host == "" || proxy.Port < 1 || proxy.Port > 65535 || strings.ContainsAny(proxy.Host, "/@?#") {
-		return nil
+	if proxy.Host == "" || proxy.Port < 1 || proxy.Port > 65535 || strings.ContainsAny(proxy.Host, "/@?#") {
+		return nil, errPredictionSystemProxyUnresolved
 	}
-	return &url.URL{Scheme: scheme, Host: net.JoinHostPort(proxy.Host, strconv.Itoa(proxy.Port))}
+	return &url.URL{Scheme: scheme, Host: net.JoinHostPort(proxy.Host, strconv.Itoa(proxy.Port))}, nil
 }

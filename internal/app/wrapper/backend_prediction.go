@@ -60,17 +60,15 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 			r.predictions.canceledRequests[next] = requestID
 			r.predictions.nextCanceledRequest = (next + 1) % predictionCanceledRequestLimit
 		}
-		var outbound [][]byte
 		job := r.predictions.jobs[requestID]
 		if job != nil {
 			job.cancel()
 			delete(r.predictions.jobs, requestID)
 			if job.sampled {
-				outbound, _ = r.translator.TranslateCommand(command)
+				r.queuePredictionCancelLocked(requestID, job.frames)
 			}
 		}
 		r.mu.Unlock()
-		sendPredictionCancels([]predictionCancellation{{frames: frames, outbound: outbound}})
 		return true
 	}
 	if r.predictions.jobs[command.CommandID] != nil ||
@@ -96,10 +94,13 @@ func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- [
 	response := make(chan predictionRPCResponse, 1)
 	p.pending[id] = response
 	r.mu.Unlock()
+	sent := false
 	defer func() {
 		r.mu.Lock()
-		// Keep a tombstone until a late response arrives, so credentials stay private.
-		if _, exists := p.pending[id]; exists {
+		if !sent {
+			delete(p.pending, id)
+		} else if _, exists := p.pending[id]; exists {
+			// Keep a tombstone for late replies only after handing the request to the writer.
 			p.pending[id] = nil
 		}
 		r.mu.Unlock()
@@ -113,6 +114,7 @@ func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- [
 	}
 	select {
 	case frames <- append(raw, '\n'):
+		sent = true
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -311,51 +313,40 @@ func (r *codexBackendRuntime) waitPredictionSample(job *predictionJob, timer *ti
 	}
 	delete(r.predictions.jobs, command.CommandID)
 	job.cancel()
-	outbound, _ := r.translator.TranslateCommand(agentproto.Command{Kind: agentproto.CommandThreadPredictionCancel,
-		Prediction: agentproto.PredictionCommand{RequestCommandID: command.CommandID}})
+	r.queuePredictionCancelLocked(command.CommandID, job.frames)
 	r.mu.Unlock()
-	sendPredictionCancels([]predictionCancellation{{frames: job.frames, outbound: outbound}})
 	_ = sender.SendEvents([]agentproto.Event{{Kind: agentproto.EventThreadPredictionResult, CommandID: command.CommandID,
 		ThreadID: command.Target.ThreadID, Prediction: &agentproto.PredictionResult{SourceTurnID: command.Prediction.SourceTurnID}}})
 }
 
 func (r *codexBackendRuntime) CancelPredictions() {
 	r.mu.Lock()
-	cancellations := r.cancelPredictionJobsLocked()
-	r.mu.Unlock()
-	sendPredictionCancels(cancellations)
+	defer r.mu.Unlock()
+	r.cancelPredictionJobsLocked()
 }
 
-type predictionCancellation struct {
-	frames   chan<- []byte
-	outbound [][]byte
-}
-
-func sendPredictionCancels(cancellations []predictionCancellation) {
-	for _, cancellation := range cancellations {
-		for _, frame := range cancellation.outbound {
-			select {
-			case cancellation.frames <- frame:
-			default:
-			}
+func (r *codexBackendRuntime) queuePredictionCancelLocked(requestID string, frames chan<- []byte) {
+	_ = r.translator.QueuePredictionCancel(requestID, func(frame []byte) bool {
+		select {
+		case frames <- frame:
+			return true
+		default:
+			return false
 		}
-	}
+	})
 }
 
-func (r *codexBackendRuntime) cancelPredictionJobsLocked() []predictionCancellation {
+func (r *codexBackendRuntime) cancelPredictionJobsLocked() {
 	if r.predictions == nil {
-		return nil
+		return
 	}
-	var cancellations []predictionCancellation
 	for id, job := range r.predictions.jobs {
 		job.cancel()
 		if job.sampled {
-			outbound, _ := r.translator.TranslateCommand(agentproto.Command{Kind: agentproto.CommandThreadPredictionCancel, Prediction: agentproto.PredictionCommand{RequestCommandID: id}})
-			cancellations = append(cancellations, predictionCancellation{frames: job.frames, outbound: outbound})
+			r.queuePredictionCancelLocked(id, job.frames)
 		}
 		delete(r.predictions.jobs, id)
 	}
-	return cancellations
 }
 
 func cancelRuntimePredictions(runtime backendRuntime) {

@@ -668,6 +668,8 @@ translator 把准备后的 request 译为 `thread/sample`，prompt 优先原样�
 
 translator 按桌面算法缓存源 `turn/moderationMetadata`（最多 64 个源 thread/turn），在采样完成时用当前官方 policy 检查源轮次的 prompt 分数/标签及 generation 标签；命中则返回空建议。只使用官方下发的 `st`、`ubl`、`abl`，不对建议文本另行分类或改写；无效 policy 或 metadata 不追加过滤。桌面 beta 偏好与企业策略未独立复刻，上下文请求省略无法证实的 beta 可选字段。这里是同源官方配置获取与 live 后台逻辑移植，不能据此声明桌面 SDK 内存配置逐时同步，catch-up/new-thread 入口仍未接入。
 
+macOS 上预测配置请求采用系统对目标域名选出的固定代理或显式直连。系统返回 PAC 等需继续求值的规则或查询失败时，本次预测配置请求结束。准备请求和取消帧没有进入原生写队列时不保留其响应关联。已入队准备请求的迟到响应仍被消费，以保护凭据。
+
 ### 5.4.4 Capability / account / app / MCP status state
 
 这是 wrapper 对 capability/account/app/MCP status 类 passive notifications 的 state-only 承接。

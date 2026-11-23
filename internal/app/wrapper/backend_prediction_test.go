@@ -3,8 +3,10 @@ package wrapper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -188,6 +190,25 @@ func TestPredictionPreparationFailureEndsRoundQuietly(t *testing.T) {
 	}
 }
 
+func TestPredictionFullQueueDiscardsUnsentPreparation(t *testing.T) {
+	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
+	runtime.predictions = newTestPredictionRuntime()
+	frames := make(chan []byte, 1)
+	frames <- []byte("occupied")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	if _, err := runtime.predictionRPC(ctx, frames, "getAuthStatus", nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("preparation blocked on full writer: %v", err)
+	}
+	if got := len(runtime.predictions.pending); got != 0 {
+		t.Fatalf("unsent preparations retained in pending map: %d", got)
+	}
+	if raw := <-frames; string(raw) != "occupied" {
+		t.Fatalf("full queue unexpectedly received a preparation frame: %s", raw)
+	}
+}
+
 func TestPredictionFullQueueDiscardsUnsentSample(t *testing.T) {
 	runtime, frames, events := predictionTimeoutFixture(t)
 	predictionAuthenticate(t, runtime, frames, "user", "account", false)
@@ -232,11 +253,20 @@ func TestPredictionCancelNeverBlocksFullChildQueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	command := predictionRequest()
-	if _, err := runtime.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: "official"}); err != nil {
+	outbound, err := runtime.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: "official"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	runtime.predictions.jobs[command.CommandID] = &predictionJob{ctx: ctx, cancel: cancel, command: command, sampled: true}
+	var sample map[string]any
+	if err := json.Unmarshal(outbound[0], &sample); err != nil {
+		t.Fatal(err)
+	}
+	index, err := strconv.Atoi(strings.TrimPrefix(sample["id"].(string), "relay-prediction-sample-"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	frames := make(chan []byte, 1)
+	runtime.predictions.jobs[command.CommandID] = &predictionJob{ctx: ctx, cancel: cancel, command: command, sampled: true, frames: frames}
 	frames <- []byte("occupied")
 	done := make(chan struct{})
 	go func() {
@@ -248,8 +278,16 @@ func TestPredictionCancelNeverBlocksFullChildQueue(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("cancel blocked behind full queue")
 	}
-	runtime.mu.Lock()
-	runtime.mu.Unlock()
+	if frame := <-frames; string(frame) != "occupied" {
+		t.Fatalf("full queue unexpectedly received a cancel frame: %s", frame)
+	}
+	// The already-sent sample stays private, while a dropped cancel has no response to consume.
+	predictionReply(t, runtime, sample, map[string]any{})
+	cancelID := "relay-prediction-cancel-" + strconv.Itoa(index+1)
+	result, err := runtime.ObserveServer([]byte(`{"id":"` + cancelID + `","result":{}}`))
+	if err != nil || result.Suppress {
+		t.Fatalf("unsent cancel is still owned: %#v, %v", result, err)
+	}
 }
 
 func TestPredictionDisconnectCancelsNativeSample(t *testing.T) {
