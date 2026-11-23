@@ -99,7 +99,7 @@ func retiredControlCandidateFor(tx *workstore.Tx, id, hostID string) (retiredCon
 	if err != nil {
 		return c, false, err
 	}
-	if op.Kind != "native.request_response" || op.State != work.OperationRetryable || op.ScopeID != scope.ID || op.ContextID != wc.ID || op.TargetID != worker.ID {
+	if op.Kind != "native.request_response" || (op.State != work.OperationRetryable && op.State != work.OperationSending) || op.ScopeID != scope.ID || op.ContextID != wc.ID || op.TargetID != worker.ID {
 		return c, false, nil
 	}
 	_, err = tx.GetNativeCommand(op.ID)

@@ -45,21 +45,7 @@ func (a *App) runTeamRuntimeViews(ctx context.Context) error {
 			if e != nil {
 				return e
 			}
-			gate, e := tx.GetRuntimeGate(worker.ID)
-			if errors.Is(e, workstore.ErrNotFound) {
-				return a.retireTeamRecoveryView(tx, current, false)
-			}
-			if e != nil {
-				return e
-			}
-			if gate.Reason == "snapshot_rebuild_required" {
-				return a.retireTeamRecoveryView(tx, current, true)
-			}
-			if runtimeGateStillReconciling(gate, time.Now()) {
-				return nil
-			}
-			_, e = a.queueTeamRecoveryView(tx, current, gate)
-			return e
+			return a.projectRecoveryView(tx, current, true)
 		})
 		if err != nil {
 			failures = append(failures, err)
@@ -67,7 +53,41 @@ func (a *App) runTeamRuntimeViews(ctx context.Context) error {
 	}
 	return errors.Join(failures...)
 }
-func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession, gate workstore.RuntimeGate) (string, error) {
+
+// A routine idle carrier reconnect needs no card unless a real input has
+// remained blocked long enough for automatic recovery to be considered stuck.
+func privateIdleRecoveryInput(tx *workstore.Tx, worker work.WorkerSession, gate workstore.RuntimeGate, now time.Time) (string, bool, error) {
+	if worker.Controller != work.ControllerAutomatic || gate.AttemptID != "" || gate.RecoveryReason != "" || (gate.Reason != "carrier_disconnected_reconcile" && gate.Reason != "snapshot_rebuild_required") {
+		return "", false, nil
+	}
+	scope, err := tx.GetScope(worker.ScopeID)
+	if err != nil || scope.Kind != work.ScopePersonal {
+		return "", false, err
+	}
+	occupied, err := tx.WorkerHasOccupancy(worker.ID)
+	if err != nil || occupied {
+		return "", false, err
+	}
+	inputs, err := tx.ListPendingInputs(worker.ScopeID, worker.RoleID)
+	if err != nil {
+		return "", false, err
+	}
+	for _, input := range inputs {
+		if (input.RecipientContextID != "" && input.RecipientContextID != worker.ContextID) || input.AwaitingText || input.ContentState == work.InputContentPending {
+			continue
+		}
+		blockedSince := gate.CreatedAt
+		if input.AvailableAt.After(blockedSince) {
+			blockedSince = input.AvailableAt
+		}
+		if now.Sub(blockedSince) >= 30*time.Second {
+			return input.ID, true, nil
+		}
+	}
+	return "", true, nil
+}
+
+func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession, gate workstore.RuntimeGate, blockedInput string) (string, error) {
 	view, err := workui.ContextDestination(tx, worker.ContextID)
 	if err != nil {
 		return "", err
@@ -85,6 +105,9 @@ func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession,
 		}
 	}
 	view.ID = workui.ID("runtime", worker.ID, strconv.FormatInt(worker.Generation, 10), strconv.FormatInt(worker.ControllerGeneration, 10), strconv.FormatInt(gate.Revision, 10), strconv.FormatBool(canRecover))
+	if blockedInput != "" {
+		view.ID = workui.ID("runtime-blocked", view.ID, blockedInput)
+	}
 	if old, e := tx.GetUIView(view.ID); e == nil {
 		return old.ID, nil
 	} else if !errors.Is(e, workstore.ErrNotFound) {
@@ -96,6 +119,9 @@ func (a *App) queueTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession,
 	view.TargetRevision = worker.Revision
 	text := teamRuntimeGateDescription(gate)
 	panel := workui.Panel{Title: role.Name + "的工作需要核对", Paragraphs: []string{text}}
+	if blockedInput != "" {
+		panel = workui.Panel{Title: "消息还在等待执行", Paragraphs: []string{"执行器尚未恢复连接。你的消息已保留，无需重发。"}}
+	}
 	if gate.AttemptID != "" {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "重新核对", Action: "runtime.observe"})
 	}
@@ -204,7 +230,19 @@ func (a *App) handleTeamRecoveryAction(ctx context.Context, interaction workstor
 // Retire visible controls when the gate changes without a human callback.
 // This is a presentation update, never evidence that the task itself finished.
 func (a *App) retireTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession, rebuilding bool) error {
-	views, err := tx.ListUIViews(worker.ScopeID)
+	scope, err := tx.GetScope(worker.ScopeID)
+	if err != nil {
+		return err
+	}
+	return a.retireTeamRecoveryViewWithPolicy(tx, worker, rebuilding, scope.Kind == work.ScopePersonal, false)
+}
+
+func (a *App) retireTeamRecoveryViewQuietly(tx *workstore.Tx, worker work.WorkerSession) error {
+	return a.retireTeamRecoveryViewWithPolicy(tx, worker, false, true, true)
+}
+
+func (a *App) retireTeamRecoveryViewWithPolicy(tx *workstore.Tx, worker work.WorkerSession, rebuilding, replaceOnly, recovering bool) error {
+	views, err := tx.ListActiveRuntimeViews(worker.ScopeID, "runtime:"+worker.ID)
 	if err != nil {
 		return err
 	}
@@ -234,7 +272,18 @@ func (a *App) retireTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession
 		if old.ExternalMessageID != "" && operation.State == work.OperationConfirmed && old.Binding == view.Binding && old.ChatID == view.ChatID && old.PrincipalID == view.PrincipalID {
 			view.ReplacesViewID = old.ID
 		}
+		if replaceOnly && view.ReplacesViewID == "" {
+			old.Invalidated = true
+			old.Revision++
+			if err := tx.PutUIView(old, old.Revision-1); err != nil {
+				return err
+			}
+			continue
+		}
 		text := "上次的执行限制已经解除，原工作和待处理输入仍保留。后续进展会在这里更新。"
+		if recovering {
+			text = "可以继续发送消息，需要时会自动连接执行器。"
+		}
 		if rebuilding {
 			text = "核对已完成，可以继续发送消息。"
 		}
@@ -280,6 +329,10 @@ func reuseTeamRecoveryView(tx *workstore.Tx, next *workstore.UIView) error {
 // A successful control request only refreshes observed state; it never implies
 // that a remaining gate was cleared or that original work has finished.
 func (a *App) refreshTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSession) error {
+	return a.projectRecoveryView(tx, worker, false)
+}
+
+func (a *App) projectRecoveryView(tx *workstore.Tx, worker work.WorkerSession, background bool) error {
 	gate, err := tx.GetRuntimeGate(worker.ID)
 	if errors.Is(err, workstore.ErrNotFound) {
 		return a.retireTeamRecoveryView(tx, worker, false)
@@ -287,10 +340,24 @@ func (a *App) refreshTeamRecoveryView(tx *workstore.Tx, worker work.WorkerSessio
 	if err != nil {
 		return err
 	}
+	blockedInput, idlePrivate, err := privateIdleRecoveryInput(tx, worker, gate, time.Now())
+	if err != nil {
+		return err
+	}
+	if idlePrivate {
+		if blockedInput == "" {
+			return a.retireTeamRecoveryViewQuietly(tx, worker)
+		}
+		_, err = a.queueTeamRecoveryView(tx, worker, gate, blockedInput)
+		return err
+	}
+	if background && runtimeGateStillReconciling(gate, time.Now()) {
+		return nil
+	}
 	if gate.Reason == "snapshot_rebuild_required" {
 		return a.retireTeamRecoveryView(tx, worker, true)
 	}
-	_, err = a.queueTeamRecoveryView(tx, worker, gate)
+	_, err = a.queueTeamRecoveryView(tx, worker, gate, "")
 	return err
 }
 
@@ -300,6 +367,8 @@ func teamRuntimeGateDescription(gate workstore.RuntimeGate) string {
 	}
 	text := "这项工作正在核对执行状态。未处理的输入和已有成果会保留，确认后才能重新执行。"
 	switch gate.Reason {
+	case "snapshot_rebuild_required":
+		text = "执行进程正在自动重建，待处理输入仍然保留。恢复耗时较长，输入会在恢复后继续处理。"
 	case "native_resume_rejected":
 		text = "原生会话无法恢复，原输入和检查点已保留。自动重建的证据不足，请核查后恢复工作。"
 	case "missing_processing_report":

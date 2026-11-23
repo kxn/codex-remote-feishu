@@ -14,6 +14,9 @@ import (
 // RecoverUnsentResponses reuses only a previously saved human decision. It
 // does not ask the user again, invent an answer, or replay an uncertain write.
 func (s *Service) RecoverUnsentResponses(ctx context.Context, limit int) error {
+	if limit < 1 || limit > 100 {
+		limit = 32
+	}
 	s.recoveryMu.Lock()
 	var ids []string
 	err := s.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -94,6 +97,15 @@ func (s *Service) RecoverUnsentResponses(ctx context.Context, limit int) error {
 			if e != nil {
 				return e
 			}
+			op, e := tx.GetOperation(request.ResponseOperationID)
+			if e != nil {
+				return e
+			}
+			// A sending operation may have a live registrar. Only the strict
+			// retired-control closure above can settle it; never replay it.
+			if op.State == work.OperationSending {
+				return nil
+			}
 			connected, e := tx.CarrierConnected(request.CarrierIncarnation)
 			if e != nil {
 				return e
@@ -109,10 +121,6 @@ func (s *Service) RecoverUnsentResponses(ctx context.Context, limit int) error {
 				return e
 			}
 			eligible = true
-			op, e := tx.GetOperation(request.ResponseOperationID)
-			if e != nil {
-				return e
-			}
 			body, e := tx.GetContent(request.ScopeID, op.RequestRef)
 			if e != nil {
 				return e

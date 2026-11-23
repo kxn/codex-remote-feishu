@@ -517,6 +517,34 @@ func TestRetiredPrivateControlCancellationClosesOnlyAfterExactProcessExit(t *tes
 		}
 		return nil
 	})
+	// Simulate a crash after a retry was durably marked sending but before registration.
+	f.tx(func(tx *workstore.Tx) error {
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if op.State != work.OperationRetryable || len(op.Steps) != 1 || op.Steps[0].ID != "local_registration_target_repair" {
+			t.Fatal("missing proven unsent decision")
+		}
+		old := op.Revision
+		op.Revision++
+		op.State = work.OperationSending
+		_, _, e = tx.PutOperation(op, old)
+		return e
+	})
+	if err = f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		r, e := tx.GetNativeRequest(f.request.ID)
+		if e != nil {
+			return e
+		}
+		if r.State != "response_pending" || f.writes != 0 {
+			t.Fatal("live carrier sending response was settled or replayed")
+		}
+		return nil
+	})
 	if err = child.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}
@@ -614,6 +642,49 @@ func TestNativeTerminalPrecedesLegacyDecisionRepair(t *testing.T) {
 		}
 		if r.State != "stale" || op.State != work.OperationTerminal {
 			t.Fatal("terminal event was blocked by obsolete decision repair")
+		}
+		return nil
+	})
+}
+
+func TestSendingResponseWithUnsentHistoryIsNeverReplayedOnConnectedCarrier(t *testing.T) {
+	f := responseIntegrationFixture(t, false)
+	f.driver.BindRegistrar(failBeforeResponseRegistration{})
+	id, err := f.service.Respond(t.Context(), f.decision)
+	if err == nil {
+		t.Fatal("expected unsent registration")
+	}
+	var revision int64
+	f.tx(func(tx *workstore.Tx) error {
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		old := op.Revision
+		op.Revision++
+		op.State = work.OperationSending
+		op.NextAttemptAt = nil
+		_, _, e = tx.PutOperation(op, old)
+		revision = op.Revision
+		return e
+	})
+	f.driver.BindRegistrar(f.coordinator)
+	for i := 0; i < 2; i++ {
+		if err = f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if op.Revision != revision || op.State != work.OperationSending || f.writes != 0 {
+			t.Fatal("live sending operation was replayed")
+		}
+		_, e = tx.GetNativeCommand(id)
+		if !errors.Is(e, workstore.ErrNotFound) {
+			t.Fatal("live sending operation was registered by recovery")
 		}
 		return nil
 	})

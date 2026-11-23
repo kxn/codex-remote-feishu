@@ -133,6 +133,12 @@ func (t *Tx) ListUIViews(scopeID string) ([]UIView, error) {
 	return out, rows.Err()
 }
 
+// ListActiveRuntimeViews limits recovery retirement to the worker's current
+// actionable cards instead of decoding the scope's entire navigation history.
+func (t *Tx) ListActiveRuntimeViews(scopeID, surfaceKey string) ([]UIView, error) {
+	return listRecords[UIView](t, "team_ui_views", " WHERE scope_id=? AND surface_key=? AND COALESCE(json_extract(payload,'$.invalidated'),0)=0 AND json_extract(payload,'$.kind') IN ('runtime.worker','runtime.rebuilding')", scopeID, surfaceKey)
+}
+
 func (t *Tx) ValidateViewInteraction(view UIView, interaction HumanInteraction) error {
 	raw := interaction.Envelope
 	if view.Invalidated || view.Binding.GatewayRef != interaction.Gateway.GatewayRef || view.Binding.AppID != interaction.Gateway.AppID || view.Binding.IdentityGeneration != interaction.Gateway.BotGeneration || view.ChatID != raw.ChatID || view.Tenant != raw.Tenant || view.ExternalMessageID == "" || view.ExternalMessageID != raw.MessageID || view.PrincipalID != "" && view.PrincipalID != interaction.PrincipalID {
