@@ -213,6 +213,9 @@ func TestMain(m *testing.M) {
 }
 
 func runCodexOAuthProbeHelper(mode string) int {
+	if strings.HasPrefix(mode, "model-catalog") {
+		return runModelCatalogProbeHelper(mode)
+	}
 	if mode == "hang" {
 		time.Sleep(10 * time.Minute)
 	}

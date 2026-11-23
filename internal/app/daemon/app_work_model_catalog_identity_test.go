@@ -1,174 +1,313 @@
 package daemon
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worksettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestModelCatalogModelEditReusesLoginButAccountSwitchCannotBorrowOldCarrier(t *testing.T) {
-	f, _, binding := catalogAppFixture(t)
-	commands := make(chan agentproto.Command, 4)
-	f.relay.send = func(_ string, c agentproto.Command) error { commands <- c; return nil }
-	f.a.prefetchTeamModelCatalog(t.Context(), agentproto.Hello{CarrierIncarnation: f.carrier.Incarnation})
-	var command agentproto.Command
-	select {
-	case command = <-commands:
-	case <-time.After(time.Second):
-		t.Fatal("Hello did not prefetch")
-	}
-	catalogReply(t, f, command, "account-a-model")
-	f.a.teamRuntime.workers.Wait()
-	owner := worksettings.CatalogOwner{ContextID: f.carrier.Owner.ContextID, WorkerID: f.carrier.Owner.WorkerSessionID, SessionGeneration: 1, SettingsRevision: 1, Backend: agentproto.BackendCodex, ProfileID: state.OAuthCodexProfileID}
-	// Selecting a model must not invalidate an account-wide catalog.
-	setTestWorkBotSettings(t, f.a, state.BotCapabilitySettingsRecord{GatewayID: "gateway", Backend: agentproto.BackendCodex, CodexProfileID: state.OAuthCodexProfileID, PromptOverride: state.ModelConfigRecord{Model: "account-a-model", ReasoningEffort: "high"}})
-	snapshot, err := (teamBotSettingsPort{f.a}).Snapshot(t.Context(), binding)
-	if err != nil {
-		t.Fatal(err)
-	}
+func seedProfileCatalog(t *testing.T, f *privateMCPReadFixture, key string, at time.Time) {
+	t.Helper()
 	pickerTx(t, f.a, func(tx *workstore.Tx) error {
-		if e := tx.SyncRoleSettingsReference(binding.RoleID, snapshot.Fingerprint); e != nil {
+		if _, e := tx.BeginProfileModelCatalogRefresh(key, "seed", at); e != nil {
 			return e
 		}
-		role, e := tx.GetRole(binding.RoleID)
-		owner.SettingsRevision = role.SettingsRevision
+		snapshot := catalogProbeResult(codexprofile.ModelCatalogProbeOptions{}, "last-good-model").Snapshot
+		snapshot.RefreshedAt = at
+		_, e := tx.CompleteProfileModelCatalogRefresh(key, "seed", &snapshot, "native-old-success", "", at)
 		return e
 	})
-	observed, err := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
-	if err != nil || observed.Snapshot == nil || observed.Evidence != command.CommandID {
-		t.Fatalf("thread edit lost catalog: %+v %v", observed, err)
+}
+func catalogOwner(f *privateMCPReadFixture) worksettings.CatalogOwner {
+	return worksettings.CatalogOwner{ContextID: f.carrier.Owner.ContextID, Backend: "codex", ProfileID: state.OAuthCodexProfileID}
+}
+
+func TestModelCatalogRestartKeepsThirtyDayChoicesFailurePreservesAndExplicitRefreshQueries(t *testing.T) {
+	f, key, binding := catalogAppFixture(t)
+	seedProfileCatalog(t, f, key, time.Now().Add(-30*24*time.Hour))
+	previous, _ := f.a.codexOAuthProfileState.current()
+	if _, _, e := f.a.codexOAuthProfileState.store.ApplyProbe(catalogOAuthObservation("fixture@example.com", "plus"), time.Now(), "new-daemon", false); e != nil {
+		t.Fatal(e)
 	}
-	// Explicit refresh issues a new owner-only query even while cache is fresh.
-	frozen := teamSettingsState{ContextID: owner.ContextID, Fingerprint: snapshot.Fingerprint}
-	if err = f.a.refreshTeamModelCatalog(t.Context(), f.source, binding, frozen); err != nil {
-		t.Fatal(err)
+	current, _ := f.a.codexOAuthProfileState.current()
+	target, e := f.a.teamProfileCatalog(t.Context(), binding, state.OAuthCodexProfileID, "")
+	if e != nil {
+		t.Fatal(e)
 	}
-	if err = f.a.refreshTeamModelCatalog(t.Context(), f.source, binding, frozen); err != nil {
-		t.Fatal(err)
+	if target.Key != key || current.AuthGeneration != previous.AuthGeneration+1 {
+		t.Fatal("restart invalidated catalog identity or weakened execution generation")
 	}
-	var refresh agentproto.Command
+	calls := make(chan struct{}, 4)
+	release := make(chan struct{})
+	f.a.runCodexModelCatalogProbe = func(ctx context.Context, _ codexprofile.ModelCatalogProbeOptions) (codexprofile.ModelCatalogProbeObservation, error) {
+		calls <- struct{}{}
+		select {
+		case <-release:
+			return codexprofile.ModelCatalogProbeObservation{}, fmt.Errorf("offline-model-service")
+		case <-ctx.Done():
+			return codexprofile.ModelCatalogProbeObservation{}, ctx.Err()
+		}
+	}
+	got, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, catalogOwner(f))
+	if e != nil || got.Snapshot == nil || got.Snapshot.Entries[0].Model != "last-good-model" {
+		t.Fatalf("old cache not immediately selectable: %+v %v", got, e)
+	}
 	select {
-	case refresh = <-commands:
+	case <-calls:
 	case <-time.After(time.Second):
-		t.Fatal("refresh only returned cached page")
+		t.Fatal("stale page not refreshed in background")
 	}
-	if refresh.CommandID == command.CommandID || refresh.Kind != agentproto.CommandModelList || refresh.Execution.AttemptID != "" {
-		t.Fatal("refresh lost read-only request boundary")
+	close(release)
+	f.a.teamRuntime.workers.Wait()
+	got, e = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, catalogOwner(f))
+	if e != nil || got.Snapshot == nil || got.Unavailable == "" {
+		t.Fatalf("failure lost lastgood: %+v %v", got, e)
+	}
+	release = make(chan struct{})
+	f.a.runCodexModelCatalogProbe = func(ctx context.Context, o codexprofile.ModelCatalogProbeOptions) (codexprofile.ModelCatalogProbeObservation, error) {
+		calls <- struct{}{}
+		select {
+		case <-release:
+			return catalogProbeResult(o, "fresh-model"), nil
+		case <-ctx.Done():
+			return codexprofile.ModelCatalogProbeObservation{}, ctx.Err()
+		}
+	}
+	snapshot, e := (teamBotSettingsPort{f.a}).Snapshot(t.Context(), binding)
+	if e != nil {
+		t.Fatal(e)
+	}
+	frozen := teamSettingsState{ContextID: f.carrier.Owner.ContextID, Fingerprint: snapshot.Fingerprint}
+	for i := 0; i < 2; i++ {
+		if e = f.a.refreshTeamModelCatalog(t.Context(), f.source, binding, frozen); e != nil {
+			t.Fatal(e)
+		}
 	}
 	select {
-	case <-commands:
-		t.Fatal("repeated refresh duplicated in-flight query")
+	case <-calls:
+	case <-time.After(time.Second):
+		t.Fatal("explicit refresh returned cache without new query")
+	}
+	select {
+	case <-calls:
+		t.Fatal("simultaneous refresh duplicated process")
 	default:
 	}
-	stillVisible, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
-	if e != nil || stillVisible.Snapshot == nil || stillVisible.Evidence != command.CommandID {
-		t.Fatal("refresh discarded last good choices while request pending")
+	got, e = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, catalogOwner(f))
+	if e != nil || got.Snapshot == nil || got.Snapshot.Entries[0].Model != "last-good-model" {
+		t.Fatal("pending explicit refresh hid choices")
 	}
-	catalogReply(t, f, refresh, "account-a-new-model")
+	close(release)
 	f.a.teamRuntime.workers.Wait()
-	observed, err = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
-	if err != nil || observed.Evidence != refresh.CommandID || observed.Snapshot.Entries[0].Model != "account-a-new-model" {
-		t.Fatalf("refresh did not replace observed page: %+v %v", observed, err)
+	got, e = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, catalogOwner(f))
+	if e != nil || got.Snapshot == nil || got.Snapshot.Entries[0].Model != "fresh-model" {
+		t.Fatalf("new result not selected: %+v %v", got, e)
 	}
-	_, _, err = f.a.codexOAuthProfileState.store.ApplyProbe(codexprofile.OAuthProbeObservation{Result: codexprofile.OAuthProbeResult{Status: codexprofile.OAuthProbeStatusDetected, AccountHint: "different-account", PlanType: "plus"}, CapabilitySet: codexprofile.CodexProfileCapabilitySetV1}, time.Now(), "fixture", true)
-	if err != nil {
-		t.Fatal(err)
+}
+
+func TestModelCatalogAccountPlanAndPageHaveSeparatePersistentNamespaces(t *testing.T) {
+	f, key, binding := catalogAppFixture(t)
+	seedProfileCatalog(t, f, key, time.Now())
+	for _, tc := range []struct{ email, plan, cursor string }{{"different@example.com", "plus", ""}, {"fixture@example.com", "pro", ""}, {"fixture@example.com", "plus", "page-two"}} {
+		if _, _, e := f.a.codexOAuthProfileState.store.ApplyProbe(catalogOAuthObservation(tc.email, tc.plan), time.Now(), "fixture", false); e != nil {
+			t.Fatal(e)
+		}
+		target, e := f.a.teamProfileCatalog(t.Context(), binding, state.OAuthCodexProfileID, tc.cursor)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if target.Key == key || target.Options.Cursor != tc.cursor {
+			t.Fatal("different account/plan/page reused cached choices")
+		}
+		pickerTx(t, f.a, func(tx *workstore.Tx) error {
+			if _, e := tx.GetProfileModelCatalog(target.Key); e != workstore.ErrNotFound {
+				t.Fatalf("unrelated namespace returned cache: %v", e)
+			}
+			return nil
+		})
 	}
-	observed, err = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
-	if err != nil || observed.Snapshot != nil {
-		t.Fatalf("new login borrowed old model choices: %+v %v", observed, err)
+}
+
+func TestModelCatalogAPIEndpointChangeSeparatesNamespaces(t *testing.T) {
+	f, _, binding := catalogAppFixture(t)
+	record, e := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{Name: "fixture", BaseURL: "https://api-one.example/v1", APIKey: "test-secret", Model: "configured-model", ReasoningEffort: "high"})
+	if e != nil {
+		t.Fatal(e)
 	}
-	if err = f.a.refreshTeamModelCatalog(t.Context(), f.source, binding, frozen); err == nil {
-		t.Fatal("disconnected identity refresh gave no explanation")
+	loaded, e := f.a.loadAdminConfig()
+	if e != nil {
+		t.Fatal(e)
+	}
+	loaded.Config.Codex.Profiles = []config.CodexAPIProfileRecord{record}
+	if e = config.WriteAppConfig(loaded.Path, loaded.Config); e != nil {
+		t.Fatal(e)
+	}
+	prefs, e := f.a.profileContextPreferenceStore()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = prefs.EnsureCodexProfile(record.ID, state.CodexContextModeDefault); e != nil {
+		t.Fatal(e)
+	}
+	first, e := f.a.teamProfileCatalog(t.Context(), binding, record.ID, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	updated, _, e := config.PrepareCodexAPIProfileUpdate(record, config.CodexAPIProfileInput{Name: "fixture", BaseURL: "https://api-two.example/v1", APIKey: "test-secret", Model: "configured-model", ReasoningEffort: "high"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	loaded.Config.Codex.Profiles = []config.CodexAPIProfileRecord{updated}
+	if e = config.WriteAppConfig(loaded.Path, loaded.Config); e != nil {
+		t.Fatal(e)
+	}
+	second, e := f.a.teamProfileCatalog(t.Context(), binding, record.ID, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if first.Key == second.Key {
+		t.Fatal("changed endpoint borrowed old directory")
+	}
+}
+
+func TestModelCatalogIndependentProbePaginationPreservesNativeCursor(t *testing.T) {
+	f, _, binding := catalogAppFixture(t)
+	calls := make(chan string, 3)
+	f.a.runCodexModelCatalogProbe = func(_ context.Context, o codexprofile.ModelCatalogProbeOptions) (codexprofile.ModelCatalogProbeObservation, error) {
+		calls <- o.Cursor
+		model := "page-one-model"
+		if o.Cursor != "" {
+			model = "page-two-model"
+		}
+		result := catalogProbeResult(o, model)
+		if o.Cursor == "" {
+			result.Snapshot.NextCursor = "native-page-two"
+		}
+		return result, nil
+	}
+	owner := catalogOwner(f)
+	for _, cursor := range []string{"", "native-page-two"} {
+		owner.Cursor = cursor
+		if _, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner); e != nil {
+			t.Fatal(e)
+		}
+		f.a.teamRuntime.workers.Wait()
+		got, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
+		if e != nil || got.Snapshot == nil {
+			t.Fatalf("page unavailable: %+v %v", got, e)
+		}
+		want := "page-one-model"
+		if cursor != "" {
+			want = "page-two-model"
+		}
+		if got.Snapshot.Entries[0].Model != want {
+			t.Fatal("page returned another cursor cache")
+		}
+		if cursor == "" && got.Snapshot.NextCursor != "native-page-two" {
+			t.Fatal("lost native continuation cursor")
+		}
+		select {
+		case actual := <-calls:
+			if actual != cursor {
+				t.Fatal("probe received wrong cursor")
+			}
+		default:
+			t.Fatal("page query absent")
+		}
 	}
 	select {
-	case c := <-commands:
-		t.Fatalf("new login queried old identity: %s", c.CommandID)
+	case <-calls:
+		t.Fatal("fresh page queried repeatedly")
 	default:
 	}
 }
 
-func TestModelCatalogLateResultCannotReplaceNewSettingsPage(t *testing.T) {
-	f, _, _ := catalogAppFixture(t)
-	commands := make(chan agentproto.Command, 2)
-	f.relay.send = func(_ string, c agentproto.Command) error { commands <- c; return nil }
-	old, err := f.a.queueTeamSettings(t.Context(), f.source, "model", "")
-	if err != nil {
-		t.Fatal(err)
+func TestModelCatalogCapacityQueuesExplicitFreshCacheRefreshAndDoesNotLoseRequest(t *testing.T) {
+	f, _, binding := catalogAppFixture(t)
+	targets := make([]teamProfileCatalogTarget, 3)
+	for i, cursor := range []string{"slot-one", "slot-two", "queued-third"} {
+		target, e := f.a.teamProfileCatalog(t.Context(), binding, state.OAuthCodexProfileID, cursor)
+		if e != nil {
+			t.Fatal(e)
+		}
+		targets[i] = target
 	}
-	var c agentproto.Command
-	select {
-	case c = <-commands:
-	case <-time.After(time.Second):
-		t.Fatal("no discovery")
+	seedProfileCatalog(t, f, targets[2].Key, time.Now())
+	calls := make(chan string, 4)
+	release := make(chan struct{})
+	f.a.runCodexModelCatalogProbe = func(ctx context.Context, o codexprofile.ModelCatalogProbeOptions) (codexprofile.ModelCatalogProbeObservation, error) {
+		calls <- o.Cursor
+		if o.Cursor == "queued-third" {
+			return codexprofile.ModelCatalogProbeObservation{}, fmt.Errorf("third-refresh-failed")
+		}
+		select {
+		case <-release:
+			return catalogProbeResult(o, "slot-model"), nil
+		case <-ctx.Done():
+			return codexprofile.ModelCatalogProbeObservation{}, ctx.Err()
+		}
 	}
-	source := f.source
-	source.Key = "newer-overview"
-	newer, err := f.a.queueTeamSettings(t.Context(), source, "overview", "")
-	if err != nil {
-		t.Fatal(err)
+	for i := 0; i < 2; i++ {
+		if _, e := f.a.readOrRefreshProfileCatalog(t.Context(), targets[i], true); e != nil {
+			t.Fatal(e)
+		}
 	}
-	catalogReply(t, f, c, "late-model")
-	f.a.teamRuntime.workers.Wait()
-	if err = f.a.advanceTeamModelCatalogViews(t.Context()); err != nil {
-		t.Fatal(err)
+	for i := 0; i < 2; i++ {
+		select {
+		case <-calls:
+		case <-time.After(time.Second):
+			t.Fatal("two read-only probes did not occupy capacity")
+		}
+	}
+	snapshot, e := (teamBotSettingsPort{f.a}).Snapshot(t.Context(), binding)
+	if e != nil {
+		t.Fatal(e)
+	}
+	frozen := teamSettingsState{ContextID: f.carrier.Owner.ContextID, Fingerprint: snapshot.Fingerprint, CursorTrail: []string{"queued-third"}}
+	if e = f.a.refreshTeamModelCatalog(t.Context(), f.source, binding, frozen); e != nil {
+		t.Fatal(e)
 	}
 	pickerTx(t, f.a, func(tx *workstore.Tx) error {
-		oldView, e := tx.GetUIView(old)
+		got, e := tx.GetProfileModelCatalog(targets[2].Key)
 		if e != nil {
 			return e
 		}
-		if !oldView.Invalidated {
-			t.Fatal("old model page remains current")
+		if !got.Refreshing || got.EvidenceID != "native-old-success" || got.Snapshot.Entries[0].Model != "last-good-model" {
+			t.Fatal("capacity-full explicit request was lost or cache hidden")
 		}
-		newView, e := tx.GetUIView(newer)
-		if e != nil {
-			return e
-		}
-		if newView.Invalidated {
-			t.Fatal("late catalog replaced newer overview")
-		}
-		views, e := tx.ListUIViews(f.source.ScopeID)
-		if len(views) != 2 {
-			t.Fatalf("late result created extra view: %d", len(views))
-		}
-		return e
+		return nil
 	})
-}
-
-func TestModelCatalogExpiredExactPageRefreshesWhileRetainingLastGoodChoices(t *testing.T) {
-	f, _, binding := catalogAppFixture(t)
-	commands := make(chan agentproto.Command, 4)
-	f.relay.send = func(_ string, c agentproto.Command) error { commands <- c; return nil }
-	f.a.prefetchTeamModelCatalog(t.Context(), agentproto.Hello{CarrierIncarnation: f.carrier.Incarnation})
-	var c agentproto.Command
 	select {
-	case c = <-commands:
-	case <-time.After(time.Second):
-		t.Fatal("no discovery")
+	case <-calls:
+		t.Fatal("third probe escaped concurrency bound")
+	default:
 	}
-	catalogReply(t, f, c, "last-good-model", time.Now().Add(-6*time.Minute))
+	close(release)
 	f.a.teamRuntime.workers.Wait()
-	owner := worksettings.CatalogOwner{ContextID: f.carrier.Owner.ContextID, WorkerID: f.carrier.Owner.WorkerSessionID, SessionGeneration: 1, SettingsRevision: 1, Backend: agentproto.BackendCodex, ProfileID: state.OAuthCodexProfileID}
-	got, err := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
-	if err != nil || got.Snapshot == nil || got.Evidence != c.CommandID {
-		t.Fatalf("last good not retained: %+v %v", got, err)
+	owner := catalogOwner(f)
+	owner.Cursor = "queued-third"
+	got, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
+	if e != nil || got.Snapshot == nil {
+		t.Fatalf("queued request hid choices: %+v %v", got, e)
 	}
-	var refresh agentproto.Command
 	select {
-	case refresh = <-commands:
+	case cursor := <-calls:
+		if cursor != "queued-third" {
+			t.Fatal("wrong queued namespace queried")
+		}
 	case <-time.After(time.Second):
-		t.Fatal("expired exact key bypassed TTL without new query")
+		t.Fatal("freed capacity did not run persisted explicit refresh")
 	}
-	catalogReply(t, f, refresh, "fresh-model")
 	f.a.teamRuntime.workers.Wait()
-	got, err = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
-	if err != nil || got.Evidence != refresh.CommandID {
-		t.Fatalf("fresh result not selected: %+v %v", got, err)
+	got, e = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
+	if e != nil || got.Snapshot == nil || got.Snapshot.Entries[0].Model != "last-good-model" || got.Unavailable == "" {
+		t.Fatalf("queued failure lost last good choices: %+v %v", got, e)
 	}
 }

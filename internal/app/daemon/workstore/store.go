@@ -112,7 +112,7 @@ func (s *Store) initialize(ctx context.Context) error {
 			return fmt.Errorf("work schema %d is newer than supported %d", version, SchemaVersion)
 		}
 		if version == SchemaVersion {
-			for _, statement := range []string{SchemaPrivateExecutionDisplayV1, SchemaPublicationBudgetV1, SchemaPublicationOutboxIndexV1} {
+			for _, statement := range []string{SchemaProfileModelCatalogV1, SchemaPrivateExecutionDisplayV1, SchemaPublicationBudgetV1, SchemaPublicationOutboxIndexV1} {
 				if _, err := t.tx.ExecContext(ctx, statement); err != nil {
 					return err
 				}

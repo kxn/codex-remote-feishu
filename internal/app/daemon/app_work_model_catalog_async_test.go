@@ -22,15 +22,29 @@ import (
 )
 
 func catalogAppFixture(t *testing.T) (*privateMCPReadFixture, string, work.RoleBotBinding) {
+	return catalogAppFixtureWithWorker(t, true)
+}
+func catalogAppFixtureWithWorker(t *testing.T, withWorker bool) (*privateMCPReadFixture, string, work.RoleBotBinding) {
 	t.Helper()
-	f := newPrivateMCPReadFixture(t, isolatedSDKFixtureAppID(t, "model-catalog"))
+	var f *privateMCPReadFixture
+	if withWorker {
+		f = newPrivateMCPReadFixture(t, isolatedSDKFixtureAppID(t, "model-catalog"))
+	} else {
+		a, source := teamPickerFixture(t, isolatedSDKFixtureAppID(t, "cold-catalog"))
+		f = &privateMCPReadFixture{a: a, source: source}
+		pickerTx(t, a, func(tx *workstore.Tx) error {
+			nav, e := tx.GetPrivateNavigation(source.ScopeID)
+			f.carrier.Owner.ContextID = nav.FrontContextID
+			return e
+		})
+	}
 	cfg := config.DefaultAppConfig()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{ID: "gateway", AppID: f.source.Gateway.AppID, AppSecret: "fixture"}}
 	a, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 	a.daemonLifecycleID = "fixture"
 	a.headlessRuntime.CodexRealBinary = "fake-codex"
 	a.runCodexOAuthProbe = func(context.Context, codexprofile.OAuthProbeOptions) (codexprofile.OAuthProbeObservation, error) {
-		return codexprofile.OAuthProbeObservation{Result: codexprofile.OAuthProbeResult{Status: codexprofile.OAuthProbeStatusDetected, AccountHint: "fixture", PlanType: "plus"}, CapabilitySet: codexprofile.CodexProfileCapabilitySetV1}, nil
+		return catalogOAuthObservation("fixture@example.com", "plus"), nil
 	}
 	a.teamRuntime = f.a.teamRuntime
 	f.a = a
@@ -38,7 +52,7 @@ func catalogAppFixture(t *testing.T) (*privateMCPReadFixture, string, work.RoleB
 	ctx, cancel := context.WithCancel(t.Context())
 	a.teamRuntime.runContext = ctx
 	t.Cleanup(func() { cancel(); a.teamRuntime.workers.Wait() })
-	_, _, err := a.codexOAuthProfileState.store.ApplyProbe(codexprofile.OAuthProbeObservation{Result: codexprofile.OAuthProbeResult{Status: codexprofile.OAuthProbeStatusDetected, AccountHint: "fixture", PlanType: "plus"}, CapabilitySet: codexprofile.CodexProfileCapabilitySetV1}, time.Now(), "fixture", false)
+	_, _, err := a.codexOAuthProfileState.store.ApplyProbe(catalogOAuthObservation("fixture@example.com", "plus"), time.Now(), "fixture", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,48 +75,45 @@ func catalogAppFixture(t *testing.T) (*privateMCPReadFixture, string, work.RoleB
 	if err != nil {
 		t.Fatal(err)
 	}
-	connection, err := a.teamCatalogConnection(t.Context(), binding, state.OAuthCodexProfileID)
+	target, err := a.teamProfileCatalog(t.Context(), binding, state.OAuthCodexProfileID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	pickerTx(t, a, func(tx *workstore.Tx) error {
-		if e := tx.SyncRoleSettingsReference(binding.RoleID, snapshot.Fingerprint); e != nil {
-			return e
-		}
-		raw, _ := json.Marshal(map[string]any{"settings_revision": 1, "preferences_revision": 0, "profile_id": state.OAuthCodexProfileID, "backend": work.BackendCodex, "snapshot": agentproto.RuntimeLaunchSnapshot{Owner: f.carrier.Owner, CarrierIncarnation: f.carrier.Incarnation}, "codex_resume": agentproto.CodexResumePolicy{ConnectionContractID: connection}})
-		body := work.NewContent("catalog-launch-body", f.source.ScopeID, "application/json", raw, time.Now())
-		if e := tx.PutContent(body); e != nil {
-			return e
-		}
-		_, _, e := tx.PutOperation(work.Operation{ID: "catalog-launch", ScopeID: f.source.ScopeID, ContextID: f.carrier.Owner.ContextID, Actor: work.Actor{Kind: work.ActorSystem, ID: "work-host"}, Kind: "worker.launch", TargetID: f.carrier.Owner.WorkerSessionID, TargetGeneration: 1, RequestRef: body.ID, RequestHash: body.SHA256, IdempotencyKey: "catalog-launch", State: work.OperationConfirmed, ExternalReceipt: "fixture-carrier", Revision: 1}, 0)
-		return e
+		return tx.SyncRoleSettingsReference(binding.RoleID, snapshot.Fingerprint)
 	})
-	return f, connection, binding
+	a.runCodexModelCatalogProbe = func(ctx context.Context, _ codexprofile.ModelCatalogProbeOptions) (codexprofile.ModelCatalogProbeObservation, error) {
+		<-ctx.Done()
+		return codexprofile.ModelCatalogProbeObservation{}, ctx.Err()
+	}
+	return f, target.Key, binding
 }
 
-func catalogReply(t *testing.T, f *privateMCPReadFixture, command agentproto.Command, model string, observedAt ...time.Time) {
-	t.Helper()
-	f.sequence++
-	at := time.Now().UTC()
-	if len(observedAt) > 0 {
-		at = observedAt[0]
-	}
-	event := agentproto.Event{Kind: agentproto.EventModelCatalogUpdated, CommandID: command.CommandID, RequestID: command.CommandID, Execution: agentproto.CloneExecutionBinding(command.Execution), Seq: f.sequence, ModelCatalog: &agentproto.ModelCatalogSnapshot{RefreshedAt: at, Entries: []agentproto.ModelCatalogEntry{{ID: model, Model: model}}}}
-	hash, e := agentproto.RuntimeEventPayloadHash(event)
-	if e != nil {
-		t.Fatal(e)
-	}
-	event.Journal = &agentproto.RuntimeEventIdentity{Version: 1, CarrierIncarnation: f.carrier.Incarnation, Sequence: event.Seq, PayloadHash: hash}
-	if e = f.coordinator.HandleEvent(t.Context(), f.carrier.OriginInstanceID, event); e != nil {
-		t.Fatal(e)
-	}
+func catalogOAuthObservation(email, plan string) codexprofile.OAuthProbeObservation {
+	return codexprofile.OAuthProbeObservation{Result: codexprofile.ClassifyOAuthProbe(codexprofile.OAuthProbeEvidence{AccountType: "chatgpt", AuthMethod: "chatgpt", Email: email, PlanType: plan}), CapabilitySet: codexprofile.CodexProfileCapabilitySetV1}
+}
+func catalogProbeResult(options codexprofile.ModelCatalogProbeOptions, model string) codexprofile.ModelCatalogProbeObservation {
+	return codexprofile.ModelCatalogProbeObservation{Snapshot: agentproto.ModelCatalogSnapshot{RefreshedAt: time.Now().UTC(), Entries: []agentproto.ModelCatalogEntry{{ID: model, Model: model, IsDefault: true, DefaultReasoningEffort: "high", SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{{ReasoningEffort: "high"}}}}}, EvidenceID: "native-readonly-" + model, AccountFingerprint: options.ExpectedAccountFingerprint, PlanType: options.ExpectedPlanType}
 }
 
-func TestModelCatalogHelloPrefetchAndResultUpdateOriginalSDKCard(t *testing.T) {
+func TestModelCatalogIndependentProbeAndResultUpdateOriginalSDKCard(t *testing.T) {
 	f, _, _ := catalogAppFixture(t)
 	a := f.a
-	commands := make(chan agentproto.Command, 4)
-	f.relay.send = func(_ string, c agentproto.Command) error { commands <- c; return nil }
+	calls := make(chan codexprofile.ModelCatalogProbeOptions, 4)
+	release := make(chan struct{})
+	a.runCodexModelCatalogProbe = func(ctx context.Context, o codexprofile.ModelCatalogProbeOptions) (codexprofile.ModelCatalogProbeObservation, error) {
+		calls <- o
+		select {
+		case <-release:
+			return catalogProbeResult(o, "fresh-model"), nil
+		case <-ctx.Done():
+			return codexprofile.ModelCatalogProbeObservation{}, ctx.Err()
+		}
+	}
+	f.relay.send = func(_ string, c agentproto.Command) error {
+		t.Errorf("business carrier received %s", c.Kind)
+		return nil
+	}
 	var creates, patches atomic.Int32
 	platform := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -124,6 +135,23 @@ func TestModelCatalogHelloPrefetchAndResultUpdateOriginalSDKCard(t *testing.T) {
 			if !strings.Contains(string(raw), "fresh-model") {
 				t.Error("catalog result missing from patch")
 			}
+			var envelope struct{ Content string }
+			if e := json.Unmarshal(raw, &envelope); e != nil {
+				t.Error(e)
+			}
+			var card struct {
+				Body struct {
+					Elements []json.RawMessage `json:"elements"`
+				} `json:"body"`
+			}
+			if e := json.Unmarshal([]byte(envelope.Content), &card); e != nil {
+				t.Error(e)
+			}
+			for i, want := range []string{"菜单首页 › 参数设置 › 模型", "返回参数设置", "返回菜单首页"} {
+				if len(card.Body.Elements) <= i || !strings.Contains(string(card.Body.Elements[i]), want) {
+					t.Errorf("automatic patch lost top navigation %s", want)
+				}
+			}
 			fmt.Fprint(w, `{"code":0,"data":{"message_id":"catalog-card","chat_id":"private-chat"}}`)
 		default:
 			t.Errorf("unexpected SDK route %s %s", r.Method, r.URL.Path)
@@ -136,18 +164,15 @@ func TestModelCatalogHelloPrefetchAndResultUpdateOriginalSDKCard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The initial page may itself request discovery. Hello must coalesce with it.
-	a.prefetchTeamModelCatalog(t.Context(), agentproto.Hello{CarrierIncarnation: f.carrier.Incarnation})
-	var command agentproto.Command
 	select {
-	case command = <-commands:
+	case o := <-calls:
+		if o.ExpectedAccountFingerprint == "" {
+			t.Fatal("probe missing exact account proof")
+		}
 	case <-time.After(time.Second):
-		t.Fatal("no model query before manual refresh")
+		t.Fatal("empty model page did not launch independent probe")
 	}
-	if command.Kind != agentproto.CommandModelList || command.Execution.AttemptID != "" {
-		t.Fatal("catalog started business task")
-	}
-	catalogReply(t, f, command, "fresh-model")
+	close(release)
 	a.teamRuntime.workers.Wait()
 	// Thirty-two older views have no publication receipt yet. They must not
 	// permanently starve this ready result at position 33.
@@ -214,8 +239,8 @@ func TestModelCatalogHelloPrefetchAndResultUpdateOriginalSDKCard(t *testing.T) {
 		return e
 	})
 	select {
-	case c := <-commands:
-		t.Fatalf("duplicate query %s", c.Kind)
+	case <-calls:
+		t.Fatal("duplicate independent query")
 	default:
 	}
 }

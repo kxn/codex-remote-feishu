@@ -54,11 +54,7 @@ func (a *App) queueTeamSettingsCursor(ctx context.Context, source teamHumanSourc
 	if err != nil {
 		return "", err
 	}
-	if (kind == "model" || kind == "reasoning") && snapshot.Catalog == nil && teamFixedModel(snapshot) == "" && a.teamRuntime.host != nil {
-		if e := a.prepareTeamModelCatalog(ctx, source); e != nil && note == "" {
-			note = e.Error()
-		}
-	}
+
 	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		wc, navRevision, e := worksettings.FrozenContext(tx, source.Authority)
 		if e != nil {
@@ -245,9 +241,8 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 				}
 			}
 			if !fixed {
-				if snapshot.Catalog == nil {
-					text(snapshot.CatalogUnavailable)
-				} else {
+				text(snapshot.CatalogUnavailable)
+				if snapshot.Catalog != nil {
 					for _, entry := range snapshot.Catalog.Entries {
 						if entry.Hidden {
 							continue
@@ -285,6 +280,7 @@ func teamSettingsCard(id string, snapshot worksettings.Snapshot, pref work.Conte
 				}
 			}
 			if !fixed {
+				text(snapshot.CatalogUnavailable)
 				model := snapshot.Settings.PromptOverride.Model
 				if snapshot.Catalog != nil {
 					for _, entry := range snapshot.Catalog.Entries {

@@ -100,15 +100,14 @@ type ContextUpdateRequest struct {
 }
 
 type CatalogOwner struct {
-	Cursor            string             `json:"cursor,omitempty"`
-	ContextID         string             `json:"context_id"`
-	WorkerID          string             `json:"worker_id"`
-	SessionGeneration int64              `json:"session_generation"`
-	SettingsRevision  int64              `json:"settings_revision"`
-	Backend           agentproto.Backend `json:"backend"`
-	ProfileID         string             `json:"profile_id"`
+	Cursor           string             `json:"cursor,omitempty"`
+	ContextID        string             `json:"context_id"`
+	SettingsRevision int64              `json:"settings_revision"`
+	Backend          agentproto.Backend `json:"backend"`
+	ProfileID        string             `json:"profile_id"`
 }
 type ObservedCatalog struct {
+	Identity              string // Opaque semantic profile/account namespace; never credentials.
 	Snapshot              *agentproto.ModelCatalogSnapshot
 	Evidence, Unavailable string
 }

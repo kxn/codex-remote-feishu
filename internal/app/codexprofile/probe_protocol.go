@@ -1,7 +1,10 @@
 package codexprofile
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"net/mail"
 	"net/url"
 	"strings"
 )
@@ -30,6 +33,7 @@ type OAuthProbeFrame struct {
 type OAuthProbeEvidence struct {
 	AccountType    string
 	AuthMethod     string
+	AccountID      string
 	Email          string
 	PlanType       string
 	ChatGPTBaseURL string
@@ -37,6 +41,7 @@ type OAuthProbeEvidence struct {
 
 type OAuthProbeResult struct {
 	Status             OAuthProbeStatus `json:"status"`
+	AccountFingerprint string           `json:"accountFingerprint,omitempty"`
 	AccountHint        string           `json:"accountHint,omitempty"`
 	PlanType           string           `json:"planType,omitempty"`
 	LastProbeErrorCode string           `json:"lastProbeErrorCode,omitempty"`
@@ -79,6 +84,7 @@ func ClassifyOAuthProbe(evidence OAuthProbeEvidence) OAuthProbeResult {
 	case accountType == "chatgpt" && authMethod == "chatgpt":
 		result.Status = OAuthProbeStatusDetected
 		result.AccountHint = redactEmail(evidence.Email)
+		result.AccountFingerprint = oauthAccountFingerprint(evidence)
 		result.PlanType = strings.TrimSpace(evidence.PlanType)
 		if !isOfficialChatGPTBaseURL(evidence.ChatGPTBaseURL) {
 			result.AvailabilityCode = ErrorOAuthDeploymentUnsupported
@@ -133,4 +139,29 @@ func redactEmail(value string) string {
 		return ""
 	}
 	return string([]rune(local)[0]) + "***@" + domain
+}
+
+// Execution auth generations may change on restart. Catalog identity hashes
+// actual account/read identity and realm, never the redacted display hint.
+func oauthAccountFingerprint(e OAuthProbeEvidence) string {
+	id, email := strings.TrimSpace(e.AccountID), strings.TrimSpace(e.Email)
+	if parsed, err := mail.ParseAddress(email); err != nil || parsed.Address != email || strings.Contains(email, "*") {
+		email = ""
+	}
+	if id == "" && email == "" {
+		return ""
+	}
+	realm := strings.TrimSpace(e.ChatGPTBaseURL)
+	if realm == "" {
+		realm = OfficialChatGPTBaseURL
+	}
+	if parsed, err := url.Parse(realm); err == nil {
+		parsed.Scheme = strings.ToLower(parsed.Scheme)
+		parsed.Host = strings.ToLower(parsed.Host)
+		parsed.Path = strings.TrimRight(parsed.Path, "/")
+		realm = parsed.String()
+	}
+	raw, _ := json.Marshal([]string{"codex-oauth-account-v1", strings.TrimSpace(e.AccountType), strings.TrimSpace(e.AuthMethod), realm, id, strings.ToLower(email)})
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
 }

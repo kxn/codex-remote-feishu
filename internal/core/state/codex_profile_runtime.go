@@ -16,6 +16,7 @@ type CodexOAuthProfileState struct {
 	Revision           uint64    `json:"revision"`
 	AuthGeneration     uint64    `json:"authGeneration"`
 	Status             string    `json:"status"`
+	AccountFingerprint string    `json:"accountFingerprint,omitempty"`
 	AccountHint        string    `json:"accountHint,omitempty"`
 	PlanType           string    `json:"planType,omitempty"`
 	LastCheckedAt      time.Time `json:"lastCheckedAt,omitempty"`

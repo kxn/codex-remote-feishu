@@ -194,6 +194,13 @@ func decodeOAuthProbeEvidence(configResponse, accountResponse, authResponse map[
 	if account, ok := accountResponse["account"].(map[string]any); ok {
 		evidence.AccountType = resultString(account, "type")
 		evidence.Email = resultString(account, "email")
+		evidence.AccountID = resultString(account, "id")
+		if evidence.AccountID == "" {
+			evidence.AccountID = resultString(account, "accountId")
+		}
+		if evidence.AccountID == "" {
+			evidence.AccountID = resultString(account, "account_id")
+		}
 		evidence.PlanType = resultString(account, "planType")
 	}
 	if evidence.AccountType == "chatgpt" && evidence.AuthMethod == "" {

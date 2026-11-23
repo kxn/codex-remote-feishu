@@ -96,29 +96,6 @@ func (s *Service) catalog(ctx context.Context, source workstore.PrivateActionSou
 			return err
 		}
 		owner.SettingsRevision = role.SettingsRevision
-		if source.MessageID != "" {
-			worker, err := tx.GetWorker(source.RunRef.WorkerID)
-			if err != nil {
-				return err
-			}
-			owner.WorkerID = worker.ID
-			owner.SessionGeneration = worker.Generation
-			return nil
-		}
-		workers, err := tx.ListWorkers(context.ScopeID)
-		if err != nil {
-			return err
-		}
-		for _, worker := range workers {
-			if worker.ContextID != context.ID || worker.RoleID != binding.RoleID || worker.State == work.WorkerRetired {
-				continue
-			}
-			if owner.WorkerID != "" {
-				return fmt.Errorf("private context has multiple native workers; exact model-catalog ownership is required")
-			}
-			owner.WorkerID = worker.ID
-			owner.SessionGeneration = worker.Generation
-		}
 		return nil
 	})
 	if err != nil {

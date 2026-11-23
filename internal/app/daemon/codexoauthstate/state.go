@@ -125,6 +125,7 @@ func (s *Store) ApplyProbe(observation codexprofile.OAuthProbeObservation, check
 	} else {
 		next.LastProbeErrorCode = ""
 		next.AccountHint = strings.TrimSpace(observation.Result.AccountHint)
+		next.AccountFingerprint = strings.TrimSpace(observation.Result.AccountFingerprint)
 		next.PlanType = strings.TrimSpace(observation.Result.PlanType)
 		next.AvailabilityCode = strings.TrimSpace(observation.Result.AvailabilityCode)
 		if observation.CapabilitySet != "" {
@@ -161,6 +162,9 @@ func (s *Store) authEvidenceChanged(previous state.CodexOAuthProfileState, obser
 		return true
 	}
 	if s.lastKnownStatus != "" && s.lastKnownStatus != status {
+		return true
+	}
+	if status == string(codexprofile.OAuthProbeStatusDetected) && previous.AccountFingerprint != "" && observation.Result.AccountFingerprint != "" && previous.AccountFingerprint != observation.Result.AccountFingerprint {
 		return true
 	}
 	return status == string(codexprofile.OAuthProbeStatusDetected) && previous.AccountHint != "" && observation.Result.AccountHint != "" && previous.AccountHint != strings.TrimSpace(observation.Result.AccountHint)

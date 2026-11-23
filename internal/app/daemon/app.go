@@ -140,6 +140,7 @@ type App struct {
 	startHeadless                 func(relayruntime.HeadlessLaunchOptions) (int, error)
 	runCodexCapabilityPreflight   func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error)
 	runCodexOAuthProbe            func(context.Context, codexprofile.OAuthProbeOptions) (codexprofile.OAuthProbeObservation, error)
+	runCodexModelCatalogProbe     func(context.Context, codexprofile.ModelCatalogProbeOptions) (codexprofile.ModelCatalogProbeObservation, error)
 	runCodexNativeConfigProbe     func(context.Context, codexprofile.NativeConfigProbeOptions) (codexprofile.NativeConfigObservation, error)
 	stopProcess                   func(int, time.Duration) error
 	sendAgentCommand              func(string, agentproto.Command) error

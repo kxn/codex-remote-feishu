@@ -95,12 +95,7 @@ func (a *App) advanceTeamModelCatalogView(ctx context.Context, view workstore.UI
 		if len(state.CursorTrail) > 0 {
 			owner.Cursor = state.CursorTrail[len(state.CursorTrail)-1]
 		}
-		worker, err := tx.CurrentContextWorker(view.ContextID)
-		if err == nil {
-			owner.WorkerID, owner.SessionGeneration = worker.ID, worker.Generation
-		} else if !errors.Is(err, workstore.ErrNotFound) {
-			return err
-		}
+
 		valid = true
 		return nil
 	}); err != nil || !valid {
@@ -119,11 +114,15 @@ func (a *App) advanceTeamModelCatalogView(ctx context.Context, view workstore.UI
 	if err != nil {
 		return err
 	}
-	if observed.Snapshot == nil {
+	return a.projectTeamModelCatalogObservation(ctx, view, state, owner, snapshot, observed)
+}
+
+func (a *App) projectTeamModelCatalogObservation(ctx context.Context, view workstore.UIView, state teamSettingsState, owner worksettings.CatalogOwner, snapshot worksettings.Snapshot, observed worksettings.ObservedCatalog) error {
+	if observed.Evidence == "" {
 		return nil
 	}
 	sameEvidence := false
-	if err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+	if err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		body, e := tx.GetContent(view.ScopeID, view.ID+":catalog-baseline")
 		if e != nil {
 			return e
@@ -141,60 +140,79 @@ func (a *App) advanceTeamModelCatalogView(ctx context.Context, view workstore.UI
 		return nil
 	}
 	snapshot.Catalog, snapshot.CatalogBackend, snapshot.CatalogProfileID, snapshot.CatalogEvidence = observed.Snapshot, owner.Backend, owner.ProfileID, observed.Evidence
-	snapshot.CatalogUnavailable = ""
-	return a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
-		current, err := tx.GetUIView(view.ID)
-		if err != nil {
-			return err
-		}
-		if current.Invalidated || current.ExternalMessageID == "" {
-			return nil
-		}
-		nav, err := tx.GetPrivateNavigation(view.ScopeID)
-		if err != nil {
-			return err
-		}
-		if nav.Revision != state.NavigationRevision {
-			return nil
-		}
-		binding, err := tx.GetRoleBotBinding(view.Binding.RoleID)
-		if err != nil {
-			return err
-		}
-		if binding != view.Binding {
-			return nil
-		}
-		if err = tx.CheckRoleSettingsReference(binding.RoleID, state.Fingerprint, owner.SettingsRevision); err != nil {
-			return nil
-		}
-		pref, err := tx.GetContextPreferences(view.ContextID)
-		if errors.Is(err, workstore.ErrNotFound) {
-			pref = work.ContextPreferences{ContextID: view.ContextID, ScopeID: view.ScopeID}
-		} else if err != nil {
-			return err
-		}
-		if pref.Revision != state.ContextRevision {
-			return nil
-		}
-		id := workui.ID(view.ID, "catalog-ready", observed.Evidence)
-		state.NextCursor = observed.Snapshot.NextCursor
-		raw, err := json.Marshal(state)
-		if err != nil {
-			return err
-		}
-		if err = tx.PutContent(work.NewContent(id+":settings-state", view.ScopeID, "application/json", raw, time.Now().UTC())); err != nil {
-			return err
-		}
-		card, err := teamSettingsCard(id, snapshot, pref, state.Kind, "", state.CursorTrail...)
-		if err != nil {
-			return err
-		}
-		next := current
-		next.ID, next.ReplacesViewID = id, current.ID
-		next.BodyRef, next.OperationID, next.ExternalMessageID = "", "", ""
-		if _, err = workui.Queue(tx, next, card); err != nil {
-			return err
-		}
-		return tx.PutContent(work.NewContent(view.ID+":catalog-result", view.ScopeID, "text/plain", []byte(id), time.Now().UTC()))
-	})
+	snapshot.CatalogUnavailable = observed.Unavailable
+	commit := func() error {
+		return a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
+			current, err := tx.GetUIView(view.ID)
+			if err != nil {
+				return err
+			}
+			if current.Invalidated || current.ExternalMessageID == "" {
+				return nil
+			}
+			nav, err := tx.GetPrivateNavigation(view.ScopeID)
+			if err != nil {
+				return err
+			}
+			if nav.Revision != state.NavigationRevision {
+				return nil
+			}
+			binding, err := tx.GetRoleBotBinding(view.Binding.RoleID)
+			if err != nil {
+				return err
+			}
+			if binding != view.Binding {
+				return nil
+			}
+			if err = tx.CheckRoleSettingsReference(binding.RoleID, state.Fingerprint, owner.SettingsRevision); err != nil {
+				return nil
+			}
+			pref, err := tx.GetContextPreferences(view.ContextID)
+			if errors.Is(err, workstore.ErrNotFound) {
+				pref = work.ContextPreferences{ContextID: view.ContextID, ScopeID: view.ScopeID}
+			} else if err != nil {
+				return err
+			}
+			if pref.Revision != state.ContextRevision {
+				return nil
+			}
+			id := workui.ID(view.ID, "catalog-ready", observed.Evidence)
+			state.NextCursor = ""
+			if observed.Snapshot != nil {
+				state.NextCursor = observed.Snapshot.NextCursor
+			}
+			raw, err := json.Marshal(state)
+			if err != nil {
+				return err
+			}
+			if err = tx.PutContent(work.NewContent(id+":settings-state", view.ScopeID, "application/json", raw, time.Now().UTC())); err != nil {
+				return err
+			}
+			card, err := teamSettingsCard(id, snapshot, pref, state.Kind, "", state.CursorTrail...)
+			if err != nil {
+				return err
+			}
+			next := current
+			next.ID, next.ReplacesViewID = id, current.ID
+			next.BodyRef, next.OperationID, next.ExternalMessageID = "", "", ""
+			saved, err := workui.Queue(tx, next, card)
+			if err != nil {
+				return err
+			}
+			if err = a.registerTeamCatalogView(tx, saved, state, snapshot); err != nil {
+				return err
+			}
+			return tx.PutContent(work.NewContent(view.ID+":catalog-result", view.ScopeID, "text/plain", []byte(id), time.Now().UTC()))
+		})
+	}
+	if observed.Identity != "" {
+		_, err := a.withTeamProfileCatalog(ctx, view.Binding, owner.ProfileID, owner.Cursor, func(current teamProfileCatalogTarget) error {
+			if current.Key != observed.Identity {
+				return nil
+			}
+			return commit()
+		})
+		return err
+	}
+	return commit()
 }

@@ -204,7 +204,7 @@ func (p *scopedCatalogPort) ReadCatalog(_ context.Context, binding work.RoleBotB
 	}
 	return ObservedCatalog{Snapshot: snapshot, Evidence: "actual-native-model-command"}, nil
 }
-func TestSettingsCatalogUsesExactAdmittedWorkerAndPage(t *testing.T) {
+func TestSettingsCatalogUsesVerifiedConfigurationContextAndPage(t *testing.T) {
 	s, fake, source := settingsFixture(t)
 	port := &scopedCatalogPort{settingsFakePort: fake}
 	s.port = port
@@ -216,7 +216,7 @@ func TestSettingsCatalogUsesExactAdmittedWorkerAndPage(t *testing.T) {
 		t.Fatalf("catalog %+v", snapshot)
 	}
 	owner := port.owners[0]
-	if owner.WorkerID != source.RunRef.WorkerID || owner.SessionGeneration != source.RunRef.Generation || owner.Cursor != "page-2" || owner.ContextID == "" {
-		t.Fatalf("wrong exact catalog owner %+v", owner)
+	if owner.Cursor != "page-2" || owner.ContextID != "context" || owner.SettingsRevision != 1 || owner.Backend != agentproto.BackendCodex || owner.ProfileID != state.NativeCodexProfileID {
+		t.Fatalf("wrong frozen catalog configuration %+v", owner)
 	}
 }
