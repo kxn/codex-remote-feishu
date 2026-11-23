@@ -1,6 +1,8 @@
 package control
 
 import (
+	"time"
+
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
@@ -136,11 +138,16 @@ type FeishuTargetPickerWorkspaceOption struct {
 	Synthetic       bool
 }
 
+const FeishuTargetPickerSessionDetailLimit = 1000
+
 type FeishuTargetPickerSessionOption struct {
-	Value    string
-	Kind     FeishuTargetPickerSessionKind
-	Label    string
-	MetaText string
+	Value            string
+	Kind             FeishuTargetPickerSessionKind
+	Label            string
+	MetaText         string
+	FullTitle        string
+	WorkingDirectory string
+	LastUsedAt       time.Time
 }
 
 type FeishuTargetPickerMessage struct {
