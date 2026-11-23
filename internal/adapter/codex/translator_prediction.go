@@ -114,8 +114,13 @@ func (t *Translator) translatePredictionCancel(command agentproto.Command) ([][]
 	return nil, nil
 }
 
+// OwnsPredictionRPCID identifies requests issued by this translator instance.
+func (t *Translator) OwnsPredictionRPCID(requestID string) bool {
+	return t.predictionRequestPrefix != "" && strings.HasPrefix(requestID, t.predictionRequestPrefix)
+}
+
 func (t *Translator) observePredictionResponse(requestID string, message map[string]any) (Result, bool) {
-	if method, _ := message["method"].(string); method != "" || !strings.HasPrefix(requestID, t.predictionRequestPrefix) {
+	if method, _ := message["method"].(string); method != "" || !t.OwnsPredictionRPCID(requestID) {
 		return Result{}, false
 	}
 	pending, active := t.pendingPredictions[requestID]

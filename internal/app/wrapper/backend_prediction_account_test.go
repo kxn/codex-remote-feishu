@@ -87,3 +87,21 @@ func TestPredictionQueuedSampleWaitsAtNativeWriterForAccountProbe(t *testing.T) 
 		})
 	}
 }
+
+func TestPredictionReservedIDStemDoesNotInterceptOrdinaryTraffic(t *testing.T) {
+	runtime := New(Config{Backend: agentproto.BackendCodex, InstanceID: "prediction-prefix-test"}).runtime.(*codexBackendRuntime)
+	for _, input := range []string{
+		`{"id":"remote-prediction-prep:parent","method":"thread/read"}`,
+		`{"id":"relay-prediction:parent","method":"thread/sample"}`,
+		`{"id":"remote-prediction-account:parent","method":"getAuthStatus"}`,
+	} {
+		if !runtime.allowPredictionWrite([]byte(input)) {
+			t.Error("ordinary parent request rejected:", input)
+		}
+	}
+	runtime.predictions = newPredictionRuntime()
+	observed, err := runtime.ObserveServer([]byte(`{"id":"remote-prediction-account:parent","result":{}}`))
+	if err != nil || observed.Suppress {
+		t.Fatalf("ordinary parent response suppressed: %#v, err=%v", observed, err)
+	}
+}

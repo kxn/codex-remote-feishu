@@ -51,8 +51,9 @@ type predictionRPCResponse struct {
 func newPredictionRuntime() *predictionRuntime {
 	return &predictionRuntime{
 		jobs: make(map[string]*predictionJob), pending: make(map[string]*pendingPredictionRPC),
-		preparationPrefix: predictionPreparationPrefix + securerand.Text() + ":",
-		cache:             make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(),
+		preparationPrefix:  predictionPreparationPrefix + securerand.Text() + ":",
+		accountProbePrefix: predictionAccountProbePrefix + securerand.Text() + ":",
+		cache:              make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(),
 		now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext,
 		desktopPreferences: readPredictionDesktopPreferences,
 	}

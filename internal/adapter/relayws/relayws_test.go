@@ -1210,3 +1210,31 @@ func TestServerCallbackContextSurvivesAfterUpgradeHandlerReturns(t *testing.T) {
 		t.Fatal("timed out waiting for event callback")
 	}
 }
+
+func TestClientKeepsPredictionRevocationWhenDataOutboxIsFull(t *testing.T) {
+	client := newClientWithQueueSizes("ws://relay.test/ws/agent", agentproto.Hello{
+		Instance: agentproto.InstanceHello{InstanceID: "inst-1"},
+	}, ClientCallbacks{}, 1, 1)
+	prediction := agentproto.Event{Kind: agentproto.EventThreadPredictionResult, CommandID: "before-revocation"}
+	revocation := agentproto.Event{Kind: agentproto.EventThreadPredictionInvalidated}
+	if err := client.SendEvents([]agentproto.Event{prediction}); err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
+		if err := client.SendEvents([]agentproto.Event{revocation}); err != nil {
+			t.Fatalf("revocation rejected by a full outbox: %v", err)
+		}
+	}
+	if err := client.SendEvents([]agentproto.Event{prediction}); err == nil {
+		t.Fatal("an ordinary event consumed capacity reserved for revocation")
+	}
+	for _, want := range []agentproto.EventKind{prediction.Kind, revocation.Kind} {
+		next, ok := client.dequeueData()
+		if !ok || next.envelope.EventBatch.Events[0].Kind != want {
+			t.Fatalf("expected %s in data order, got %#v", want, next)
+		}
+	}
+	if _, ok := client.dequeueData(); ok {
+		t.Fatal("duplicate revocations expanded the overflow queue")
+	}
+}

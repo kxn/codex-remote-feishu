@@ -301,10 +301,11 @@ func (p *predictionRuntime) cacheConfig(ctx context.Context, identity prediction
 }
 
 type predictionRuntime struct {
-	jobs              map[string]*predictionJob
-	pending           map[string]*pendingPredictionRPC
-	preparationPrefix string
-	sequence          uint64
+	jobs               map[string]*predictionJob
+	pending            map[string]*pendingPredictionRPC
+	preparationPrefix  string
+	accountProbePrefix string
+	sequence           uint64
 
 	canceledRequests    [predictionCanceledRequestLimit]string
 	nextCanceledRequest int

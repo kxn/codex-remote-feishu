@@ -89,7 +89,7 @@ func (r *codexBackendRuntime) observePredictionAccountLocked(line []byte) ([]age
 	}
 	frame := predictionWriteFrame(line)
 	state := &r.predictionAccount
-	if frame.Method == "" && strings.HasPrefix(frame.ID, predictionAccountProbePrefix) {
+	if frame.Method == "" && strings.HasPrefix(frame.ID, r.predictions.accountProbePrefix) {
 		if frame.ID != state.probeID {
 			return nil, true
 		}
@@ -132,7 +132,7 @@ func (r *codexBackendRuntime) observePredictionAccountLocked(line []byte) ([]age
 	}
 	r.clearPredictionAccountProbeLocked()
 	r.predictions.sequence++
-	id := fmt.Sprintf("%s%d", predictionAccountProbePrefix, r.predictions.sequence)
+	id := fmt.Sprintf("%s%d", r.predictions.accountProbePrefix, r.predictions.sequence)
 	probe, _ := json.Marshal(map[string]any{"id": id, "method": "getAuthStatus", "params": map[string]bool{"includeToken": true, "refreshToken": false}})
 	select {
 	case state.frames <- append(probe, '\n'):
@@ -248,19 +248,16 @@ func (r *codexBackendRuntime) allowPredictionWrite(raw []byte) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	switch {
-	case frame.Method == "getAuthStatus" && strings.HasPrefix(frame.ID, predictionAccountProbePrefix):
+	case r.predictions != nil && frame.Method == "getAuthStatus" && strings.HasPrefix(frame.ID, r.predictions.accountProbePrefix):
 		return r.predictionAccount.probeID == frame.ID
-	case strings.HasPrefix(frame.ID, predictionPreparationPrefix):
-		if r.predictions == nil {
-			return false
-		}
+	case r.predictions != nil && strings.HasPrefix(frame.ID, r.predictions.preparationPrefix):
 		pending := r.predictions.pending[frame.ID]
 		if pending != nil && pending.ctx.Err() == nil {
 			return true
 		}
 		delete(r.predictions.pending, frame.ID)
 		return false
-	case frame.Method == "thread/sample" && strings.HasPrefix(frame.ID, codex.PredictionRPCIDPrefix):
+	case frame.Method == "thread/sample" && r.translator.OwnsPredictionRPCID(frame.ID):
 		if r.predictions == nil {
 			return false
 		}

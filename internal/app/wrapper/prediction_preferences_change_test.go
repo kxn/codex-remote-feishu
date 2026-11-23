@@ -117,6 +117,10 @@ func startDesktopSettingSample(t *testing.T) (*codexBackendRuntime, chan []byte,
 	if sample["method"] != "thread/sample" {
 		t.Fatalf("expected native sample, got %#v", sample)
 	}
+	nativeFrame, _ := json.Marshal(sample)
+	if !runtime.allowPredictionWrite(nativeFrame) {
+		t.Fatal("expected the writer to deliver the admitted sample")
+	}
 	response, err := json.Marshal(map[string]any{"id": sample["id"], "result": map[string]any{"sourceTurnId": "turn", "text": `{"suggestion":"native suggestion"}`}})
 	if err != nil {
 		t.Fatal(err)
