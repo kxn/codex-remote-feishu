@@ -17,15 +17,17 @@ type FinalBlockPreviewMaintenanceService interface {
 }
 
 type FinalBlockPreviewRequest struct {
-	GatewayID        string
-	SurfaceSessionID string
-	ChatID           string
-	ActorUserID      string
-	WorkspaceRoot    string
-	ThreadCWD        string
-	PreviewGrantKey  string
-	TurnDiffSnapshot *control.TurnDiffSnapshot
-	Block            render.Block
+	// PrivateWorkspaceOnly confines managed private turns to their frozen launch roots.
+	PrivateWorkspaceOnly bool
+	GatewayID            string
+	SurfaceSessionID     string
+	ChatID               string
+	ActorUserID          string
+	WorkspaceRoot        string
+	ThreadCWD            string
+	PreviewGrantKey      string
+	TurnDiffSnapshot     *control.TurnDiffSnapshot
+	Block                render.Block
 }
 
 type FinalBlockPreviewResult struct {

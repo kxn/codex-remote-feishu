@@ -14,12 +14,13 @@ import (
 )
 
 type projection struct {
-	tx      *workstore.Tx
-	display *workstore.PrivateExecutionDisplay
-	event   agentproto.Event
-	backend work.Backend
-	now     time.Time
-	ordinal int
+	tx           *workstore.Tx
+	display      *workstore.PrivateExecutionDisplay
+	event        agentproto.Event
+	backend      work.Backend
+	now          time.Time
+	ordinal      int
+	deferPreview bool
 }
 
 func (p *projection) enqueue(card json.RawMessage, media *workservice.PrivateMediaPublication, anchor, fence, resultHash string) (string, error) {
@@ -71,40 +72,53 @@ func queue(tx *workstore.Tx, scopeID, contextID, id string, projection workservi
 }
 
 func (p *projection) finalReply(body string) error {
-	v := p.display
 	hash := workservice.PrivateResultHash(body)
+	duplicate, err := p.finalAlreadyPublished(hash)
+	if err != nil || duplicate {
+		return err
+	}
+	return p.reply("", body, p.finalSummary(), hash)
+}
+
+func (p *projection) finalAlreadyPublished(hash string) (bool, error) {
+	v := p.display
 	ops, err := p.tx.PrivateRunPublications(v.Binding.ScopeID, v.Binding.ContextID, v.Binding.RunRef)
 	if err != nil {
-		return err
+		return false, err
 	}
 	for _, op := range ops {
 		projected, e := workservice.ReadMessageProjection(p.tx, op)
 		if e != nil {
-			return e
+			return false, e
 		}
 		if projected.ChatID != v.ChatID || projected.Tenant != v.Tenant || projected.BotGeneration != v.Bot.IdentityGeneration || projected.AppID != v.Bot.AppID || projected.GatewayRef != v.Bot.GatewayRef {
 			continue
 		}
 		if projected.PrivateDisplay == nil && projected.Body != "" && workservice.PrivateResultHash(projected.Body) == hash {
-			return nil
+			return true, nil
 		}
 		if projected.PrivateDisplay != nil && projected.PrivateDisplay.ResultHash == hash {
-			return nil
+			return true, nil
 		}
 	}
-	return p.reply("", body, p.finalSummary(), hash)
+	return false, nil
 }
 
 func (p *projection) reply(title, body string, summary *control.FinalTurnSummary, resultHash string) error {
 	var files *control.FileChangeSummary
+	var diff *control.TurnDiffPreview
+	originalBody := body
 	if resultHash != "" {
 		files = p.fileSummary()
+		if p.display.PreviewState == "ready" && p.display.PreviewSource == body {
+			body, diff = p.display.PreviewBody, p.display.PreviewDiff
+		}
 	}
-	cards := feishu.PrivateExecutionReply(title, body, files, summary)
+	cards := feishu.PrivateExecutionReplyWithPreview(title, body, files, diff, summary)
 	for i, card := range cards {
 		meta := workservice.PrivateDisplayPublication{DisplayID: p.display.ID, PreviousOutboxID: p.display.LastOutboxID, ResultHash: resultHash}
 		if i == 0 && resultHash != "" {
-			content := work.NewContent(stableID("final-body", p.display.ID), p.display.Binding.ScopeID, "text/markdown", []byte(body), p.now)
+			content := work.NewContent(stableID("final-body", p.display.ID), p.display.Binding.ScopeID, "text/markdown", []byte(originalBody), p.now)
 			if err := p.tx.PutContent(content); err != nil {
 				return err
 			}

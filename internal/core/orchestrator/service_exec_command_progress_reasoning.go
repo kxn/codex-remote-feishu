@@ -107,7 +107,7 @@ func (s *Service) handleReasoningSummaryProgressCompleted(instanceID string, eve
 	if progress == nil {
 		return nil
 	}
-	if !finalizeExecCommandProgressReasoning(progress, execprogress.NormalizeStatus(event.Status, true)) && !surfaceShowsVisibleReasoning(surface.Verbosity) {
+	if !execprogress.FinalizeReasoning(progress, execprogress.NormalizeStatus(event.Status, true)) && !surfaceShowsVisibleReasoning(surface.Verbosity) {
 		return nil
 	}
 	if !surfaceShowsVisibleReasoning(surface.Verbosity) {

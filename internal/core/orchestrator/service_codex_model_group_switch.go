@@ -191,16 +191,7 @@ func instCodexProfileID(inst *state.InstanceRecord) string {
 }
 
 func codexModelGroup(model string) string {
-	model = strings.ToLower(strings.TrimSpace(model))
-	if model == "" {
-		return ""
-	}
-	for _, prefix := range []string{"gpt", "o1", "o3", "o4", "codex-"} {
-		if strings.HasPrefix(model, prefix) {
-			return "gpt"
-		}
-	}
-	return "non_gpt"
+	return agentproto.CodexModelGroup(model)
 }
 
 func (s *Service) codexProfileSwitchStartsNewThread(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, target state.CodexProfileSummary) bool {

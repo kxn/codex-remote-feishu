@@ -45,5 +45,5 @@ func (c *Coordinator) applyPrivateDisplay(tx *workstore.Tx, carrier workstore.Ca
 	if event.TrafficClass == agentproto.TrafficClassInternalHelper || event.Initiator.Kind == agentproto.InitiatorInternalHelper || binding.AttemptID == "" {
 		return nil
 	}
-	return workdisplay.Apply(tx, carrier, binding, event, c.options.Clock())
+	return workdisplay.ApplyWithPreview(tx, carrier, binding, event, c.options.Clock(), c.options.PreviewPrivateFinal != nil)
 }

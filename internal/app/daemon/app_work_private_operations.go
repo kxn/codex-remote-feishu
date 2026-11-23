@@ -69,7 +69,7 @@ func (a *App) handleTeamPrivateViewOperation(ctx context.Context, source teamHum
 	case "private.resume":
 		return a.applyTeamPrivateStop(ctx, source, view.TargetRevision, true)
 	case "private.new", "private.return_personal":
-		verb, note := "new", "已新建私人会话。下一条消息会进入新会话。"
+		verb, note := "new", privateNewSessionNotice
 		if action == "private.return_personal" {
 			verb, note = "return_personal", "已返回私人工作。"
 		}

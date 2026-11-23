@@ -22,6 +22,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -363,6 +364,65 @@ func TestPrivateMenuWholeJourneyThroughFeishuSDK(t *testing.T) {
 		}
 		return nil
 	})
+	// Exercise every catalog-defined direct access/verbosity menu choice through
+	// the real SDK event, then inspect the durable preference it changes.
+	for _, commandID := range []string{control.FeishuCommandAccess, control.FeishuCommandVerbose} {
+		def, ok := control.FeishuCommandDefinitionByID(commandID)
+		if !ok {
+			t.Fatalf("missing command %s", commandID)
+		}
+		for _, option := range def.Options {
+			menuAction, ok := control.ParseFeishuMenuActionWithoutCatalog(option.MenuKey)
+			textAction, textOK := control.ParseFeishuTextActionWithoutCatalog(option.CommandText)
+			if !ok || !textOK || menuAction.Kind != textAction.Kind || menuAction.Text != textAction.Text {
+				t.Fatalf("catalog option routes diverge: %+v %+v", menuAction, textAction)
+			}
+			event("catalog-"+option.MenuKey, "application.bot.menu_v6", map[string]any{"event_key": option.MenuKey, "operator": map[string]any{"operator_id": map[string]string{"open_id": "ou_human"}}})
+			if err := a.runTeamMenus(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if card := publish(); !strings.Contains(card, "已保存") {
+				t.Fatalf("%s did not save: %s", option.MenuKey, card)
+			}
+			pickerTx(t, a, func(tx *workstore.Tx) error {
+				prefs, err := tx.GetContextPreferences(frontID)
+				if err != nil {
+					return err
+				}
+				value := prefs.Verbose
+				if commandID == control.FeishuCommandAccess {
+					value = prefs.AccessMode
+				}
+				if option.Value == "clear" {
+					if value != nil {
+						t.Fatalf("%s did not clear: %+v", option.MenuKey, prefs)
+					}
+				} else {
+					want := option.Value
+					if commandID == control.FeishuCommandAccess {
+						want = agentproto.NormalizeAccessMode(want)
+					}
+					if value == nil || *value != want {
+						t.Fatalf("%s not saved: %+v", option.MenuKey, prefs)
+					}
+				}
+				return nil
+			})
+		}
+	}
+	modelKey := "model_" + model
+	menuModel, ok := control.ParseFeishuMenuActionWithoutCatalog(modelKey)
+	textModel, textOK := control.ParseFeishuTextActionWithoutCatalog("/model " + model)
+	if !ok || !textOK || menuModel.Kind != textModel.Kind || menuModel.Text != textModel.Text {
+		t.Fatalf("model routes diverge: %+v %+v", menuModel, textModel)
+	}
+	event("catalog-model", "application.bot.menu_v6", map[string]any{"event_key": modelKey, "operator": map[string]any{"operator_id": map[string]string{"open_id": "ou_human"}}})
+	if err := a.runTeamMenus(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if card := publish(); !strings.Contains(card, "已保存") || !strings.Contains(card, model) {
+		t.Fatalf("model shortcut did not save: %s", card)
+	}
 	setTestWorkBotSettings(t, a, state.BotCapabilitySettingsRecord{GatewayID: gatewayID, Backend: agentproto.BackendCodex, CodexProfileID: state.NativeCodexProfileID})
 	event("shortcut-reasoning-high-persist", "application.bot.menu_v6", map[string]any{"event_key": "reasoning_high", "operator": map[string]any{"operator_id": map[string]string{"open_id": "ou_human"}}})
 	if err := a.runTeamMenus(ctx); err != nil {

@@ -36,7 +36,7 @@ func (h *Host) startPrepared(ctx context.Context, worker work.WorkerSession, op 
 			binding.IdentityGeneration != record.Snapshot.Owner.BotGeneration {
 			return workstore.ErrConflict
 		}
-		if err := tx.CheckContextPreferencesRevision(worker.ContextID, record.PreferencesRevision); err != nil {
+		if err := tx.CheckContextPreferencesRevision(worker.ContextID, settings.PreferencesRevision); err != nil {
 			return err
 		}
 		if err := h.assertUpgradeLaunch(ctx, tx, worker.Backend); err != nil {

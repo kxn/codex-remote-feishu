@@ -35,7 +35,14 @@ func PrivateExecutionProgress(progress control.ExecCommandProgress, plan *contro
 }
 
 func PrivateExecutionReply(title, markdown string, files *control.FileChangeSummary, summary *control.FinalTurnSummary) []json.RawMessage {
-	elements := (&Projector{}).finalBlockExtraElements(files, nil, summary)
+	return PrivateExecutionReplyWithPreview(title, markdown, files, nil, summary)
+}
+
+func PrivateExecutionReplyWithPreview(title, markdown string, files *control.FileChangeSummary, diff *control.TurnDiffPreview, summary *control.FinalTurnSummary) []json.RawMessage {
+	elements := (&Projector{}).finalBlockExtraElements(files, diff, summary)
+	if (files == nil || files.FileCount == 0 || len(files.Files) == 0) && projectorTurnDiffPreviewURL(diff) != "" {
+		elements = append([]map[string]any{{"tag": "markdown", "content": "[查看本轮变更](" + projectorTurnDiffPreviewURL(diff) + ")"}}, elements...)
+	}
 	ops := projectFinalReplyCards("", "", "", "", title, "", markdown, elements)
 	cards := make([]json.RawMessage, 0, len(ops))
 	for _, op := range ops {

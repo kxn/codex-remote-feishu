@@ -141,11 +141,14 @@ func (r *teamRuntime) run(ctx context.Context) {
 	r.every(ctx, "private-reasoning", time.Second, func(ctx context.Context) error {
 		return workdisplay.FlushPublicReasoning(ctx, r.store, time.Now().UTC(), 32)
 	})
+	r.every(ctx, "private-previews", time.Second, func(ctx context.Context) error {
+		return r.coordinator.RunPrivatePreviews(ctx, 32)
+	})
 	r.every(ctx, "publication", time.Second, func(ctx context.Context) error { _, err := r.publisher.RunOnce(ctx, 32); return err })
 	r.every(ctx, "provisioning", 5*time.Second, r.runProvisioning)
 	r.workers.Add(1)
 	go func() { defer r.workers.Done(); r.reconcileLoop(ctx) }()
-	go func() { r.workers.Wait(); close(r.runDone) }()
+	go func() { r.workers.Wait(); r.coordinator.WaitPrivatePreviews(); close(r.runDone) }()
 }
 
 func (r *teamRuntime) every(ctx context.Context, name string, interval time.Duration, fn func(context.Context) error) {

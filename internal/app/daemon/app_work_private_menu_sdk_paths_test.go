@@ -85,6 +85,7 @@ func exercisePrivateMenuSDKShortcuts(t *testing.T, event func(string, string, ma
 		{"settings", "参数设置"}, {"model", "模型"}, {"reasoning", "推理强度"}, {"mode", "执行后端"},
 		{"access", "执行权限"}, {"plan", "计划模式"}, {"verbose", "消息详细程度"}, {"reasoning_high", "推理强度"},
 		{"codexprofile", "Codex 配置"}, {"claudeprofile", "Claude 配置"}, {"opencodeprofile", "OpenCode 配置"},
+		{"use", "已有会话"}, {"review", "审查"}, {"compact", "这次操作没有完成"}, {"help", "命令帮助"}, {"sendfile", "发送工作目录里的文件"}, {"cron", "旧的定时任务功能已停用"},
 		{"autowhip_status", "自动检查未完成工作"}, {"autocontinue_status", "断线后自动继续"}, {"attach", "这个菜单入口已不可用"},
 	} {
 		event("shortcut-"+tt.key, "application.bot.menu_v6", map[string]any{"event_key": tt.key, "operator": map[string]any{"operator_id": map[string]string{"open_id": "ou_human"}}})

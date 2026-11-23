@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
@@ -38,6 +41,10 @@ func IsOutput(event agentproto.Event) bool {
 }
 
 func Apply(tx *workstore.Tx, carrier workstore.CarrierRegistration, binding agentproto.ExecutionBinding, event agentproto.Event, now time.Time) error {
+	return ApplyWithPreview(tx, carrier, binding, event, now, false)
+}
+
+func ApplyWithPreview(tx *workstore.Tx, carrier workstore.CarrierRegistration, binding agentproto.ExecutionBinding, event agentproto.Event, now time.Time, preview bool) error {
 	scope, err := tx.GetScope(binding.ScopeID)
 	if err != nil || scope.Kind != work.ScopePersonal {
 		return err
@@ -58,7 +65,7 @@ func Apply(tx *workstore.Tx, carrier workstore.CarrierRegistration, binding agen
 	if event.ThreadID == "" {
 		return nil
 	}
-	id := stableID("display", carrier.Incarnation, event.ThreadID, event.TurnID, binding.AttemptID)
+	id := DisplayID(carrier, binding, event.ThreadID, event.TurnID)
 	display, err := tx.GetPrivateExecutionDisplay(id)
 	if errors.Is(err, workstore.ErrNotFound) {
 		display, err = begin(tx, id, scope, carrier, binding, event)
@@ -69,17 +76,24 @@ func Apply(tx *workstore.Tx, carrier workstore.CarrierRegistration, binding agen
 	if display.Binding != binding {
 		return workstore.ErrScopeDenied
 	}
+	if display.PreviewTerminal != nil {
+		return nil
+	}
 	display.Progress.Verbosity, err = executionVerbosity(tx, binding.ContextID)
 	if err != nil {
 		return err
 	}
-	p := projection{tx: tx, display: &display, event: event, backend: carrier.Backend, now: now}
+	p := projection{tx: tx, display: &display, event: event, backend: carrier.Backend, now: now, deferPreview: preview && context.Purpose != work.PurposeControl}
 	if err := p.apply(); err != nil {
 		return err
 	}
 	previous := display.Revision
 	display.Revision++
 	return tx.PutPrivateExecutionDisplay(display, previous)
+}
+
+func DisplayID(carrier workstore.CarrierRegistration, binding agentproto.ExecutionBinding, threadID, turnID string) string {
+	return stableID("display", carrier.Incarnation, threadID, turnID, binding.AttemptID)
 }
 
 func begin(tx *workstore.Tx, id string, scope work.WorkScope, carrier workstore.CarrierRegistration, binding agentproto.ExecutionBinding, event agentproto.Event) (workstore.PrivateExecutionDisplay, error) {
@@ -155,6 +169,9 @@ func destinationForAttempt(tx *workstore.Tx, scope work.WorkScope, attempt work.
 
 func (p *projection) apply() error {
 	event := p.event
+	if event.Kind == agentproto.EventTurnDiffUpdated {
+		p.display.TurnDiff = &control.TurnDiffSnapshot{ThreadID: event.ThreadID, TurnID: event.TurnID, Diff: event.TurnDiff}
+	}
 	if event.Kind == agentproto.EventItemCompleted && event.ItemKind == "file_change" {
 		p.collectFiles()
 	}
@@ -262,25 +279,33 @@ func (p *projection) flushIntermediate() error {
 
 func (p *projection) finish() error {
 	text := p.display.Pending
+	if p.deferPreview && p.display.PreviewState == "" && p.event.Status != "interrupted" && text != "" &&
+		(previewpkg.HasFinalBlockCandidates(text) || p.display.TurnDiff != nil && strings.TrimSpace(p.display.TurnDiff.Diff) != "") {
+		duplicate, err := p.finalAlreadyPublished(workservice.PrivateResultHash(text))
+		if err != nil {
+			return err
+		}
+		if !duplicate {
+			p.display.PreviewState, p.display.PreviewSource = "queued", text
+			terminal := p.event
+			p.display.PreviewTerminal = &terminal
+			p.display.PreviewTerminalAt = p.now
+			return nil
+		}
+	}
 	p.display.Pending = ""
 	p.display.Terminated = true
+	p.display.TurnDiff = nil
 	if p.display.ProgressAnchorID != "" {
 		status := execprogress.NormalizeStatus(p.event.Status, true)
+		// Retire start cards emitted by older daemons without adding a new row.
 		for i := range p.display.Progress.Entries {
 			entry := &p.display.Progress.Entries[i]
-			if entry.Status == "running" || entry.Status == "started" {
-				entry.Status = status
-				// An in-flight turn from an older daemon may already have sent a
-				// start card. Retire that existing row without creating another.
-				if entry.Kind == "turn_status" {
-					entry.Label, entry.Summary = "执行状态", "本轮已结束"
-				}
+			if entry.Kind == "turn_status" && (entry.Status == "running" || entry.Status == "started") {
+				entry.Label, entry.Summary = "执行状态", "本轮已结束"
 			}
 		}
-		if p.display.Progress.Reasoning != nil {
-			p.display.Progress.Reasoning.Active = false
-		}
-		execprogress.FinalizeExploration(&p.display.Progress, status)
+		execprogress.Finalize(&p.display.Progress, status)
 		if err := p.publishProgress(); err != nil {
 			return err
 		}

@@ -300,6 +300,13 @@ func parsePreviewLocationNumber(text string) int {
 	return value
 }
 
+func (p *DriveMarkdownPreviewer) requestRoots(req FinalBlockPreviewRequest) []string {
+	if req.PrivateWorkspaceOnly {
+		return previewAllowedRoots(req.ThreadCWD, req.WorkspaceRoot)
+	}
+	return previewAllowedRoots(req.ThreadCWD, req.WorkspaceRoot, p.config.ProcessCWD)
+}
+
 func previewAllowedRoots(values ...string) []string {
 	seen := map[string]bool{}
 	roots := []string{}

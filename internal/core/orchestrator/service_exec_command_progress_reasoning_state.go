@@ -51,30 +51,3 @@ func (s *Service) upsertSurfaceReasoningProgress(surface *state.SurfaceConsoleRe
 	}
 	return execprogress.UpdateReasoningCarrier(&record.Reasoning, event, backend, now)
 }
-
-func finalizeExecCommandProgressReasoning(progress *state.ExecCommandProgressRecord, status string) bool {
-	if progress == nil {
-		return false
-	}
-	status = strings.TrimSpace(status)
-	if status == "" {
-		status = "completed"
-	}
-	changed := false
-	if progress.Reasoning != nil && progress.Reasoning.Active {
-		progress.Reasoning.Active = false
-		changed = true
-	}
-	if progress.Reasoning != nil && strings.TrimSpace(progress.Reasoning.VisibleEntryID) != "" {
-		for i := range progress.Entries {
-			if progress.Entries[i].ItemID != progress.Reasoning.VisibleEntryID {
-				continue
-			}
-			if progress.Entries[i].Status != status {
-				progress.Entries[i].Status = status
-				changed = true
-			}
-		}
-	}
-	return changed
-}

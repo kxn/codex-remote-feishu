@@ -159,12 +159,38 @@ type pipelineWorkInput struct {
 
 func pipelineFindEnvelope(value any) (pipelineWorkEnvelope, bool) {
 	if text, ok := value.(string); ok {
+		originalText := text
 		var envelope pipelineWorkEnvelope
 		if start := strings.Index(text, "\n{"); start >= 0 {
 			text = text[start+1:]
 		}
 		if json.NewDecoder(strings.NewReader(text)).Decode(&envelope) == nil && envelope.RunRef != "" && len(envelope.Inputs) > 0 {
 			return envelope, true
+		}
+		// Personal prompts carry readable original text and separately labelled
+		// durable source IDs instead of the team JSON envelope.
+		if start := strings.Index(originalText, "使用宿主能力时的执行引用：--run-ref "); start >= 0 {
+			privateText := originalText[start:]
+			first, _, _ := strings.Cut(privateText, "\n")
+			envelope.RunRef, _, _ = strings.Cut(strings.TrimPrefix(first, "使用宿主能力时的执行引用：--run-ref "), "。")
+			header, _, hasBody := strings.Cut(privateText, "\n\n用户消息：\n")
+			for _, line := range strings.Split(header, "\n") {
+				if !strings.HasPrefix(line, "输入来源：") {
+					continue
+				}
+				var inputID, messageID, platformID string
+				if n, _ := fmt.Sscanf(line, "输入来源：input_id=%q message_id=%q platform_message_id=%q", &inputID, &messageID, &platformID); n != 3 || inputID == "" || messageID == "" {
+					return pipelineWorkEnvelope{}, false
+				}
+				message := &work.Message{ID: messageID, Source: work.Actor{Kind: work.ActorPrincipal}}
+				if platformID != "" {
+					message.PlatformKey = &work.MessageKey{MessageID: platformID}
+				}
+				envelope.Inputs = append(envelope.Inputs, pipelineWorkInput{ID: inputID, Message: message, Body: privateText})
+			}
+			if envelope.RunRef != "" && len(envelope.Inputs) > 0 && hasBody {
+				return envelope, true
+			}
 		}
 	}
 	switch typed := value.(type) {
@@ -192,7 +218,13 @@ func pipelineChildBusiness(frame map[string]any) error {
 	}
 	envelope, ok := pipelineFindEnvelope(frame)
 	if !ok {
-		return fmt.Errorf("native prompt lacks the explicit admitted work envelope")
+		return fmt.Errorf("native prompt lacks admitted work sources")
+	}
+	if os.Getenv("FSC_NATIVE_PIPELINE_AUTO_PRIVATE") == "true" && os.Getenv("FSC_NATIVE_PIPELINE_IMAGES") != "true" && os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") != "true" {
+		first := envelope.Inputs[0]
+		if first.ID == "" || first.Message == nil || first.Message.ID == "" || first.Message.PlatformKey == nil || first.Message.PlatformKey.MessageID != "sdk-human-message" || !strings.Contains(first.Body, "Complete my authorized work and reply here.") {
+			return fmt.Errorf("native private prompt lost actual SDK source or readable text")
+		}
 	}
 
 	help, err := pipelineTeamCLI(nil, "help", "outcome.report")

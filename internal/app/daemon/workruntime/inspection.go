@@ -244,6 +244,11 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		} else if pending {
 			return nil
 		}
+		// A pending final belongs to presentation. Its worker wakes reconciliation
+		// after committing the reply, so it needs no native recovery notice.
+		if pending, err := tx.HasPendingPrivatePreview(attemptID); err != nil || pending {
+			return err
+		}
 		if err = c.gate(tx, request.Carrier, attemptID, "native_reconciliation"); err != nil {
 			return err
 		}
@@ -284,6 +289,13 @@ func (c *Coordinator) Reconcile(ctx context.Context, attemptID string) error {
 		}
 		if e != nil && !errors.Is(e, workstore.ErrNotFound) {
 			return e
+		}
+		pendingPreview, e := tx.HasPendingPrivatePreview(attemptID)
+		if e != nil {
+			return e
+		}
+		if pendingPreview {
+			return workstore.ErrConflict
 		}
 		if e := c.resolveStoppedInputAdmissions(tx, request, observation); e != nil {
 			return e

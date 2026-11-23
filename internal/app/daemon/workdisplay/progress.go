@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
@@ -113,7 +114,7 @@ func (p *projection) item() error {
 			}
 		}
 		command, _ := execprogress.CommandMetadata(event)
-		entry.Kind, entry.Label = "tool_activity", "执行"
+		entry.Kind, entry.Label = "command_execution", "执行"
 		if preview := publicCommandPreview(command); preview != "" {
 			entry.Summary = activityStatus(entry.Status, preview) + "（参数未显示）"
 		} else {
@@ -147,8 +148,8 @@ func (p *projection) item() error {
 		}
 		entry, _, _ = execprogress.UpsertDynamicToolProgressEntry(&p.display.Progress, event)
 	case "delegated_task":
-		entry.Label = "Task"
-		entry.Summary = xutil.FirstNonEmpty(xutil.MetadataString(event.Metadata, "description"), xutil.MetadataString(event.Metadata, "subagentType"), "子任务")
+		entry = execprogress.DelegatedTaskEntry(event)
+		entry.ItemID = "native:" + event.ItemID
 	case "image_generation":
 		return nil // The completed event sends the actual image.
 	case "plan":
@@ -285,12 +286,19 @@ func (p *projection) publishProgress() error {
 		return err
 	}
 	if anchor == "" {
-		v.ProgressAnchorID = id
-		v.Progress.Segments = []state.ExecCommandProgressSegmentRecord{{SegmentID: id, MessageID: id, StartSeq: startSeq}}
+		recordProgressSegment(v, id, startSeq, rollover)
 	}
 	v.ProgressFenceID, v.ProgressHash = id, hash
 	p.markReasoningPublished()
 	return nil
+}
+
+func recordProgressSegment(v *workstore.PrivateExecutionDisplay, id string, startSeq int, rollover bool) {
+	v.ProgressAnchorID = id
+	v.Progress.Segments = []state.ExecCommandProgressSegmentRecord{{SegmentID: id, MessageID: id, StartSeq: startSeq}}
+	if rollover {
+		execprogress.RolloverCarryoverEntries(&v.Progress, startSeq)
+	}
 }
 
 func workCardHash(card []byte) string {

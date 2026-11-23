@@ -1,6 +1,7 @@
 package workstore
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -12,6 +13,7 @@ import (
 )
 
 const SchemaPrivateExecutionDisplayV1 = `CREATE TABLE IF NOT EXISTS private_execution_display(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL CHECK(json_valid(payload)));
+CREATE INDEX IF NOT EXISTS private_execution_display_pending_preview ON private_execution_display(json_extract(payload,'$.Binding.attemptId'),id) WHERE json_extract(payload,'$.PreviewTerminal') IS NOT NULL;
 CREATE TABLE IF NOT EXISTS native_thread_token_usage(incarnation TEXT NOT NULL REFERENCES carrier_registrations(incarnation),session_id TEXT NOT NULL,payload TEXT NOT NULL CHECK(json_valid(payload)),PRIMARY KEY(incarnation,session_id))`
 
 type PrivateExecutionDisplay struct {
@@ -35,6 +37,13 @@ type PrivateExecutionDisplay struct {
 	ProgressHash         string
 	Progress             state.ExecCommandProgressRecord
 	Plan                 *control.PlanUpdate
+	TurnDiff             *control.TurnDiffSnapshot
+	PreviewState         string
+	PreviewSource        string
+	PreviewBody          string
+	PreviewDiff          *control.TurnDiffPreview
+	PreviewTerminal      *agentproto.Event
+	PreviewTerminalAt    time.Time
 	Files                map[string]control.FileChangeSummaryEntry
 	Pending              string
 	PendingItem          string
@@ -93,4 +102,32 @@ func (t *Tx) SupersedePrivateDisplayUpdate(id string, now time.Time) (bool, erro
 		return false, err
 	}
 	return true, t.PutOutbox(item, lastItem)
+}
+
+// ListPendingPrivatePreviews returns accepted terminal displays awaiting their
+// durable preview decision, including interrupted preparations after restart.
+func (t *Tx) ListPendingPrivatePreviews(limit int) ([]string, error) {
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT id FROM private_execution_display WHERE json_extract(payload,'$.PreviewTerminal') IS NOT NULL ORDER BY json_extract(payload,'$.Binding.attemptId'),id LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []string
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
+	return result, rows.Err()
+}
+
+func (t *Tx) HasPendingPrivatePreview(attemptID string) (bool, error) {
+	var found int
+	err := t.tx.QueryRowContext(t.ctx, `SELECT 1 FROM private_execution_display WHERE json_extract(payload,'$.PreviewTerminal') IS NOT NULL AND json_extract(payload,'$.Binding.attemptId')=? LIMIT 1`, attemptID).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }

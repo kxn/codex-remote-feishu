@@ -207,5 +207,23 @@ func pipelineVerifyMediaFrame(frame map[string]any) error {
 	if !ok || len(envelope.Inputs) != want {
 		return fmt.Errorf("native image prompt lost queued image/text provenance")
 	}
+	wantIDs := []string{"image-one", "image-two", "sdk-human-message"}
+	wantText := "Complete my authorized work and reply here."
+	if os.Getenv("FSC_NATIVE_PIPELINE_CLAUDE_STEER") == "true" {
+		wantIDs = []string{"steer-image-one", "steer-image-two", "steer-caption"}
+		wantText = "Use these two queued pictures in this running request."
+	} else if os.Getenv("FSC_NATIVE_PIPELINE_MEDIA_POST") == "captioned-post" {
+		wantIDs = []string{"sdk-post"}
+	} else if os.Getenv("FSC_NATIVE_PIPELINE_MEDIA_POST") == "image-only-post" {
+		wantIDs = []string{"sdk-post", "sdk-human-message"}
+	}
+	for i, input := range envelope.Inputs {
+		if input.ID == "" || input.Message == nil || input.Message.ID == "" || input.Message.PlatformKey == nil || input.Message.PlatformKey.MessageID != wantIDs[i] {
+			return fmt.Errorf("native image source %d lost actual SDK identity", i)
+		}
+	}
+	if !strings.Contains(envelope.Inputs[0].Body, wantText) {
+		return fmt.Errorf("native image prompt lost readable human instruction")
+	}
 	return nil
 }

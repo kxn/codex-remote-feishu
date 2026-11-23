@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
-	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
 // SDK ACK follows this durable receipt. Destination discovery and publication
@@ -111,58 +111,26 @@ func (a *App) advanceTeamMenu(ctx context.Context, menu workstore.MenuInteractio
 	source := teamHumanSource{NavigationRevision: menu.NavigationRevision, Key: menu.ID, ScopeID: menu.ScopeID, PrincipalID: menu.PrincipalID, RoleID: menu.Gateway.RoleID, Tenant: menu.Envelope.Tenant, ChatID: menu.ChatID, MessageID: menu.MessageID, Gateway: menu.Gateway, SenderIDs: menu.Envelope.SenderIDs, Authority: workstore.PrivateActionSource{PersonalScopeID: menu.ScopeID, MenuInteractionID: menu.ID}}
 	var result string
 	var err error
-	route := feishuapp.ResolveTeamMenu(menu.Envelope.EventKey)
-	switch route.Action {
-	case feishuapp.TeamMenuSteer:
-		result, err = a.steerTeamPendingInputs(ctx, source)
-	case feishuapp.TeamMenuReview:
-		result, err = a.queueTeamReview(ctx, source, control.Action{Kind: control.ActionReviewCommand, Text: "/review"})
-	case feishuapp.TeamMenuAutoWhip, feishuapp.TeamMenuAutoContinue:
-		kind := control.ActionAutoWhipCommand
-		if route.Action == feishuapp.TeamMenuAutoContinue {
-			kind = control.ActionAutoContinueCommand
+	// The shared catalog defines the published command keys and their arguments.
+	// Dispatch those through the same path as literal slash commands so aliases,
+	// direct settings and operation semantics cannot drift between entry points.
+	if action, ok := control.ParseFeishuMenuActionWithoutCatalog(menu.Envelope.EventKey); ok {
+		result, err = a.dispatchTeamPrivateCommand(ctx, source, action)
+		if err != nil {
+			result, err = a.queuePrivatePanel(ctx, source, "command-error", "这次操作没有完成："+err.Error())
 		}
-		mode := route.Argument
-		if mode == "" {
-			mode = "status"
+	} else {
+		// These project-specific destinations have no slash command.
+		switch strings.ToLower(strings.TrimSpace(menu.Envelope.EventKey)) {
+		case "settings":
+			result, err = a.queueTeamSettings(ctx, source, "overview", "")
+		case "project", "projects":
+			result, err = a.queueTeamProjectPicker(ctx, source)
+		case "resources":
+			result, err = a.queueTeamResourcePicker(ctx, source)
+		default:
+			result, err = a.queuePrivatePanel(ctx, source, "menu", "这个菜单入口已不可用。请从工作菜单选择当前可用的操作。")
 		}
-		result, err = a.handleTeamAutomation(ctx, source, control.Action{Kind: kind, Text: "/" + string(route.Action) + " " + mode})
-	case feishuapp.TeamMenuSettings:
-		page := route.Argument
-		if page == "" {
-			page = "overview"
-		}
-		result, err = a.queueTeamSettings(ctx, source, page, "")
-	case feishuapp.TeamMenuProjects:
-		result, err = a.queueTeamProjectPicker(ctx, source)
-	case feishuapp.TeamMenuResources:
-		result, err = a.queueTeamResourcePicker(ctx, source)
-	case feishuapp.TeamMenuHistory:
-		result, err = a.queueTeamCurrentHistory(ctx, source)
-	case feishuapp.TeamMenuContexts:
-		result, err = a.queuePrivatePanel(ctx, source, "contexts", "")
-	case feishuapp.TeamMenuStatus:
-		result, err = a.queuePrivatePanel(ctx, source, "status", "")
-	case feishuapp.TeamMenuStop:
-		result, err = a.applyTeamPrivateStop(ctx, source, 0, false)
-	case feishuapp.TeamMenuNew:
-		err = a.navigateFromSource(ctx, source, "new", "", "", 0)
-		if err == nil {
-			result, err = a.queuePrivatePanel(ctx, source, "menu", "已新建私人会话。下一条消息会进入新会话。")
-		}
-	case feishuapp.TeamMenuHome:
-		if action, ok := control.ParseFeishuMenuActionWithoutCatalog(menu.Envelope.EventKey); ok && route.Note != "" {
-			switch action.Kind {
-			case control.ActionModelCommand, control.ActionReasoningCommand, control.ActionModeCommand, control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand, control.ActionAccessCommand, control.ActionPlanCommand, control.ActionVerboseCommand:
-				result, err = a.handleTeamSettingsCommand(ctx, source, action)
-			default:
-				result, err = a.queuePrivatePanel(ctx, source, "menu", route.Note)
-			}
-		} else {
-			result, err = a.queuePrivatePanel(ctx, source, "menu", route.Note)
-		}
-	default:
-		return fmt.Errorf("unsupported team menu action %q", route.Action)
 	}
 	if err != nil {
 		return err

@@ -20,7 +20,7 @@ func TestPrivateNativeVerbosityAndOutcome(t *testing.T) {
 		present, absent []string
 	}{
 		{mode: "quiet", status: "completed", present: []string{"stage-final"}, absent: []string{"stage-commentary", "plan-check", "go test", "public-one", "approval/read"}},
-		{mode: "normal", status: "completed", present: []string{"stage-final", "stage-commentary", "plan-check", "approval/read"}, absent: []string{"go test", "public-one"}},
+		{mode: "normal", status: "completed", present: []string{"stage-final", "stage-commentary", "plan-check", "approval/read", "reviewer · inspect changes"}, absent: []string{"go test", "public-one"}},
 		{mode: "verbose", status: "failed", present: []string{"stage-final", "stage-commentary", "plan-check", "go test", "approval/read", "公开的失败原因", "public-two"}, absent: []string{"public-one"}},
 		{mode: "chatty", status: "interrupted", present: []string{"stage-commentary", "plan-check", "go test", "approval/read", "public-one", "public-two", "本轮执行已停止"}, absent: []string{"stage-final"}},
 	} {
@@ -41,6 +41,7 @@ func TestPrivateNativeVerbosityAndOutcome(t *testing.T) {
 			frame(agentproto.Event{Kind: agentproto.EventTurnPlanUpdated, PlanSnapshot: &agentproto.TurnPlanSnapshot{Steps: []agentproto.TurnPlanStep{{Step: "plan-check", Status: agentproto.TurnPlanStepStatusCompleted}}}})
 			frame(agentproto.Event{Kind: agentproto.EventItemStarted, ItemKind: "command_execution", ItemID: "shell", Metadata: map[string]any{"command": "go test redacted-command-opaque-argument", "output": "redacted-shell-output"}})
 			frame(agentproto.Event{Kind: agentproto.EventItemCompleted, ItemKind: "mcp_tool_call", ItemID: "mcp", Metadata: map[string]any{"server": "approval", "tool": "read", "arguments": "redacted-mcp-arg"}})
+			frame(agentproto.Event{Kind: agentproto.EventItemCompleted, ItemKind: "delegated_task", ItemID: "task", Metadata: map[string]any{"subagentType": "reviewer", "description": "inspect changes"}})
 			frame(agentproto.Event{Kind: agentproto.EventItemCompleted, ItemKind: "reasoning_summary", ItemID: "public-1", Metadata: map[string]any{"publicSummary": "public-one", "content": "redacted-reasoning"}})
 			frame(agentproto.Event{Kind: agentproto.EventItemCompleted, ItemKind: "reasoning_summary", ItemID: "public-2", Metadata: map[string]any{"publicSummary": "public-two"}})
 			frame(agentproto.Event{Kind: agentproto.EventItemCompleted, ItemKind: "agent_message", ItemID: "final", Metadata: map[string]any{"text": "stage-final", "phase": "final_answer"}})

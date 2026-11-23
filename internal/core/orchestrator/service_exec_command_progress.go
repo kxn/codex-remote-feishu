@@ -8,7 +8,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const execCommandProgressMinInterval = 300 * time.Millisecond
@@ -200,22 +199,7 @@ func (s *Service) handleDelegatedTaskProgressUpdated(instanceID string, event ag
 	if progress == nil {
 		return nil
 	}
-	entry := state.ExecCommandProgressEntryRecord{
-		ItemID:  strings.TrimSpace(event.ItemID),
-		Kind:    "delegated_task",
-		Label:   "Task",
-		Summary: strings.TrimSpace(xutil.MetadataString(event.Metadata, "description")),
-		Status:  execprogress.NormalizeStatus(event.Status, event.Kind == agentproto.EventItemCompleted),
-	}
-	subagentType := strings.TrimSpace(xutil.MetadataString(event.Metadata, "subagentType"))
-	switch {
-	case entry.Summary != "" && subagentType != "":
-		entry.Summary = subagentType + " · " + entry.Summary
-	case entry.Summary == "" && subagentType != "":
-		entry.Summary = subagentType
-	case entry.Summary == "":
-		entry.Summary = "任务处理中"
-	}
+	entry := execprogress.DelegatedTaskEntry(event)
 	execprogress.UpsertEntry(progress, entry)
 	progress.ItemID = entry.ItemID
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
@@ -308,13 +292,7 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 	}
 	defer s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
 	status := execprogress.NormalizeStatus(turnStatus, true)
-	for i := range progress.Entries {
-		if strings.TrimSpace(progress.Entries[i].Status) == "running" || strings.TrimSpace(progress.Entries[i].Status) == "started" {
-			progress.Entries[i].Status = status
-		}
-	}
-	finalizeExecCommandProgressReasoning(progress, status)
-	execprogress.FinalizeExploration(progress, status)
+	execprogress.Finalize(progress, status)
 	_ = finalText
 	if status == "" {
 		return nil

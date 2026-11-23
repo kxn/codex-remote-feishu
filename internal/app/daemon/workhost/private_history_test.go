@@ -2,6 +2,7 @@ package workhost
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workengine"
@@ -63,7 +64,7 @@ func TestPrivateHistoryRequiresExactConnectionAndOwnership(t *testing.T) {
 	bot := work.RoleBotBinding{IdentityGeneration: 1}
 	next.CodexResume.Model = "new-model"
 	next.CodexResume.ThreadPolicyID = "new-thread-policy"
-	if !privateHistoryCompatible(old, next, worker, role, bot, "host") {
+	if !privateHistoryCompatible(old, next, worker, role, bot, "host", nil) {
 		t.Fatal("mutable model lost history")
 	}
 	for _, change := range []string{"account", "provider", "profile", "cwd", "bot", "host", "policy"} {
@@ -88,9 +89,45 @@ func TestPrivateHistoryRequiresExactConnectionAndOwnership(t *testing.T) {
 			case "policy":
 				n.ReadOnly = true
 			}
-			if privateHistoryCompatible(old, n, worker, role, b, host) {
+			if privateHistoryCompatible(old, n, worker, role, b, host, nil) {
 				t.Fatal("identity change reused history")
 			}
 		})
+	}
+}
+
+// The display reads /verbose live. A later turn must use the latest preference
+// revision for admission even when it can resume the exact same native process.
+func TestPrivateDisplayChangeReusesNativeProcessAndFencesNextTurn(t *testing.T) {
+	ctx := t.Context()
+	launches := 0
+	h, store := hostFixture(t, func(relayruntime.HeadlessLaunchOptions) (int, error) { launches++; return 1234, nil })
+	settings, err := h.config.Settings.ResolveLaunch(ctx, work.WorkScope{}, work.Role{}, work.WorkContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := &mutablePrivateSettings{settings}
+	h.config.Settings = resolver
+	h.config.Runtime = &rebuildDriver{stopped: true}
+	need := workengine.WorkerNeed{ScopeID: "scope", RoleID: "role"}
+	if err := h.Prepare(ctx, need); err != nil {
+		t.Fatal(err)
+	}
+	before := seedIdleSession(t, h, store)
+	resolver.settings.PreferencesRevision++
+	if err := h.Prepare(ctx, need); err != nil {
+		t.Fatal(err)
+	}
+	candidate := readLifecycleCandidate(t, store, before.ContextID)
+	plan, err := h.Plan(ctx, candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launches != 1 || candidate.Worker.CarrierIncarnation != before.CarrierIncarnation || before.NativeSessionID == "" || plan.Command.Target.ThreadID != before.NativeSessionID || plan.PreferencesRevision != resolver.settings.PreferencesRevision {
+		t.Fatal("display-only change must preserve the process and native history and claim with the new revision")
+	}
+	resolver.settings.Overrides.AccessMode = agentproto.AccessModeConfirm
+	if _, err = h.Plan(ctx, candidate); !errors.Is(err, workengine.ErrPreparationRequired) {
+		t.Fatalf("an effective permission change reused the old launch: %v", err)
 	}
 }

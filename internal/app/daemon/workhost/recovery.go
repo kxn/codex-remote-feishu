@@ -47,6 +47,7 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 	var carrier workstore.CarrierRegistration
 	var personal bool
 	var rejectedResume bool
+	var observedModel *agentproto.CodexEffectiveThreadContract
 	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
 		scope, err := tx.GetScope(previous.ScopeID)
 		if err != nil {
@@ -90,6 +91,13 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 		if record.WorkerID != previous.ID || record.Generation != previous.Generation || record.Snapshot.CarrierIncarnation != previous.CarrierIncarnation {
 			return fmt.Errorf("launch recovery ownership mismatch")
 		}
+		if personal && previous.Backend == work.BackendCodex && previous.NativeSessionID != "" &&
+			privateCodexSelectedModel(record.Overrides, record.CodexResume) != privateCodexSelectedModel(settings.Overrides, settings.CodexResume) {
+			observedModel, err = tx.PrivateCodexObservedModel(previous.CarrierIncarnation, previous.NativeSessionID)
+			if err != nil {
+				return err
+			}
+		}
 		carrier, err = tx.GetCarrier(previous.CarrierIncarnation)
 		if errors.Is(err, workstore.ErrNotFound) && operation.State == work.OperationPrepared {
 			return nil
@@ -99,8 +107,9 @@ func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession
 	if err != nil {
 		return existingPreparation{}, err
 	}
-	same := record.ConnectionIdentity == settings.ConnectionIdentity && record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.HostID == h.config.HostID && sameRuntimePolicy(record, settings) && record.Snapshot.NativeMemoryPolicyVersion == agentproto.NativeMemoryPolicyVersion && record.SettingsRevision == role.SettingsRevision && record.RoleDescriptionVersion == role.DescriptionVersion && record.Snapshot.Owner.BotGeneration == binding.IdentityGeneration && record.Snapshot.Owner.ControllerGeneration == previous.ControllerGeneration && record.Snapshot.InstructionBundle.Revision == bundle.Revision && record.ProfileID == settings.ProfileID && record.Backend == settings.Backend && record.Snapshot.CWD == settings.Location.Cwd && previous.LocationID == settings.Location.ID && previous.LocationGeneration == settings.Location.Generation
-	compatibleSnapshot := !rejectedResume && (same || (personal && privateHistoryCompatible(record, settings, *previous, role, binding, h.config.HostID)))
+	same := record.reusableFor(settings, *previous, role, binding, bundle, h.config.HostID, personal)
+	privateCompatible := personal && privateHistoryCompatible(record, settings, *previous, role, binding, h.config.HostID, observedModel)
+	compatibleSnapshot := !rejectedResume && (same || privateCompatible)
 	if rebuilt.State == work.OperationConfirmed && rebuilt.NextAttemptAt != nil {
 		if h.config.Now().Before(*rebuilt.NextAttemptAt) {
 			return existingPreparation{}, nil

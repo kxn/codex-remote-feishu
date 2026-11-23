@@ -112,6 +112,15 @@ func pipelineNativePrivateShell(frame map[string]any, session string) error {
 	if !ok || len(envelope.Inputs) != 3 {
 		return fmt.Errorf("shell context lost exact three-source provenance")
 	}
+	for i, id := range []string{"steer-image-one", "steer-image-two", "steer-caption"} {
+		input := envelope.Inputs[i]
+		if input.ID == "" || input.Message == nil || input.Message.ID == "" || input.Message.PlatformKey == nil || input.Message.PlatformKey.MessageID != id {
+			return fmt.Errorf("shell source %d lost exact SDK identity", i)
+		}
+	}
+	if !strings.Contains(bundle.Text, "Use these two queued pictures in this running request.") {
+		return fmt.Errorf("shell context lost readable human instruction")
+	}
 	for index, asset := range bundle.Attachments {
 		data, e := os.ReadFile(asset.Path)
 		if e != nil {

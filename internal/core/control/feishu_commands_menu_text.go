@@ -58,7 +58,7 @@ func normalizeModeMenuArgument(value string) (string, bool) {
 func normalizeAutoWhipMenuArgument(value string) (string, bool) {
 	mode := strings.ToLower(strings.TrimSpace(value))
 	switch mode {
-	case "on", "off":
+	case "on", "off", "status":
 		return mode, true
 	default:
 		return "", false
@@ -68,7 +68,7 @@ func normalizeAutoWhipMenuArgument(value string) (string, bool) {
 func normalizeAutoContinueMenuArgument(value string) (string, bool) {
 	mode := strings.ToLower(strings.TrimSpace(value))
 	switch mode {
-	case "on", "off":
+	case "on", "off", "status":
 		return mode, true
 	default:
 		return "", false

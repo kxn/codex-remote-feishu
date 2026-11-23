@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"reflect"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -46,8 +45,4 @@ func composeLaunchInstructions(settings LaunchSettings, platform agentproto.Inst
 	text := profile + "\n\n" + platform.Text
 	hash := sha256.Sum256([]byte(text))
 	return agentproto.InstructionBundle{Revision: hex.EncodeToString(hash[:]), Text: text}
-}
-
-func sameRuntimePolicy(record LaunchRecord, settings LaunchSettings) bool {
-	return record.ConnectionIdentity == settings.ConnectionIdentity && record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.ReadOnly == settings.ReadOnly && record.PreferencesRevision == settings.PreferencesRevision && reflect.DeepEqual(record.Overrides, settings.Overrides) && reflect.DeepEqual(record.CodexResume, settings.CodexResume)
 }

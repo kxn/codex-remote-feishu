@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -30,6 +32,7 @@ type Options struct {
 	SendReceipt            func(string, agentproto.EventReceipt) error
 	Clock                  func() time.Time
 	AuthorizeControl       func(context.Context, work.Actor, string, string) error
+	PreviewPrivateFinal    func(context.Context, work.RoleBotBinding, previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error)
 }
 
 func (c *Coordinator) scheduleReconcile(ctx context.Context, attemptID string) error {
@@ -41,8 +44,11 @@ func (c *Coordinator) scheduleReconcile(ctx context.Context, attemptID string) e
 }
 
 type Coordinator struct {
-	store   *workstore.Store
-	options Options
+	store          *workstore.Store
+	options        Options
+	previewMu      sync.Mutex
+	previewActive  map[string]bool
+	previewWorkers sync.WaitGroup
 }
 
 func New(store *workstore.Store, options Options) *Coordinator {

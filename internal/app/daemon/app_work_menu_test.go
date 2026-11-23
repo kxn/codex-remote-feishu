@@ -7,13 +7,12 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
-	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
 func TestTeamBotMenuStatusAndLegacyActionsPublishDistinctFeedback(t *testing.T) {
 	a, source := teamPickerFixture(t)
 	for _, tc := range []struct{ key, prompt string }{
-		{string(feishuapp.TeamMenuStatus), "当前工作状态"},
+		{"status", "当前工作状态"},
 		{"stop", "已提交停止请求"},
 		{"new", "已新建私人会话"},
 	} {

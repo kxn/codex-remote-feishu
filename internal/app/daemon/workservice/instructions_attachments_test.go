@@ -16,6 +16,9 @@ func attachmentAttempt(t *testing.T) (*Service, work.ExecutionAttempt) {
 	return attachmentAttemptState(t, true)
 }
 func attachmentAttemptState(t *testing.T, claim bool) (*Service, work.ExecutionAttempt) {
+	return attachmentAttemptPrincipal(t, claim, "human")
+}
+func attachmentAttemptPrincipal(t *testing.T, claim bool, principal string) (*Service, work.ExecutionAttempt) {
 	t.Helper()
 	s, _, _ := runningService(t)
 	var attempt work.ExecutionAttempt
@@ -30,13 +33,13 @@ func attachmentAttemptState(t *testing.T, claim bool) (*Service, work.ExecutionA
 		}
 		image := work.NewContent("image-bytes", wc.ScopeID, "image/png", []byte("durable image fixture"), s.now())
 		file := work.NewContent("file-bytes", wc.ScopeID, "text/plain", []byte("actual file content"), s.now())
-		body := work.NewContent("attachment-body", wc.ScopeID, "text/plain", []byte("inspect these attachments"), s.now())
+		body := work.NewContent("attachment-body", wc.ScopeID, "text/plain", []byte("你好，检查这些附件：\n```go\nfmt.Println(\"hello\")\n```\n"+strings.Repeat("长", 8100)+"END"), s.now())
 		for _, content := range []work.Content{image, file, body} {
 			if err := tx.PutContent(content); err != nil {
 				return err
 			}
 		}
-		message := work.Message{ID: "attachment-message", ScopeID: wc.ScopeID, ConversationID: "actual-conversation", Source: work.Actor{Kind: work.ActorPrincipal, ID: "human"}, BodyRef: body.ID, Revision: 1, CreatedAt: s.now(), Attachments: []work.MessageAttachment{{ContentRef: image.ID, SHA256: image.SHA256, Size: int64(len(image.Data)), MediaType: image.MediaType, Kind: "image", SourceMessageID: "sdk-message"}, {ContentRef: file.ID, SHA256: file.SHA256, Size: int64(len(file.Data)), MediaType: file.MediaType, Kind: "file", FileName: "../../ignored-name.txt", SourceMessageID: "sdk-message"}}}
+		message := work.Message{ID: "attachment-message", ScopeID: wc.ScopeID, ConversationID: "actual-conversation", Source: work.Actor{Kind: work.ActorPrincipal, ID: principal}, BodyRef: body.ID, Revision: 1, CreatedAt: s.now(), Attachments: []work.MessageAttachment{{ContentRef: image.ID, SHA256: image.SHA256, Size: int64(len(image.Data)), MediaType: image.MediaType, Kind: "image", SourceMessageID: "sdk-message"}, {ContentRef: file.ID, SHA256: file.SHA256, Size: int64(len(file.Data)), MediaType: file.MediaType, Kind: "file", FileName: "../../ignored-name.txt", SourceMessageID: "sdk-message"}}}
 		inbox := work.Inbox{ID: "attachment-inbox", ScopeID: wc.ScopeID, RecipientRoleID: wc.RoleID, MessageID: message.ID, EventID: "attachment-event", State: work.InboxPending, ContentState: work.InputContentReady, AvailableAt: s.now(), Revision: 1}
 		if _, _, err := tx.AcceptMessage(message, []work.Inbox{inbox}); err != nil {
 			return err
@@ -64,6 +67,9 @@ func TestWorkPromptMaterializesOnlyAdmittedDurableBytes(t *testing.T) {
 	inputs, err := s.BuildWorkPrompt(t.Context(), attempt, root)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(inputs[0].Text, "你好，检查这些附件：\n```go\nfmt.Println(\"hello\")\n```") || strings.Contains(inputs[0].Text, `"body":`) || strings.Contains(inputs[0].Text, `\n`) || !strings.Contains(inputs[0].Text, strings.Repeat("长", 8100)+"END") {
+		t.Fatalf("private user text was escaped or wrapped in business metadata: %q", inputs[0].Text)
 	}
 	if len(inputs) != 3 || inputs[1].Type != agentproto.InputLocalImage || !strings.HasPrefix(inputs[1].Path, root) || !strings.Contains(inputs[2].Text, "actual file") && !strings.Contains(inputs[2].Text, "local_path") {
 		t.Fatalf("wrong typed prompt %+v", inputs)

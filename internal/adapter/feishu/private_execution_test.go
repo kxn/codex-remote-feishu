@@ -3,6 +3,8 @@ package feishu
 import (
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func TestPrivateExecutionLongMarkdownKeepsAllChunks(t *testing.T) {
@@ -18,5 +20,12 @@ func TestPrivateExecutionLongMarkdownKeepsAllChunks(t *testing.T) {
 	}
 	if !strings.Contains(string(cards[0]), "first anchor") || !strings.Contains(string(cards[len(cards)-1]), "last anchor") {
 		t.Fatal("private final chunk split lost the beginning or tail")
+	}
+}
+
+func TestPrivateDiffPreviewWithoutFileEvents(t *testing.T) {
+	cards := PrivateExecutionReplyWithPreview("", "done", nil, &control.TurnDiffPreview{URL: "https://example.test/diff"}, nil)
+	if len(cards) != 1 || !strings.Contains(string(cards[0]), "https://example.test/diff") {
+		t.Fatalf("diff-only preview missing from final card: %s", cards)
 	}
 }

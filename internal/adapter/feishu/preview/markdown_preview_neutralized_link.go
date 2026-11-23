@@ -1,7 +1,6 @@
 package preview
 
 import (
-	"context"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -104,19 +103,13 @@ func looksLikeNeutralizedURLSchemeTail(token string) bool {
 	return true
 }
 
-func (p *DriveMarkdownPreviewer) tryRewriteNeutralizedLocalMarkdownLink(
-	ctx context.Context,
-	req FinalBlockPreviewRequest,
-	principals []previewPrincipal,
-	runtime *previewRewriteRuntime,
-	scopeKey string,
-	rewrittenTargets map[string]string,
+func (resolve rewriteReference) tryRewriteNeutralizedLocalMarkdownLink(
 	text string,
 	last int,
 	index int,
 	baseOffset int,
 ) (neutralizedLocalMarkdownRewrite, bool) {
-	if p == nil || index < 2 || text[index-2:index] != " (" {
+	if index < 2 || text[index-2:index] != " (" {
 		return neutralizedLocalMarkdownRewrite{}, false
 	}
 	run := markdown.ConsecutiveByteRun(text, index, '`')
@@ -144,23 +137,11 @@ func (p *DriveMarkdownPreviewer) tryRewriteNeutralizedLocalMarkdownLink(
 	if !ok {
 		return neutralizedLocalMarkdownRewrite{}, false
 	}
-	rewrittenHead, headChanged, headErrs := p.rewriteMarkdownLinksPlain(
-		ctx,
-		req,
-		principals,
-		runtime,
-		scopeKey,
-		rewrittenTargets,
+	rewrittenHead, headChanged, headErrs := resolve.rewriteMarkdownLinksPlain(
 		head,
 		baseOffset+last,
 	)
-	replacement, linkChanged, linkErrs := p.rewritePreviewReferenceTarget(
-		ctx,
-		req,
-		principals,
-		runtime,
-		scopeKey,
-		rewrittenTargets,
+	replacement, linkChanged, linkErrs := resolve(
 		rawTarget,
 		baseOffset+index+run+trimStart,
 		baseOffset+index+run+trimStart+len(rawTarget),

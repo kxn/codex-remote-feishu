@@ -15,6 +15,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
+const privateNewSessionNotice = "已新建私人会话。下一条消息会进入新会话。"
+
 type teamPrivateCommands struct{ app *App }
 type teamHumanSource struct {
 	BootstrapSourceMessageID                                     string
@@ -56,31 +58,7 @@ func (h teamPrivateCommands) Handle(ctx context.Context, command work.TypedComma
 	if !known {
 		receipt, err = a.queuePrivatePanel(ctx, source, "help", "没有识别这个命令，可以使用下面的入口。")
 	} else {
-		switch action.Kind {
-		case control.ActionShowCommandMenu:
-			receipt, err = a.queueTeamPrivateCommandMenu(ctx, source, action.Text)
-		case control.ActionShowCommandHelp:
-			receipt, err = a.queuePrivatePanel(ctx, source, "help", "")
-		case control.ActionStatus:
-			receipt, err = a.queuePrivatePanel(ctx, source, "status", "")
-		case control.ActionShowHistory:
-			receipt, err = a.queueTeamCurrentHistory(ctx, source)
-		case control.ActionShowThreads, control.ActionShowAllThreads:
-			receipt, err = a.queuePrivatePanel(ctx, source, "contexts", "")
-		case control.ActionListInstances:
-			receipt, err = a.queuePrivatePanel(ctx, source, "workspace", "")
-		case control.ActionNewThread:
-			err = a.navigateFromSource(ctx, source, "new", "", "", 0)
-			if err == nil {
-				receipt, err = a.queuePrivatePanel(ctx, source, "menu", "已新建工作。长期记忆会保留，新工作的讨论从这里开始。")
-			}
-		case control.ActionCronCommand:
-			receipt, err = a.queuePrivatePanel(ctx, source, "menu", "旧的定时任务功能已停用，旧任务不会自动执行。")
-		case control.ActionPrimaryCommand, control.ActionCoworkersCommand:
-			receipt, err = a.queuePrivatePanel(ctx, source, "menu", "项目团队由负责人协调，可以直接和负责人讨论成员及分工。")
-		default:
-			receipt, err = a.handleTeamPrivateOperation(ctx, source, action)
-		}
+		receipt, err = a.dispatchTeamPrivateCommand(ctx, source, action)
 	}
 	if err != nil {
 		problem := err
@@ -89,6 +67,35 @@ func (h teamPrivateCommands) Handle(ctx context.Context, command work.TypedComma
 		err = errors.Join(problem, publishErr)
 	}
 	return workingress.PrivateCommandReceipt{Receipt: receipt, Rejected: err != nil && receipt != "", ErrorDetail: teamCommandError(err)}, err
+}
+
+func (a *App) dispatchTeamPrivateCommand(ctx context.Context, source teamHumanSource, action control.Action) (receipt string, err error) {
+	switch action.Kind {
+	case control.ActionShowCommandMenu:
+		receipt, err = a.queueTeamPrivateCommandMenu(ctx, source, action.Text)
+	case control.ActionShowCommandHelp:
+		receipt, err = a.queuePrivatePanel(ctx, source, "help", "")
+	case control.ActionStatus:
+		receipt, err = a.queuePrivatePanel(ctx, source, "status", "")
+	case control.ActionShowHistory:
+		receipt, err = a.queueTeamCurrentHistory(ctx, source)
+	case control.ActionShowThreads, control.ActionShowAllThreads:
+		receipt, err = a.queuePrivatePanel(ctx, source, "contexts", "")
+	case control.ActionListInstances:
+		receipt, err = a.queuePrivatePanel(ctx, source, "workspace", "")
+	case control.ActionNewThread:
+		err = a.navigateFromSource(ctx, source, "new", "", "", 0)
+		if err == nil {
+			receipt, err = a.queuePrivatePanel(ctx, source, "menu", privateNewSessionNotice)
+		}
+	case control.ActionCronCommand:
+		receipt, err = a.queuePrivatePanel(ctx, source, "menu", "旧的定时任务功能已停用，旧任务不会自动执行。")
+	case control.ActionPrimaryCommand, control.ActionCoworkersCommand:
+		receipt, err = a.queuePrivatePanel(ctx, source, "menu", "项目团队由负责人协调，可以直接和负责人讨论成员及分工。")
+	default:
+		receipt, err = a.handleTeamPrivateOperation(ctx, source, action)
+	}
+	return receipt, err
 }
 
 func (a *App) navigateFromSource(ctx context.Context, source teamHumanSource, action, projectScopeID, contextID string, expected int64) error {

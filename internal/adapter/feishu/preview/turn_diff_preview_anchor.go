@@ -27,7 +27,7 @@ type turnDiffAnchorCandidate struct {
 }
 
 func (p *DriveMarkdownPreviewer) loadTurnDiffAnchorText(file turnDiffParsedFile, req FinalBlockPreviewRequest) (string, bool, bool) {
-	directRoots := previewAllowedRoots(req.ThreadCWD, req.WorkspaceRoot, p.config.ProcessCWD)
+	directRoots := p.requestRoots(req)
 	if len(directRoots) == 0 {
 		return "", false, false
 	}

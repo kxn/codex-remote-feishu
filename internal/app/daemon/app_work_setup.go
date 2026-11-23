@@ -91,7 +91,16 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err != nil {
 		return err
 	}
-	r.coordinator = workruntime.New(store, workruntime.Options{DefaultGoalTokenBudget: loaded.Config.Work.DefaultGoalTokenBudget, StateDir: paths.StateDir, HostID: hostID, Driver: driver, SendReceipt: a.relay.SendEventReceipt, EnqueueReconcile: r.enqueueReconcile, AuthorizeControl: authorizeControl, ApplyNativeRequest: workrequests.Apply})
+	options := workruntime.Options{
+		DefaultGoalTokenBudget: loaded.Config.Work.DefaultGoalTokenBudget,
+		StateDir:               paths.StateDir, HostID: hostID, Driver: driver,
+		SendReceipt: a.relay.SendEventReceipt, EnqueueReconcile: r.enqueueReconcile,
+		AuthorizeControl: authorizeControl, ApplyNativeRequest: workrequests.Apply,
+	}
+	if a.finalBlockPreviewer != nil {
+		options.PreviewPrivateFinal = a.previewWorkPrivateFinal
+	}
+	r.coordinator = workruntime.New(store, options)
 	if err = r.coordinator.RecoverConnectionsOnStartup(ctx); err != nil {
 		return err
 	}
