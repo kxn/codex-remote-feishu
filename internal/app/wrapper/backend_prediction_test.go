@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -191,6 +190,36 @@ func TestPredictionPreparationFailureEndsRoundQuietly(t *testing.T) {
 	}
 }
 
+func TestPredictionCanceledPreparationNeedsNoTombstone(t *testing.T) {
+	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
+	runtime.predictions = newTestPredictionRuntime()
+	frames := make(chan []byte, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() {
+		_, err := runtime.predictionRPC(ctx, frames, "getAuthStatus", nil)
+		done <- err
+	}()
+	request := predictionFrame(t, frames)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("preparation ended with %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("preparation did not cancel")
+	}
+	if got := len(runtime.predictions.pending); got != 0 {
+		t.Errorf("canceled preparations retained in pending map: %d", got)
+	}
+	predictionReply(t, runtime, request, map[string]any{"authToken": "late-private-token"})
+	if observed, err := runtime.ObserveServer([]byte(`{"id":"desktop-auth-1","result":{"authToken":"desktop-token"}}`)); err != nil || observed.Suppress {
+		t.Fatalf("unrelated native reply was suppressed: %#v, %v", observed, err)
+	}
+}
+
 func TestPredictionFullQueueDiscardsUnsentPreparation(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
 	runtime.predictions = newTestPredictionRuntime()
@@ -262,10 +291,6 @@ func TestPredictionCancelNeverBlocksFullChildQueue(t *testing.T) {
 	if err := json.Unmarshal(outbound[0], &sample); err != nil {
 		t.Fatal(err)
 	}
-	index, err := strconv.Atoi(strings.TrimPrefix(sample["id"].(string), "relay-prediction-sample-"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	frames := make(chan []byte, 1)
 	runtime.predictions.jobs[command.CommandID] = &predictionJob{ctx: ctx, cancel: cancel, command: command, sampled: true, frames: frames}
 	frames <- []byte("occupied")
@@ -282,13 +307,7 @@ func TestPredictionCancelNeverBlocksFullChildQueue(t *testing.T) {
 	if frame := <-frames; string(frame) != "occupied" {
 		t.Fatalf("full queue unexpectedly received a cancel frame: %s", frame)
 	}
-	// The already-sent sample stays private, while a dropped cancel has no response to consume.
 	predictionReply(t, runtime, sample, map[string]any{})
-	cancelID := "relay-prediction-cancel-" + strconv.Itoa(index+1)
-	result, err := runtime.ObserveServer([]byte(`{"id":"` + cancelID + `","result":{}}`))
-	if err != nil || result.Suppress {
-		t.Fatalf("unsent cancel is still owned: %#v, %v", result, err)
-	}
 }
 
 func TestPredictionDisconnectCancelsNativeSample(t *testing.T) {

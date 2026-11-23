@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -27,7 +28,6 @@ type pendingPrediction struct {
 	CommandID    string
 	ThreadID     string
 	SourceTurnID string
-	Canceled     bool
 }
 
 func (t *Translator) TranslatePredictionRequest(command agentproto.Command, options PredictionOptions) ([][]byte, error) {
@@ -49,7 +49,7 @@ func (t *Translator) TranslatePredictionRequest(command agentproto.Command, opti
 			return nil, fmt.Errorf("prediction command %s is already pending", commandID)
 		}
 	}
-	requestID := t.NextRequest("prediction-sample")
+	requestID := t.predictionRequestPrefix + strconv.Itoa(t.NextID())
 	params := map[string]any{
 		"threadId": threadID, "expectedTurnId": sourceTurnID,
 		"prompt":       prompt,
@@ -89,59 +89,39 @@ func (t *Translator) DiscardUnsentPrediction(commandID string) {
 }
 
 func (t *Translator) translatePredictionCancel(command agentproto.Command) ([][]byte, error) {
-	var frames [][]byte
-	err := t.QueuePredictionCancel(command.Prediction.RequestCommandID, func(frame []byte) bool {
-		frames = append(frames, frame)
-		return true
-	})
-	return frames, err
-}
-
-// QueuePredictionCancel suppresses the original sample and tracks the cancel response
-// only if the nonblocking offer accepts the frame.
-func (t *Translator) QueuePredictionCancel(commandID string, offer func([]byte) bool) error {
-	commandID = strings.TrimSpace(commandID)
+	commandID := strings.TrimSpace(command.Prediction.RequestCommandID)
 	if commandID == "" {
-		return fmt.Errorf("thread.prediction.cancel requires original request command id")
+		return nil, fmt.Errorf("thread.prediction.cancel requires original request command id")
 	}
 	for requestID, pending := range t.pendingPredictions {
-		if pending.CommandID != commandID || pending.Canceled {
+		if pending.CommandID != commandID {
 			continue
 		}
-		cancelID := t.NextRequest("prediction-cancel")
+		cancelID := t.predictionRequestPrefix + strconv.Itoa(t.NextID())
 		raw, err := json.Marshal(map[string]any{
 			"id": cancelID, "method": "thread/sample/cancel",
 			"params": map[string]any{"requestId": requestID},
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		pending.Canceled = true
-		t.pendingPredictions[requestID] = pending
-		if offer(append(raw, '\n')) {
-			t.pendingPredictionCancels[cancelID] = true
-		}
-		return nil
+		delete(t.pendingPredictions, requestID)
+		return [][]byte{append(raw, '\n')}, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (t *Translator) observePredictionResponse(requestID string, message map[string]any) (Result, bool) {
-	if method, _ := message["method"].(string); method != "" {
+	if method, _ := message["method"].(string); method != "" || !strings.HasPrefix(requestID, t.predictionRequestPrefix) {
 		return Result{}, false
 	}
-	if t.pendingPredictionCancels[requestID] {
-		delete(t.pendingPredictionCancels, requestID)
+	pending, active := t.pendingPredictions[requestID]
+	if !active {
+		// The private translator prefix covers cancel acknowledgements and
+		// late sample responses even after dropping their request state.
 		return Result{Suppress: true}, true
-	}
-	pending, owned := t.pendingPredictions[requestID]
-	if !owned {
-		return Result{}, false
 	}
 	delete(t.pendingPredictions, requestID)
-	if pending.Canceled {
-		return Result{Suppress: true}, true
-	}
 	event := agentproto.Event{
 		Kind: agentproto.EventThreadPredictionResult, CommandID: pending.CommandID,
 		ThreadID:   pending.ThreadID,

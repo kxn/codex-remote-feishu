@@ -2,6 +2,7 @@ package wrapper
 
 import (
 	"context"
+	securerand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,7 +39,8 @@ type predictionRPCResponse struct {
 func newPredictionRuntime() *predictionRuntime {
 	return &predictionRuntime{
 		jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse),
-		cache: make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(),
+		preparationPrefix: "remote-prediction-prep:" + securerand.Text() + ":",
+		cache:             make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(),
 		now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext,
 		desktopPreferences: readPredictionDesktopPreferences,
 	}
@@ -91,19 +93,13 @@ func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- [
 	r.mu.Lock()
 	p := r.predictions
 	p.sequence++
-	id := fmt.Sprintf("remote-prediction-prep:%d", p.sequence)
+	id := fmt.Sprintf("%s%d", p.preparationPrefix, p.sequence)
 	response := make(chan predictionRPCResponse, 1)
 	p.pending[id] = response
 	r.mu.Unlock()
-	sent := false
 	defer func() {
 		r.mu.Lock()
-		if !sent {
-			delete(p.pending, id)
-		} else if _, exists := p.pending[id]; exists {
-			// Keep a tombstone for late replies only after handing the request to the writer.
-			p.pending[id] = nil
-		}
+		delete(p.pending, id)
 		r.mu.Unlock()
 	}()
 	raw, err := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
@@ -115,7 +111,6 @@ func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- [
 	}
 	select {
 	case frames <- append(raw, '\n'):
-		sent = true
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -142,17 +137,16 @@ func (r *codexBackendRuntime) observePredictionPreparationLocked(raw []byte) boo
 		Method string `json:"method"`
 		predictionRPCResponse
 	}
-	if json.Unmarshal(raw, &frame) != nil || frame.Method != "" {
+	if json.Unmarshal(raw, &frame) != nil || frame.Method != "" ||
+		!strings.HasPrefix(frame.ID, r.predictions.preparationPrefix) {
 		return false
 	}
-	response, owned := r.predictions.pending[frame.ID]
-	if !owned {
-		return false
-	}
-	delete(r.predictions.pending, frame.ID)
-	if response != nil {
+	if response := r.predictions.pending[frame.ID]; response != nil {
+		delete(r.predictions.pending, frame.ID)
 		response <- frame.predictionRPCResponse
 	}
+	// Late replies can still carry authentication data. The private runtime
+	// prefix lets us consume them without keeping canceled requests around.
 	return true
 }
 
@@ -333,14 +327,16 @@ func (r *codexBackendRuntime) CancelPredictions() {
 }
 
 func (r *codexBackendRuntime) queuePredictionCancelLocked(requestID string, frames chan<- []byte) {
-	_ = r.translator.QueuePredictionCancel(requestID, func(frame []byte) bool {
+	outbound, _ := r.translator.TranslateCommand(agentproto.Command{
+		Kind:       agentproto.CommandThreadPredictionCancel,
+		Prediction: agentproto.PredictionCommand{RequestCommandID: requestID},
+	})
+	for _, frame := range outbound {
 		select {
 		case frames <- frame:
-			return true
 		default:
-			return false
 		}
-	})
+	}
 }
 
 func (r *codexBackendRuntime) cancelPredictionJobsLocked() {

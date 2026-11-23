@@ -224,6 +224,33 @@ func TestPredictionCancelOnlyOwnedOriginalRPCAndSuppressesLateResults(t *testing
 	}
 }
 
+func TestPredictionCanceledSampleNeedsNoTombstone(t *testing.T) {
+	tr := NewTranslator("instance-original")
+	var first, request map[string]any
+	for range 64 {
+		first = predictionRequest(t, tr, predictionCommand("prediction:reused"))
+		request = predictionRequest(t, tr, agentproto.Command{Kind: agentproto.CommandThreadPredictionCancel,
+			Prediction: agentproto.PredictionCommand{RequestCommandID: "prediction:reused"}})
+		if request["params"].(map[string]any)["requestId"] != first["id"] {
+			t.Fatalf("cancel targeted another sample: %#v", request)
+		}
+		if len(tr.pendingPredictions) != 0 {
+			t.Fatalf("canceled sample survived without a response: %#v", tr.pendingPredictions)
+		}
+	}
+	for _, id := range []any{first["id"], request["id"]} {
+		if result := predictionResponse(t, tr, id, map[string]any{}, nil); !result.Suppress || len(result.Events) != 0 {
+			t.Fatalf("late private response escaped: %#v", result)
+		}
+	}
+	other := predictionRequest(t, NewTranslator("instance-other"), predictionCommand("prediction:other"))
+	for _, id := range []any{other["id"], "thread/sample:af366d2a-0144-4cfb-9f34-45b9b189ef40", float64(1)} {
+		if result := predictionResponse(t, tr, id, map[string]any{}, nil); result.Suppress {
+			t.Fatalf("unrelated response was suppressed: id=%v", id)
+		}
+	}
+}
+
 func TestPredictionSampleTextRequiresActualSourceTurn(t *testing.T) {
 	for _, sourceTurnID := range []string{"", "different-turn"} {
 		t.Run("source-"+sourceTurnID, func(t *testing.T) {

@@ -1,6 +1,8 @@
 package codex
 
 import (
+	"crypto/rand"
+
 	"github.com/kxn/codex-remote-feishu/internal/adapter/adapterkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
@@ -47,7 +49,7 @@ type Translator struct {
 	pendingGoalRequests       map[string]pendingGoalRequest
 	pendingThreadReads        map[string]pendingThreadRead
 	pendingPredictions        map[string]pendingPrediction
-	pendingPredictionCancels  map[string]bool
+	predictionRequestPrefix   string
 	predictionModeration      predictionModerationState
 	lastOwnedGoalMutations    map[string]ownedGoalMutation
 	reasoningSummaryIndexes   map[string]map[int]bool
@@ -174,7 +176,7 @@ func NewTranslator(instanceID string) *Translator {
 		pendingGoalRequests:        map[string]pendingGoalRequest{},
 		pendingThreadReads:         map[string]pendingThreadRead{},
 		pendingPredictions:         map[string]pendingPrediction{},
-		pendingPredictionCancels:   map[string]bool{},
+		predictionRequestPrefix:    "relay-prediction:" + rand.Text() + ":",
 		lastOwnedGoalMutations:     map[string]ownedGoalMutation{},
 		reasoningSummaryIndexes:    map[string]map[int]bool{},
 	}
