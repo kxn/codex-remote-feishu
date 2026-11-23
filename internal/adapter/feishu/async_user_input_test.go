@@ -17,6 +17,9 @@ import (
 )
 
 func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
+	const question = "待批工作任务收到修改，本期如何处理？"
+	const firstOption = "先拒绝本次修改，保留原任务待审批，待当前任务处理完毕后再重新发起修改申请。"
+	const secondOption = "本期增加待批卡更新，修改后让审批人重新确认；保留原任务的处理记录和修改原因。\n请原样保留 [说明](details.md) 与 `revision`。"
 	for _, freeText := range []bool{false, true} {
 		name := "option"
 		if freeText {
@@ -36,7 +39,17 @@ func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
 			svc.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: surfaceID, ActorUserID: "user-1", MessageID: "initial", Text: "请继续"})
 			svc.ApplyAgentEvent("inst-1", agentproto.Event{Kind: agentproto.EventTurnStarted, ThreadID: "thread-1", TurnID: "turn-1"})
 			tr := codex.NewTranslator("inst-1")
-			result, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"item-1","type":"agentMessage","text":"切换吗？\n允许\n暂不切换","delivery":"async","questions":[{"title":"切换吗？","options":["允许","暂不切换"]}]}}}`))
+			native, err := json.Marshal(map[string]any{
+				"method": "item/completed",
+				"params": map[string]any{"threadId": "thread-1", "turnId": "turn-1", "item": map[string]any{
+					"id": "item-1", "type": "agentMessage", "text": question, "delivery": "async",
+					"questions": []map[string]any{{"title": question, "options": []string{firstOption, secondOption}}},
+				}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := tr.ObserveServer(native)
 			if err != nil || len(result.Events) != 1 {
 				t.Fatalf("native protocol: %v %#v", err, result)
 			}
@@ -49,6 +62,54 @@ func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
 			ops := projector.ProjectEvent("chat-1", events[0])
 			if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 				t.Fatalf("question card projection: %#v", ops)
+			}
+			elements := renderedV2BodyElements(t, ops[0])
+			var bodyParts []string
+			for _, element := range elements {
+				if text := plainTextContent(element); text != "" {
+					bodyParts = append(bodyParts, text)
+				}
+			}
+			questionBody := strings.Join(bodyParts, "\n")
+			if !strings.Contains(questionBody, question+"\n\n1. "+firstOption+"\n\n2. "+secondOption) {
+				t.Errorf("question body must separate the title and complete numbered options with blank lines, got %q", questionBody)
+			}
+			var optionGroup, answerInput map[string]any
+			for _, element := range elements {
+				if element["tag"] == "column_set" {
+					optionGroup = element
+				}
+				if element["tag"] == "form" {
+					fields, _ := element["elements"].([]map[string]any)
+					if len(fields) != 0 {
+						answerInput = fields[0]
+					}
+				}
+			}
+			columns, _ := optionGroup["columns"].([]map[string]any)
+			if optionGroup["flex_mode"] != "flow" || len(columns) != 2 {
+				t.Errorf("short option buttons must share a wrapping row, got %#v", optionGroup)
+			}
+			for _, column := range columns {
+				if column["width"] != "auto" {
+					t.Errorf("option buttons must keep natural width on narrow screens, got %#v", column)
+				}
+			}
+			if answerInput["tag"] != "input" || answerInput["name"] != "answer" || answerInput["width"] != "fill" || answerInput["label_position"] != "top" || answerInput["input_type"] != nil {
+				t.Errorf("answer must remain a single-line input with a top label and adaptive width, got %#v", answerInput)
+			}
+			labels := map[string]string{}
+			for _, button := range cardActionsFromElements(elements) {
+				payload := cardValueMap(button)
+				if payload["kind"] != "async_user_input" || payload["option_id"] == "" {
+					continue
+				}
+				optionID, _ := payload["option_id"].(string)
+				text, _ := button["text"].(map[string]any)
+				labels[optionID], _ = text["content"].(string)
+			}
+			if labels["0"] != "选 1" || labels["1"] != "选 2" {
+				t.Fatalf("option buttons must stay short and match body numbering, got %#v", labels)
 			}
 			payload := findAsyncCallbackPayload(ops[0].CardElements, freeText)
 			if payload == nil || payload["daemon_lifecycle_id"] != "life-1" {
@@ -66,7 +127,7 @@ func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
 			gateway.recordSurfaceMessage("om-question", surfaceID)
 			userID := "user-1"
 			callback := &larkcallback.CallBackAction{Value: wirePayload}
-			wantAnswer := "允许"
+			wantAnswer := secondOption
 			if freeText {
 				wantAnswer = "等全部空闲再切换"
 				callback.FormValue = map[string]interface{}{"answer": wantAnswer}
@@ -75,7 +136,7 @@ func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
 				Operator: &larkcallback.Operator{UserID: &userID}, Action: callback,
 				Context: &larkcallback.Context{OpenChatID: "chat-1", OpenMessageID: "om-question"},
 			}})
-			if !ok || action.Kind != control.ActionKind("surface.message.async_user_input") || action.Request == nil || control.AllowsInlineCardReplacement(action) || !control.ResolveFeishuFrontstageActionContract(action).RejectsUnstampedCallback {
+			if !ok || action.Kind != control.ActionAsyncUserInput || action.Request == nil || control.AllowsInlineCardReplacement(action) || !control.ResolveFeishuFrontstageActionContract(action).RejectsUnstampedCallback {
 				t.Fatalf("question callback parse/lifecycle: %#v", action)
 			}
 			answered := svc.ApplySurfaceAction(action)
@@ -108,7 +169,7 @@ func findAsyncCallbackPayload(value any, form bool) map[string]any {
 	case map[string]any:
 		if payload := cardValueMap(value); payload["kind"] == "async_user_input" {
 			option, _ := payload["option_id"].(string)
-			if (option == "") == form {
+			if (form && option == "") || (!form && option == "1") {
 				return payload
 			}
 		}
