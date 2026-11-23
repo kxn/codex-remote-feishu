@@ -80,7 +80,9 @@ func queueForm(tx *workstore.Tx, request workstore.NativeRequest, form orchestra
 			if e != nil {
 				return e
 			}
-			if evidence.MediaType == workstore.NativeRequestTerminalEvidenceType {
+			if evidence.MediaType == retiredControlRequestEvidence {
+				text = "原执行器已退出，取消未送达；这项请求已关闭。原执行状态仍等待核对。"
+			} else if evidence.MediaType == workstore.NativeRequestTerminalEvidenceType {
 				text = "执行已结束，这项原生请求不再等待答复。已有选择和发送记录已保留。"
 			}
 		}

@@ -2,7 +2,12 @@ package worktransport
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +15,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workui"
+	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
@@ -327,4 +333,288 @@ func TestNativeResponseRegistrationFailureIsUnsentAndSafelyRetried(t *testing.T)
 	if f.writes != 1 {
 		t.Fatal("proven unsent saved cancellation was not retried")
 	}
+}
+
+func TestUnsentNativeResponseWaitsForConnectedUngatedCarrier(t *testing.T) {
+	for _, gated := range []bool{false, true} {
+		t.Run(fmt.Sprintf("gated=%v", gated), func(t *testing.T) {
+			f := responseIntegrationFixture(t, false)
+			f.driver.BindRegistrar(failBeforeResponseRegistration{})
+			id, err := f.service.Respond(t.Context(), f.decision)
+			if err == nil {
+				t.Fatal("expected pre-send failure")
+			}
+			var revision int64
+			f.tx(func(tx *workstore.Tx) error {
+				op, e := tx.GetOperation(id)
+				if e != nil {
+					return e
+				}
+				before := op.Revision
+				op.Revision++
+				due := time.Now().UTC().Add(-time.Second)
+				op.NextAttemptAt = &due
+				if _, _, e = tx.PutOperation(op, before); e != nil {
+					return e
+				}
+				revision = op.Revision
+				if gated {
+					return tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: "worker", ScopeID: "scope", AttemptID: "attempt", Reason: "carrier_disconnected_reconcile", CreatedAt: time.Now().UTC()})
+				}
+				return tx.SetCarrierConnected("carrier-1", false)
+			})
+			f.driver.BindRegistrar(f.coordinator)
+			for i := 0; i < 2; i++ {
+				if err = f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+					t.Fatal(err)
+				}
+			}
+			f.tx(func(tx *workstore.Tx) error {
+				op, e := tx.GetOperation(id)
+				if e != nil {
+					return e
+				}
+				if op.Revision != revision || op.State != work.OperationRetryable || f.writes != 0 {
+					t.Fatal("offline or gated response was retried")
+				}
+				req, e := tx.GetNativeRequest(f.request.ID)
+				if e != nil {
+					return e
+				}
+				if req.State != "response_pending" {
+					t.Fatal("uncertain attempt was closed")
+				}
+				if gated {
+					return tx.ClearRuntimeGate("worker", "carrier_disconnected_reconcile")
+				}
+				return tx.SetCarrierConnected("carrier-1", true)
+			})
+			if err = f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+				t.Fatal(err)
+			}
+			if f.writes != 1 {
+				t.Fatal("saved response did not resume after carrier became eligible")
+			}
+		})
+	}
+}
+
+func TestLegacyUnregisteredResponseRepairsLocallyWhileCarrierOffline(t *testing.T) {
+	f := responseIntegrationFixture(t, false)
+	id := f.legacyUnregisteredResponse(t, false)
+	f.tx(func(tx *workstore.Tx) error { return tx.SetCarrierConnected("carrier-1", false) })
+	if err := f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+		t.Fatal(err)
+	}
+	var revision int64
+	f.tx(func(tx *workstore.Tx) error {
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if op.State != work.OperationRetryable || op.TargetID != "worker" || len(op.Steps) != 1 || op.Steps[0].ID != "local_registration_target_repair" || f.writes != 0 {
+			t.Fatal("offline legacy target repair did not preserve unsent decision")
+		}
+		revision = op.Revision
+		return nil
+	})
+	if err := f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if op.Revision != revision {
+			t.Fatal("offline retry modified repaired decision")
+		}
+		return tx.SetCarrierConnected("carrier-1", true)
+	})
+	if err := f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+		t.Fatal(err)
+	}
+	if f.writes != 1 {
+		t.Fatal("repaired response did not send after reconnect")
+	}
+}
+
+func TestRetiredPrivateControlCancellationClosesOnlyAfterExactProcessExit(t *testing.T) {
+	f := responseIntegrationFixture(t, false, true)
+	f.service.SetLocalHostID("local")
+	id := f.legacyUnregisteredResponse(t, false, true)
+	var err error
+	child := exec.Command(os.Args[0], "-test.run=^TestRetiredControlProcessHelper$")
+	child.Env = append(os.Environ(), "FSC_RETIRED_CONTROL_HELPER=1")
+	if err = child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = child.Process.Kill(); _ = child.Wait() })
+	identity, err := hostinventory.CaptureProcess(child.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		carrier, e := tx.GetCarrier("carrier-1")
+		if e != nil {
+			return e
+		}
+		snapshot := agentproto.RuntimeLaunchSnapshot{HostID: "local", Version: 1, Owner: carrier.Owner, CWD: t.TempDir(), InstructionBundle: agentproto.InstructionBundle{Revision: "v1", Text: "test"}, JournalPath: filepath.Join(t.TempDir(), "runtime.db"), CarrierIncarnation: carrier.Incarnation, InstanceGeneration: 1, ProcessGeneration: 1, LocationGeneration: 1}
+		raw, e := json.Marshal(struct {
+			Snapshot agentproto.RuntimeLaunchSnapshot `json:"snapshot"`
+		}{snapshot})
+		if e != nil {
+			return e
+		}
+		body := work.NewContent("launch-proof", "scope", "application/json", raw, time.Now().UTC())
+		if e = tx.PutContent(body); e != nil {
+			return e
+		}
+		_, _, e = tx.PutOperation(work.Operation{ID: "launch", ScopeID: "scope", Actor: work.Actor{Kind: work.ActorSystem, ID: "host"}, Kind: "worker.launch", TargetID: "worker", TargetGeneration: 1, IdempotencyKey: "launch", RequestRef: body.ID, RequestHash: body.SHA256, State: work.OperationConfirmed, ExternalReceipt: "test-launch", Revision: 1}, 0)
+		if e != nil {
+			return e
+		}
+		if e = tx.PutCarrierProcess("carrier-1", "instance", agentproto.RuntimeProcessIdentity{HostID: "local", Platform: identity.Platform, PID: identity.PID, StartIdentity: identity.StartIdentity}); e != nil {
+			return e
+		}
+		worker, e := tx.GetWorker("worker")
+		if e != nil {
+			return e
+		}
+		old := worker.Revision
+		worker.Revision++
+		worker.State = work.WorkerRecovering
+		if e = tx.PutWorker(worker, old); e != nil {
+			return e
+		}
+		if e = tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: "worker", ScopeID: "scope", AttemptID: "attempt", Reason: "carrier_disconnected_reconcile", CreatedAt: time.Now().UTC()}); e != nil {
+			return e
+		}
+		if e = tx.SetCarrierConnected("carrier-1", false); e != nil {
+			return e
+		}
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		old = op.Revision
+		op.Revision++
+		due := time.Now().UTC().Add(-time.Second)
+		op.NextAttemptAt = &due
+		_, _, e = tx.PutOperation(op, old)
+		return e
+	})
+	if err = f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		r, e := tx.GetNativeRequest(f.request.ID)
+		if e != nil {
+			return e
+		}
+		if r.State != "response_pending" {
+			t.Fatal("live process closed question")
+		}
+		return nil
+	})
+	if err = child.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if err = child.Wait(); err == nil {
+		t.Fatal("expected killed process")
+	}
+	if err = f.service.ProjectForms(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		views, e := tx.ListUIViews("scope")
+		if e != nil {
+			return e
+		}
+		var closed workstore.UIView
+		for _, view := range views {
+			if !view.Invalidated && view.TargetID == f.request.ID {
+				closed = view
+			}
+		}
+		if closed.ReplacesViewID != "native-view" {
+			t.Fatal("retired request did not update original card")
+		}
+		publication, e := tx.GetOperation(closed.OperationID)
+		if e != nil {
+			return e
+		}
+		projection, e := workservice.ReadMessageProjection(tx, publication)
+		if e != nil {
+			return e
+		}
+		if projection.ReplaceMessageID != "native-card" || !strings.Contains(string(projection.Card), "取消未送达") {
+			t.Fatal("original card lacks truthful unsent cancellation status")
+		}
+		r, e := tx.GetNativeRequest(f.request.ID)
+		if e != nil {
+			return e
+		}
+		if r.State != "stale" || r.ResolvedEvidenceRef == "" {
+			t.Fatal("exited control request remains open")
+		}
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if op.State != work.OperationTerminal {
+			t.Fatal("unsent cancel not terminated")
+		}
+		attempt, e := tx.GetAttempt("attempt")
+		if e != nil {
+			return e
+		}
+		if attempt.State != work.AttemptRunning {
+			t.Fatal("exit falsely resolved attempt")
+		}
+		turn, e := tx.GetNativeTurn("carrier-1", "session", "turn")
+		if e != nil {
+			return e
+		}
+		if turn.TerminalStatus != "" {
+			t.Fatal("exit fabricated native completion")
+		}
+		_, e = tx.GetRuntimeGate("worker")
+		return e
+	})
+}
+
+func TestRetiredControlProcessHelper(t *testing.T) {
+	if os.Getenv("FSC_RETIRED_CONTROL_HELPER") != "1" {
+		return
+	}
+	time.Sleep(30 * time.Second)
+}
+
+func TestNativeTerminalPrecedesLegacyDecisionRepair(t *testing.T) {
+	f := responseIntegrationFixture(t, false)
+	id := f.legacyUnregisteredResponse(t, false, true)
+	if err := f.coordinator.HandleEvent(t.Context(), "instance", f.nativeEvent(agentproto.Event{Kind: agentproto.EventTurnCompleted, CommandID: "start", ThreadID: "session", TurnID: "turn", Status: "interrupted"})); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		return tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "role", GatewayRef: "gateway", AppID: "changed", IdentityGeneration: 2}, 1)
+	})
+	if err := f.service.RecoverUnsentResponses(t.Context(), 32); err != nil {
+		t.Fatal(err)
+	}
+	f.tx(func(tx *workstore.Tx) error {
+		r, e := tx.GetNativeRequest(f.request.ID)
+		if e != nil {
+			return e
+		}
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if r.State != "stale" || op.State != work.OperationTerminal {
+			t.Fatal("terminal event was blocked by obsolete decision repair")
+		}
+		return nil
+	})
 }

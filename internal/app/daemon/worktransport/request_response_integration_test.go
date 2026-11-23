@@ -29,7 +29,8 @@ type nativeResponseFixture struct {
 	frames     [][]byte
 }
 
-func responseIntegrationFixture(t *testing.T, question bool) *nativeResponseFixture {
+func responseIntegrationFixture(t *testing.T, question bool, controlOption ...bool) *nativeResponseFixture {
+	control := len(controlOption) > 0 && controlOption[0]
 	t.Helper()
 	store, err := workstore.Open(t.Context(), filepath.Join(t.TempDir(), "requests.db"))
 	if err != nil {
@@ -63,10 +64,25 @@ func responseIntegrationFixture(t *testing.T, question bool) *nativeResponseFixt
 		if e = tx.PutScope(work.WorkScope{ID: "scope", Kind: work.ScopePersonal, RoleID: "role", PrincipalID: principal, Revision: 1}, 0); e != nil {
 			return e
 		}
-		if e = tx.PutContext(work.WorkContext{ID: "context", ScopeID: "scope", RoleID: "role", Workstream: "main", Revision: 1}, 0); e != nil {
+		if control {
+			if e = tx.PutContext(work.WorkContext{ID: "business", ScopeID: "scope", RoleID: "role", Workstream: "main", Revision: 1}, 0); e != nil {
+				return e
+			}
+		}
+		wc := work.WorkContext{ID: "context", ScopeID: "scope", RoleID: "role", Workstream: "main", Revision: 1}
+		if control {
+			wc.Workstream = "control"
+			wc.Purpose = work.PurposeControl
+			wc.ControlTargetContextID = "business"
+		}
+		if e = tx.PutContext(wc, 0); e != nil {
 			return e
 		}
-		if e = tx.PutLocation(work.ExecutionLocation{ID: "location", HostID: "host", Cwd: t.TempDir(), Generation: 1, Revision: 1}, 0); e != nil {
+		location := work.ExecutionLocation{ID: "location", HostID: "host", Cwd: t.TempDir(), Generation: 1, Revision: 1}
+		if control {
+			location.IsolatedContextID = "context"
+		}
+		if e = tx.PutLocation(location, 0); e != nil {
 			return e
 		}
 		return tx.PutWorker(work.WorkerSession{ID: "worker", ScopeID: "scope", ContextID: "context", RoleID: "role", Backend: work.BackendCodex, State: work.WorkerPreparing, Generation: 1, Controller: work.ControllerAutomatic, ControllerGeneration: 1, InstanceID: "instance", CarrierIncarnation: "carrier-1", InstanceGeneration: 1, ProcessGeneration: 1, LocationID: "location", LocationGeneration: 1, Revision: 1}, 0)
@@ -82,7 +98,20 @@ func responseIntegrationFixture(t *testing.T, question bool) *nativeResponseFixt
 	binding.RunRef = "run"
 	command := agentproto.Command{CommandID: "start", Kind: agentproto.CommandPromptSend, Execution: &binding, Target: agentproto.Target{ThreadID: "session"}}
 	f.tx(func(tx *workstore.Tx) error {
-		if e := tx.PutInbox(work.Inbox{ID: "input", ScopeID: "scope", RecipientRoleID: "role", RecipientContextID: "context", EventID: "event", State: work.InboxPending, Revision: 1}, 0); e != nil {
+		input := work.Inbox{ID: "input", ScopeID: "scope", RecipientRoleID: "role", RecipientContextID: "context", EventID: "event", State: work.InboxPending, Revision: 1}
+		if control {
+			body := work.NewContent("human-body", "scope", "text/plain", []byte("work"), time.Now().UTC())
+			if e := tx.PutContent(body); e != nil {
+				return e
+			}
+			_, _, e := tx.AcceptMessage(work.Message{ID: "human-message", ScopeID: "scope", ConversationID: "conversation", Source: work.Actor{Kind: work.ActorPrincipal, ID: principal}, BodyRef: body.ID, Revision: 1}, []work.Inbox{{ID: "business-input", ScopeID: "scope", RecipientRoleID: "role", RecipientContextID: "business", EventID: "business-event", MessageID: "human-message", State: work.InboxPending, Revision: 1}})
+			if e != nil {
+				return e
+			}
+			input.MessageID = "human-message"
+			input.ControlOfInputID = "business-input"
+		}
+		if e := tx.PutInbox(input, 0); e != nil {
 			return e
 		}
 		worker, e := tx.GetWorker("worker")

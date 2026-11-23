@@ -141,6 +141,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err != nil {
 		return err
 	}
+	r.requests.SetLocalHostID(hostID)
 	r.handler = workhttp.NewHandler(service)
 	a.teamRuntime = r
 	r.teamMaterials = workteamhome.New(store, a.teamMaterialsResolver)

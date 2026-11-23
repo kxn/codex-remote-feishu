@@ -35,6 +35,7 @@ type Service struct {
 	authorize     Authorizer
 	recoveryMu    sync.Mutex
 	recoveryAfter string
+	localHostID   string
 }
 
 func New(store *workstore.Store, driver Driver, authorize Authorizer) (*Service, error) {
@@ -43,6 +44,9 @@ func New(store *workstore.Store, driver Driver, authorize Authorizer) (*Service,
 	}
 	return &Service{store: store, driver: driver, authorize: authorize}, nil
 }
+
+// SetLocalHostID enables exact local process-exit checks for retired private control requests.
+func (s *Service) SetLocalHostID(id string) { s.localHostID = id }
 
 // Respond persists the complete native response before transport, and never
 // retries an uncertain write. A native resolved event is the completion proof.
