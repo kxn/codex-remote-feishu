@@ -387,12 +387,15 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 	}
 	command, guardEvents := s.promptSendCommandAndGuardEventsFromQueueItem(surface, item, queuedItemActorUserID(item, surface), originMessageID)
 	events = append(events, guardEvents...)
-	events = append(events, eventcontract.Event{
+	dispatch := eventcontract.Event{
 		Kind:             eventcontract.KindAgentCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Command:          command,
-	})
-	return events
+	}
+	if prediction := s.predictions[surface.SurfaceSessionID]; prediction != nil && prediction.SendQueueItemID == item.ID {
+		dispatch.QueuedPrompt = &eventcontract.QueuedPromptRef{InstanceID: prediction.InstanceID, QueueItemID: item.ID}
+	}
+	return append(events, dispatch)
 }
 
 func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, actorUserID, originMessageID string) *agentproto.Command {

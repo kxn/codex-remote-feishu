@@ -269,7 +269,7 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 		return
 	}
 	r.translator.SetPredictionPolicy(controls.ModerationPolicy)
-	outbound, err := r.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: config.Prompt, Effort: config.Effort, GenerationTrigger: "live", InterruptOnCancel: controls.InterruptOnCancel && predictionInterruptSupported(r.nativeUserAgent)})
+	outbound, err := r.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: config.Prompt, PromptWithSchema: config.PromptWithSchema, Effort: config.Effort, GenerationTrigger: "live", InterruptOnCancel: controls.InterruptOnCancel && predictionInterruptSupported(r.nativeUserAgent)})
 	if err != nil {
 		return
 	}

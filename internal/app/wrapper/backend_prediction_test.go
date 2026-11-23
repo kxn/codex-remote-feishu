@@ -60,7 +60,7 @@ func TestPredictionPreparationUsesOfficialConfigAndOriginalThread(t *testing.T) 
 		if strings.HasSuffix(req.URL.Path, "/statsig/bootstrap") {
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(controlsPayload("user", "account")))}, nil
 		}
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"is_enabled":true,"prompt":"official dynamic prompt","prompt_version":"5","prediction_reasoning_effort":"high","live_sample_rate":1}`))}, nil
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"is_enabled":true,"prompt":"official dynamic prompt","prompt_with_schema":"  official prepared prompt  ","prompt_version":"5","prediction_reasoning_effort":"high","live_sample_rate":1}`))}, nil
 	})}
 	frames := make(chan []byte, 16)
 	events := predictionEventRecorder{make(chan []agentproto.Event, 4)}
@@ -99,7 +99,7 @@ func TestPredictionPreparationUsesOfficialConfigAndOriginalThread(t *testing.T) 
 	predictionReply(t, runtime, resume, map[string]any{"modelProvider": "openai", "model": "gpt-supported", "reasoningEffort": "low", "collaborationMode": map[string]any{"mode": "default"}})
 	sample := predictionFrame(t, frames)
 	params := sample["params"].(map[string]any)
-	if sample["method"] != "thread/sample" || !strings.HasPrefix(params["prompt"].(string), "official dynamic prompt\n\nReturn only JSON matching this schema: ") || params["effort"] != "high" || params["threadId"] != "thread" || params["expectedTurnId"] != "turn" || params["interruptOnCancel"] != true {
+	if sample["method"] != "thread/sample" || params["prompt"] != "  official prepared prompt  " || params["effort"] != "high" || params["threadId"] != "thread" || params["expectedTurnId"] != "turn" || params["interruptOnCancel"] != true {
 		t.Fatalf("sample differs from official options: %#v", params)
 	}
 	if params["responsesapiClientMetadata"].(map[string]any)["prediction_trigger"] != "live" {

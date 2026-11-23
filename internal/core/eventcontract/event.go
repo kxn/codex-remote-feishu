@@ -35,6 +35,11 @@ func (meta EventMeta) Normalized() EventMeta {
 	return meta
 }
 
+type QueuedPromptRef struct {
+	InstanceID  string
+	QueueItemID string
+}
+
 type Event struct {
 	Kind                     Kind
 	GatewayID                string
@@ -69,6 +74,7 @@ type Event struct {
 	TurnDiffPreview          *control.TurnDiffPreview
 	FinalTurnSummary         *control.FinalTurnSummary
 	Command                  *agentproto.Command
+	QueuedPrompt             *QueuedPromptRef
 	DaemonCommand            *control.DaemonCommand
 	Meta                     EventMeta
 	Payload                  Payload

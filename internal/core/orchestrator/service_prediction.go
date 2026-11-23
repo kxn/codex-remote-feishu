@@ -327,6 +327,23 @@ func (s *Service) bindPredictionQueueItem(surface *state.SurfaceConsoleRecord, i
 	}
 }
 
+// BindQueuedPredictionPrompt rechecks the original dispatch lease after the
+// gateway has returned from publishing the submitted receipt.
+func (s *Service) BindQueuedPredictionPrompt(surfaceID string, ref eventcontract.QueuedPromptRef, command agentproto.Command) bool {
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil || surface.AttachedInstanceID != ref.InstanceID || surface.ActiveQueueItemID != ref.QueueItemID {
+		return false
+	}
+	binding := s.turns.pendingRemoteBinding(ref.InstanceID)
+	if binding == nil || binding.SurfaceSessionID != surfaceID || binding.QueueItemID != ref.QueueItemID ||
+		binding.ThreadID != command.Target.ThreadID || binding.CommandID != "" {
+		return false
+	}
+	binding.CommandID = command.CommandID
+	s.bindPredictionSendCommand(surface, command.CommandID)
+	return true
+}
+
 func (s *Service) bindPredictionSendCommand(surface *state.SurfaceConsoleRecord, commandID string) {
 	p := s.predictions[surface.SurfaceSessionID]
 	if p != nil && p.Submitting && p.SendQueueItemID != "" && surface.ActiveQueueItemID == p.SendQueueItemID {

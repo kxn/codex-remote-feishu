@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-23`
-> Summary: 补充绑定原会话的下一句建议与发送生命周期。
+> Summary: 明确目标选择器草稿导航使用冻结读模型，确认时重新验证实时目标与接管条件。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1265,7 +1265,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 “采用并编辑”打开以建议为默认值的独立表单。只有点击“发送”才按工作区和输入门禁校验，随后以原实例和原 thread 为目标进入现有用户执行队列。编辑后的正文按字面发送，临时会话标记保留在正文中。需要开启新会话的跨模型组设置会让表单保留编辑内容并提示原因，交由用户调整模型或另行发送。这里的新输入指 daemon 已收到的消息或动作，不承诺监听飞书正在输入事件，也没有原生 Tab 接受行为。
 
-Predictions 使用独立表单与易失编辑内容，不覆盖普通草稿载体。发送时以原 queue item 和实际派发 command 关联，排队或发送中拒绝重复提交；入队后先将原卡更新为保留完整正文的只读提交回执，确认原 command/queue item 对应的新轮次开始后更新为已发送；回执投递失败不回滚或重复派发正文。回执细节由 [Feishu UI 6.5](./feishu-card-ui-state-machine.md#65-predictions-建议与编辑草稿的-freshness) 维护。
+Predictions 使用独立表单与易失编辑内容，不覆盖普通草稿载体。发送时以原 queue item 和实际派发 command 关联，排队或发送中拒绝重复提交；入队后先将原卡更新为保留完整正文的只读提交回执，派发正文前重新核对原实例、原 thread 与排队项仍有效，确认原 command/queue item 对应的新轮次开始后更新为已发送；回执投递失败不回滚或重复派发正文。回执细节由 [Feishu UI 6.5](./feishu-card-ui-state-machine.md#65-predictions-建议与编辑草稿的-freshness) 维护。
 
 空提交保留空表单并提示输入；输入校验拒绝时同步在表单上显示原因并保留编辑内容。任务确认开始前的派发失败、wrapper 显式拒绝或对应的原生启动拒绝会后台恢复原卡，允许用户修改后显式重试。任务开始后的执行失败及迟到拒绝不能恢复发送入口。新输入、目标变化、过期及其他命令失败也不能恢复旧草稿。这些行为已通过本地回归。
 

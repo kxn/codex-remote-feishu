@@ -194,3 +194,45 @@ func TestPredictionReceiptDeliveryFailureDoesNotRetryPrompt(t *testing.T) {
 	}))
 	requirePredictionReceipt(t, lastPredictionCardUpdate(t, gateway, action.MessageID), action.Text, "已发送")
 }
+
+type predictionReceiptActionGateway struct {
+	*recordingGateway
+	onReceipt func()
+}
+
+func (g *predictionReceiptActionGateway) Apply(ctx context.Context, operations []feishu.Operation) error {
+	for _, op := range operations {
+		if g.onReceipt != nil && op.Kind == feishu.OperationUpdateCard && op.MessageID == "om-prediction" {
+			action := g.onReceipt
+			g.onReceipt = nil
+			action()
+		}
+	}
+	return g.recordingGateway.Apply(ctx, operations)
+}
+
+func TestPredictionSubmissionDoesNotDispatchAfterReceiptLosesQueue(t *testing.T) {
+	for _, replacement := range []string{"inst-1", "inst-other"} {
+		t.Run(replacement, func(t *testing.T) {
+			app, gateway, action := predictionSubmissionFixture(t)
+			app.gateway = &predictionReceiptActionGateway{recordingGateway: gateway, onReceipt: func() {
+				app.mu.Lock()
+				defer app.mu.Unlock()
+				app.service.ApplyInstanceDisconnected("inst-1")
+				surface := app.service.Surface(action.SurfaceSessionID)
+				surface.AttachedInstanceID = replacement
+			}}
+			var sent []string
+			app.sendAgentCommand = func(instanceID string, command agentproto.Command) error {
+				if command.Kind == agentproto.CommandPromptSend {
+					sent = append(sent, instanceID)
+				}
+				return nil
+			}
+			app.HandleGatewayAction(context.Background(), action)
+			if len(sent) != 0 {
+				t.Fatalf("lost prediction queue was dispatched to %v", sent)
+			}
+		})
+	}
+}

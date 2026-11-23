@@ -14,6 +14,7 @@ import (
 // There is deliberately no locally authored prediction prompt.
 type PredictionOptions struct {
 	Prompt            string
+	PromptWithSchema  string
 	Effort            *string
 	InterruptOnCancel bool
 	GenerationTrigger string
@@ -29,8 +30,12 @@ type pendingPrediction struct {
 }
 
 func (t *Translator) TranslatePredictionRequest(command agentproto.Command, options PredictionOptions) ([][]byte, error) {
-	if strings.TrimSpace(options.Prompt) == "" {
-		return nil, fmt.Errorf("prediction requires official desktop configuration")
+	prompt := options.PromptWithSchema
+	if strings.TrimSpace(prompt) == "" {
+		if strings.TrimSpace(options.Prompt) == "" {
+			return nil, fmt.Errorf("prediction requires official desktop configuration")
+		}
+		prompt = options.Prompt + "\n\nReturn only JSON matching this schema: " + predictionSuggestionSchema + "."
 	}
 	commandID := strings.TrimSpace(command.CommandID)
 	threadID := strings.TrimSpace(command.Target.ThreadID)
@@ -46,7 +51,7 @@ func (t *Translator) TranslatePredictionRequest(command agentproto.Command, opti
 	requestID := t.NextRequest("prediction-sample")
 	params := map[string]any{
 		"threadId": threadID, "expectedTurnId": sourceTurnID,
-		"prompt":       options.Prompt + "\n\nReturn only JSON matching this schema: " + predictionSuggestionSchema + ".",
+		"prompt":       prompt,
 		"effort":       options.Effort,
 		"threadSource": "composer_predictions", "turnTrigger": "composer_predictions",
 		"responsesapiClientMetadata": map[string]string{

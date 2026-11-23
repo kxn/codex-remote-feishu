@@ -29,6 +29,7 @@ type predictionRouting struct {
 type predictionConfig struct {
 	Enabled           bool
 	Prompt            string
+	PromptWithSchema  string
 	Effort            *string
 	UnsupportedModels []string
 	LiveSampleRate    float64
@@ -141,14 +142,22 @@ func parsePredictionConfig(raw []byte) (predictionConfig, error) {
 	var config struct {
 		Enabled           *bool           `json:"is_enabled"`
 		Prompt            *string         `json:"prompt"`
+		PromptWithSchema  json.RawMessage `json:"prompt_with_schema"`
 		Version           *string         `json:"prompt_version"`
 		Effort            *string         `json:"prediction_reasoning_effort"`
 		UnsupportedModels json.RawMessage `json:"unsupported_models"`
 		LiveSampleRate    json.RawMessage `json:"live_sample_rate"`
 		CatchUpSampleRate json.RawMessage `json:"catch_up_sample_rate"`
 	}
-	if json.Unmarshal(raw, &config) != nil || config.Enabled == nil || config.Prompt == nil || strings.TrimSpace(*config.Prompt) == "" || config.Version == nil || config.Effort == nil {
+	if json.Unmarshal(raw, &config) != nil || config.Enabled == nil || config.Prompt == nil || config.Version == nil || config.Effort == nil {
 		return predictionConfig{}, errors.New("invalid official prediction configuration")
+	}
+	var promptWithSchema string
+	if json.Unmarshal(config.PromptWithSchema, &promptWithSchema) != nil {
+		promptWithSchema = ""
+	}
+	if strings.TrimSpace(promptWithSchema) == "" && strings.TrimSpace(*config.Prompt) == "" {
+		return predictionConfig{}, errors.New("invalid official prediction prompt")
 	}
 	rate := 1.0
 	for _, value := range []json.RawMessage{config.LiveSampleRate, config.CatchUpSampleRate} {
@@ -181,7 +190,7 @@ func parsePredictionConfig(raw []byte) (predictionConfig, error) {
 	if *config.Effort != "" {
 		effort = config.Effort
 	}
-	return predictionConfig{Enabled: *config.Enabled, Prompt: *config.Prompt, Effort: effort, UnsupportedModels: unsupported, LiveSampleRate: rate}, nil
+	return predictionConfig{Enabled: *config.Enabled, Prompt: *config.Prompt, PromptWithSchema: promptWithSchema, Effort: effort, UnsupportedModels: unsupported, LiveSampleRate: rate}, nil
 }
 
 // The cache stores configuration only; native tokens never enter it.
