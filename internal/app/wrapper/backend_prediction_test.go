@@ -341,6 +341,10 @@ func TestPredictionAccountStatusRefreshPreservesPreparation(t *testing.T) {
 			if _, err := runtime.ObserveServer(raw); err != nil {
 				t.Fatal(err)
 			}
+			if method == "account/updated" {
+				probe := predictionFrame(t, frames)
+				predictionReply(t, runtime, probe, map[string]any{"authMethod": "chatgpt", "authToken": predictionToken(t, "user", "account")})
+			}
 			predictionReply(t, runtime, auth, map[string]any{"authMethod": "chatgpt", "authToken": predictionToken(t, "user", "account")})
 			if frame := predictionFrame(t, frames); frame["method"] != "account/read" {
 				t.Fatalf("status refresh canceled initial auth preparation: %#v", frame)
@@ -389,15 +393,22 @@ func TestPredictionOfficialRefreshIsBoundToOriginalPrincipal(t *testing.T) {
 			if refresh["method"] != "getAuthStatus" || refresh["params"].(map[string]any)["refreshToken"] != true {
 				t.Fatal("401 did not refresh native token")
 			}
-			predictionReply(t, runtime, refresh, map[string]any{"authMethod": "chatgpt", "authToken": predictionToken(t, "user", account)})
-			select {
-			case <-events.events:
-			case <-time.After(time.Second):
-				t.Fatal("config refresh left round pending")
-			}
 			want := 1
+			reply := map[string]any{"authMethod": "chatgpt", "authToken": predictionToken(t, "user", account)}
 			if account == "account" {
+				predictionReply(t, runtime, refresh, reply)
+				select {
+				case <-events.events:
+				case <-time.After(time.Second):
+					t.Fatal("config refresh left round pending")
+				}
 				want = 2
+			} else {
+				raw, _ := json.Marshal(map[string]any{"id": refresh["id"], "result": reply})
+				observed, err := runtime.ObserveServer(raw)
+				if err != nil || !observed.Suppress || len(observed.Events) != 1 || observed.Events[0].Kind != agentproto.EventThreadPredictionInvalidated {
+					t.Fatalf("refresh with a different principal must revoke earlier predictions: %#v %v", observed, err)
+				}
 			}
 			if requests != want {
 				t.Fatalf("config requests=%d; want %d", requests, want)
@@ -408,6 +419,7 @@ func TestPredictionOfficialRefreshIsBoundToOriginalPrincipal(t *testing.T) {
 
 func TestPredictionAccountNotificationCancelsOnlyConfigAuthScope(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
+	t.Cleanup(runtime.CancelPredictions)
 	runtime.predictions = newTestPredictionRuntime()
 	started := make(chan struct{})
 	runtime.predictions.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {
@@ -493,7 +505,9 @@ func accountPredictionSample(t *testing.T) (*codexBackendRuntime, context.Contex
 	frames := make(chan []byte, 2)
 	job := &predictionJob{ctx: ctx, cancel: cancel, command: command, sampled: true, frames: frames}
 	runtime.predictions.jobs[command.CommandID] = job
-	runtime.rememberPredictionPrincipal(job, predictionIdentity{UserID: "user", AccountID: "account"})
+	job.principal = predictionIdentity{UserID: "user", AccountID: "account"}
+	runtime.predictionAccount.principal, runtime.predictionAccount.frames = job.principal, frames
+	t.Cleanup(runtime.CancelPredictions)
 	response, err := json.Marshal(map[string]any{"id": sample["id"], "result": map[string]any{"sourceTurnId": "turn", "text": `{"suggestion":"native suggestion"}`}})
 	if err != nil {
 		t.Fatal(err)
@@ -533,7 +547,7 @@ func TestPredictionAccountVerifiesPrincipalBeforePublishingSample(t *testing.T) 
 		{"same principal", "user", "account", `{"method":"account/updated","params":{"authMode":"chatgpt"}}`, false},
 		{"different account", "user", "new-account", `{"method":"account/updated","params":{"authMode":"chatgptAuthTokens"}}`, true},
 		{"different user", "new-user", "account", `{"method":"account/login/completed","params":{"success":true}}`, true},
-		{"unverified", "", "", `{"method":"account/updated","params":{"authMode":"chatgpt"}}`, false},
+		{"unverified", "", "", `{"method":"account/updated","params":{"authMode":"chatgpt"}}`, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runtime, ctx, frames, response := accountPredictionSample(t)
@@ -568,11 +582,7 @@ func TestPredictionAccountVerifiesPrincipalBeforePublishingSample(t *testing.T) 
 					t.Fatalf("old suggestion survived confirmed principal change: %#v", event)
 				}
 			} else {
-				want := "native suggestion"
-				if test.user == "" {
-					want = ""
-				}
-				if event.Kind != agentproto.EventThreadPredictionResult || event.Prediction == nil || event.Prediction.Suggestion != want {
+				if event.Kind != agentproto.EventThreadPredictionResult || event.Prediction == nil || event.Prediction.Suggestion != "native suggestion" {
 					t.Fatalf("unexpected suggestion after native principal check: %#v", event)
 				}
 			}
@@ -604,6 +614,46 @@ func TestPredictionAccountProbeDoesNotBlockFullChildQueue(t *testing.T) {
 	observed, err := runtime.ObserveServer(response)
 	if err != nil || len(observed.Events) != 0 || !observed.Suppress {
 		t.Fatalf("late unverifiable sample must stay private and discarded: %#v %v", observed, err)
+	}
+}
+
+func TestPredictionAccountChangeBetweenAuthAndRoutingCancelsPreparations(t *testing.T) {
+	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
+	runtime.predictions = newTestPredictionRuntime()
+	t.Cleanup(runtime.CancelPredictions)
+	frames := make(chan []byte, 4)
+	events := predictionEventRecorder{make(chan []agentproto.Event, 4)}
+	runtime.HandlePrediction(context.Background(), predictionRequest(), frames, events)
+	auth := predictionFrame(t, frames)
+	predictionReply(t, runtime, auth, map[string]any{"authMethod": "chatgpt", "authToken": predictionToken(t, "user", "account-a")})
+	if frame := predictionFrame(t, frames); frame["method"] != "account/read" {
+		t.Fatalf("expected account/read before the switch: %#v", frame)
+	}
+	if _, err := runtime.ObserveServer([]byte(`{"method":"account/updated","params":{"authMode":"chatgpt"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	probe := predictionFrame(t, frames)
+	reply, _ := json.Marshal(map[string]any{"id": probe["id"], "result": map[string]any{"authMethod": "chatgpt", "authToken": predictionToken(t, "user", "account-b")}})
+	observed, err := runtime.ObserveServer(reply)
+	if err != nil || !slices.ContainsFunc(observed.Events, func(event agentproto.Event) bool {
+		return event.Kind == agentproto.EventThreadPredictionInvalidated
+	}) {
+		t.Fatalf("principal switch during routing must invalidate old work: %#v %v", observed, err)
+	}
+}
+
+func TestPredictionAccountFailedProbeInvalidatesExistingDraft(t *testing.T) {
+	runtime, _, frames, _ := accountPredictionSample(t)
+	if _, err := runtime.ObserveServer([]byte(`{"method":"account/updated","params":{"authMode":"chatgpt"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	probe := predictionFrame(t, frames)
+	reply, _ := json.Marshal(map[string]any{"id": probe["id"], "error": map[string]any{"code": -32603, "message": "unavailable"}})
+	observed, err := runtime.ObserveServer(reply)
+	if err != nil || !slices.ContainsFunc(observed.Events, func(event agentproto.Event) bool {
+		return event.Kind == agentproto.EventThreadPredictionInvalidated
+	}) {
+		t.Fatalf("failed identity check must revoke the ready draft: %#v %v", observed, err)
 	}
 }
 

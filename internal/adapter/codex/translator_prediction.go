@@ -12,6 +12,9 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
+// PredictionRPCIDPrefix identifies the translator’s private sample and cancel RPCs.
+const PredictionRPCIDPrefix = "relay-prediction:"
+
 // PredictionOptions comes from the same authenticated configuration as the desktop.
 // There is deliberately no locally authored prediction prompt.
 type PredictionOptions struct {

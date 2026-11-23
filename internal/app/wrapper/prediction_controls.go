@@ -160,7 +160,7 @@ func (r *codexBackendRuntime) predictionControlsForJob(job *predictionJob, token
 	defer func() { authCancel(); r.mu.Lock(); job.authCancel = nil; r.mu.Unlock() }()
 	controls, err := p.fetchControls(authCtx, token, identity, routing, desktop)
 	if errors.Is(err, errPredictionConfigUnauthorized) {
-		refreshedToken, refreshed, refreshErr := r.predictionAuthToken(authCtx, job.frames, true)
+		refreshedToken, refreshed, refreshErr := r.predictionAuthToken(authCtx, job, true)
 		if refreshErr == nil && refreshed.UserID == identity.UserID && refreshed.AccountID == identity.AccountID && refreshed.RoutingAccountID == routing.ChatGPTAccountID {
 			controls, err = p.fetchControls(authCtx, refreshedToken, refreshed, routing, desktop)
 		}

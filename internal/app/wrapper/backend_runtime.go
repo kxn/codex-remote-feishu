@@ -310,8 +310,8 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 	if accountResponse {
 		return runtimeObserveResult{Events: accountEvents, Suppress: true}, nil
 	}
-	if r.observePredictionPreparationLocked(line) {
-		return runtimeObserveResult{Suppress: true}, nil
+	if preparationEvents, owned := r.observePredictionPreparationLocked(line); owned {
+		return runtimeObserveResult{Events: preparationEvents, Suppress: true}, nil
 	}
 	result, err := r.translator.ObserveServer(line)
 	if err != nil {

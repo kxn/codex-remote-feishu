@@ -176,7 +176,7 @@ func NewTranslator(instanceID string) *Translator {
 		pendingGoalRequests:        map[string]pendingGoalRequest{},
 		pendingThreadReads:         map[string]pendingThreadRead{},
 		pendingPredictions:         map[string]pendingPrediction{},
-		predictionRequestPrefix:    "relay-prediction:" + rand.Text() + ":",
+		predictionRequestPrefix:    PredictionRPCIDPrefix + rand.Text() + ":",
 		lastOwnedGoalMutations:     map[string]ownedGoalMutation{},
 		reasoningSummaryIndexes:    map[string]map[int]bool{},
 	}

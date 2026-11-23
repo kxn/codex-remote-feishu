@@ -302,7 +302,7 @@ func (p *predictionRuntime) cacheConfig(ctx context.Context, identity prediction
 
 type predictionRuntime struct {
 	jobs              map[string]*predictionJob
-	pending           map[string]chan predictionRPCResponse
+	pending           map[string]*pendingPredictionRPC
 	preparationPrefix string
 	sequence          uint64
 

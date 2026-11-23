@@ -36,6 +36,10 @@ func predictionTimeoutSample(t *testing.T, runtime *codexBackendRuntime, frames 
 	if sample["method"] != "thread/sample" {
 		t.Fatalf("unexpected sample: %#v", sample)
 	}
+	raw, _ := json.Marshal(sample)
+	if !runtime.allowPredictionWrite(raw) {
+		t.Fatal("verified sample did not reach the native writer")
+	}
 	return sample
 }
 

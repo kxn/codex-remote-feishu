@@ -22,13 +22,24 @@ const predictionResponseTimeout = 30 * time.Second
 const predictionCanceledRequestLimit = 128
 
 type predictionJob struct {
-	ctx         context.Context
-	cancel      context.CancelFunc
-	command     agentproto.Command
-	sampled     bool
-	frames      chan<- []byte
-	authCancel  context.CancelFunc
-	accountHeld *agentproto.Event
+	ctx           context.Context
+	cancel        context.CancelFunc
+	command       agentproto.Command
+	sampled       bool
+	frames        chan<- []byte
+	authCancel    context.CancelFunc
+	accountHeld   *agentproto.Event
+	principal     predictionIdentity
+	sampleID      string
+	sampleSent    bool
+	delayedSample []byte
+}
+
+type pendingPredictionRPC struct {
+	ctx       context.Context
+	response  chan predictionRPCResponse
+	authJob   *predictionJob
+	authEpoch uint64
 }
 
 type predictionRPCResponse struct {
@@ -38,8 +49,8 @@ type predictionRPCResponse struct {
 
 func newPredictionRuntime() *predictionRuntime {
 	return &predictionRuntime{
-		jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse),
-		preparationPrefix: "remote-prediction-prep:" + securerand.Text() + ":",
+		jobs: make(map[string]*predictionJob), pending: make(map[string]*pendingPredictionRPC),
+		preparationPrefix: predictionPreparationPrefix + securerand.Text() + ":",
 		cache:             make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(),
 		now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext,
 		desktopPreferences: readPredictionDesktopPreferences,
@@ -67,9 +78,7 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 		if job != nil {
 			job.cancel()
 			delete(r.predictions.jobs, requestID)
-			if job.sampled {
-				r.queuePredictionCancelLocked(requestID, job.frames)
-			}
+			r.cancelNativePredictionLocked(job)
 		}
 		r.mu.Unlock()
 		return true
@@ -82,12 +91,17 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 	jobCtx, cancel := context.WithCancel(ctx)
 	job := &predictionJob{ctx: jobCtx, cancel: cancel, command: command, frames: frames}
 	r.predictions.jobs[command.CommandID] = job
+	r.predictionAccount.frames, r.predictionAccount.sender = frames, sender
 	r.mu.Unlock()
 	go r.preparePrediction(job, frames, sender)
 	return true
 }
 
 func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- []byte, method string, params any) (json.RawMessage, error) {
+	return r.predictionRPCWithAuthOwner(ctx, frames, method, params, nil)
+}
+
+func (r *codexBackendRuntime) predictionRPCWithAuthOwner(ctx context.Context, frames chan<- []byte, method string, params any, authJob *predictionJob) (json.RawMessage, error) {
 	ctx, cancel := context.WithTimeout(ctx, predictionResponseTimeout)
 	defer cancel()
 	r.mu.Lock()
@@ -95,7 +109,7 @@ func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- [
 	p.sequence++
 	id := fmt.Sprintf("%s%d", p.preparationPrefix, p.sequence)
 	response := make(chan predictionRPCResponse, 1)
-	p.pending[id] = response
+	p.pending[id] = &pendingPredictionRPC{ctx: ctx, response: response, authJob: authJob, authEpoch: r.predictionAccount.epoch}
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
@@ -128,9 +142,9 @@ func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- [
 	}
 }
 
-func (r *codexBackendRuntime) observePredictionPreparationLocked(raw []byte) bool {
+func (r *codexBackendRuntime) observePredictionPreparationLocked(raw []byte) ([]agentproto.Event, bool) {
 	if r.predictions == nil {
-		return false
+		return nil, false
 	}
 	var frame struct {
 		ID     string `json:"id"`
@@ -139,19 +153,21 @@ func (r *codexBackendRuntime) observePredictionPreparationLocked(raw []byte) boo
 	}
 	if json.Unmarshal(raw, &frame) != nil || frame.Method != "" ||
 		!strings.HasPrefix(frame.ID, r.predictions.preparationPrefix) {
-		return false
+		return nil, false
 	}
-	if response := r.predictions.pending[frame.ID]; response != nil {
-		delete(r.predictions.pending, frame.ID)
-		response <- frame.predictionRPCResponse
+	pending := r.predictions.pending[frame.ID]
+	delete(r.predictions.pending, frame.ID)
+	if pending == nil || pending.ctx.Err() != nil {
+		// A private late response can still contain credentials.
+		return nil, true
 	}
-	// Late replies can still carry authentication data. The private runtime
-	// prefix lets us consume them without keeping canceled requests around.
-	return true
+	events := r.observePredictionAuthReadLocked(pending, frame.predictionRPCResponse)
+	pending.response <- frame.predictionRPCResponse
+	return events, true
 }
 
-func (r *codexBackendRuntime) predictionAuthToken(ctx context.Context, frames chan<- []byte, refresh bool) (string, predictionIdentity, error) {
-	raw, err := r.predictionRPC(ctx, frames, "getAuthStatus", map[string]any{"includeToken": true, "refreshToken": refresh})
+func (r *codexBackendRuntime) predictionAuthToken(ctx context.Context, job *predictionJob, refresh bool) (string, predictionIdentity, error) {
+	raw, err := r.predictionRPCWithAuthOwner(ctx, job.frames, "getAuthStatus", map[string]any{"includeToken": true, "refreshToken": refresh}, job)
 	if err != nil {
 		return "", predictionIdentity{}, err
 	}
@@ -170,16 +186,20 @@ func decodePredictionAuthToken(raw json.RawMessage) (string, predictionIdentity,
 	return auth.Token, identity, err
 }
 
-func (r *codexBackendRuntime) predictionAuthentication(ctx context.Context, frames chan<- []byte) (string, predictionIdentity, predictionRouting, error) {
-	token, identity, err := r.predictionAuthToken(ctx, frames, false)
+func (r *codexBackendRuntime) predictionAuthentication(job *predictionJob) (string, predictionIdentity, predictionRouting, error) {
+	token, identity, err := r.predictionAuthToken(job.ctx, job, false)
 	if err != nil {
 		return "", predictionIdentity{}, predictionRouting{}, err
 	}
-	account, err := r.predictionRPC(ctx, frames, "account/read", map[string]any{"refreshToken": false})
+	if !r.lockVerifiedPredictionAccount(job) {
+		return "", predictionIdentity{}, predictionRouting{}, context.Canceled
+	}
+	r.mu.Unlock()
+	account, err := r.predictionRPC(job.ctx, job.frames, "account/read", map[string]any{"refreshToken": false})
 	if err != nil {
 		return "", predictionIdentity{}, predictionRouting{}, err
 	}
-	requirements, err := r.predictionRPC(ctx, frames, "configRequirements/read", map[string]any{})
+	requirements, err := r.predictionRPC(job.ctx, job.frames, "configRequirements/read", map[string]any{})
 	if err != nil {
 		return "", predictionIdentity{}, predictionRouting{}, err
 	}
@@ -213,7 +233,7 @@ func (r *codexBackendRuntime) predictionConfigForJob(job *predictionJob, token s
 		return config, err
 	}
 	// Desktop refreshes only the token; this auth scope retains its original routing.
-	token, refreshed, err := r.predictionAuthToken(authCtx, job.frames, true)
+	token, refreshed, err := r.predictionAuthToken(authCtx, job, true)
 	if err != nil {
 		return predictionConfig{}, err
 	}
@@ -245,11 +265,10 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 	if strings.TrimSpace(command.CommandID) == "" || strings.TrimSpace(command.Target.ThreadID) == "" || strings.TrimSpace(command.Prediction.SourceTurnID) == "" {
 		return
 	}
-	token, identity, routing, err := r.predictionAuthentication(job.ctx, frames)
+	token, identity, routing, err := r.predictionAuthentication(job)
 	if err != nil || !r.predictionEnabledForJob(job, identity) {
 		return
 	}
-	r.rememberPredictionPrincipal(job, identity)
 	config, err := r.predictionConfigForJob(job, token, identity, routing)
 	if err != nil || !config.Enabled || config.LiveSampleRate <= r.predictions.sample() {
 		return
@@ -273,24 +292,23 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 	if !controls.Evaluated {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if job.ctx.Err() != nil || r.predictions.jobs[command.CommandID] != job {
+	if !r.lockVerifiedPredictionAccount(job) {
 		return
 	}
+	defer r.mu.Unlock()
 	r.translator.SetPredictionPolicy(controls.ModerationPolicy)
 	outbound, err := r.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: config.Prompt, PromptWithSchema: config.PromptWithSchema, Effort: config.Effort, GenerationTrigger: "live", InterruptOnCancel: controls.InterruptOnCancel && predictionInterruptSupported(r.nativeUserAgent)})
 	if err != nil {
 		return
 	}
 	// The write queue is bounded; do not hold the native observer mutex waiting on it.
-	for _, frame := range outbound {
-		select {
-		case frames <- frame:
-		default:
-			r.translator.DiscardUnsentPrediction(command.CommandID)
-			return
-		}
+	frame := outbound[0]
+	job.sampleID = predictionWriteFrame(frame).ID
+	select {
+	case frames <- frame:
+	default:
+		r.translator.DiscardUnsentPrediction(command.CommandID)
+		return
 	}
 	job.sampled = true
 	completed = true
@@ -313,7 +331,7 @@ func (r *codexBackendRuntime) waitPredictionSample(job *predictionJob, timer *ti
 	}
 	delete(r.predictions.jobs, command.CommandID)
 	job.cancel()
-	r.queuePredictionCancelLocked(command.CommandID, job.frames)
+	r.cancelNativePredictionLocked(job)
 	r.mu.Unlock()
 	_ = sender.SendEvents([]agentproto.Event{{Kind: agentproto.EventThreadPredictionResult, CommandID: command.CommandID,
 		ThreadID: command.Target.ThreadID, Prediction: &agentproto.PredictionResult{SourceTurnID: command.Prediction.SourceTurnID}}})
@@ -322,8 +340,8 @@ func (r *codexBackendRuntime) waitPredictionSample(job *predictionJob, timer *ti
 func (r *codexBackendRuntime) CancelPredictions() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.cancelPredictionJobsLocked()
-	r.predictionAccount = predictionAccountState{}
+	r.invalidatePredictionAccountLocked(predictionIdentity{})
+	r.predictionAccount.frames, r.predictionAccount.sender = nil, nil
 }
 
 func (r *codexBackendRuntime) queuePredictionCancelLocked(requestID string, frames chan<- []byte) {
@@ -345,11 +363,20 @@ func (r *codexBackendRuntime) cancelPredictionJobsLocked() {
 	}
 	for id, job := range r.predictions.jobs {
 		job.cancel()
-		if job.sampled {
-			r.queuePredictionCancelLocked(id, job.frames)
-		}
+		r.cancelNativePredictionLocked(job)
 		delete(r.predictions.jobs, id)
 	}
+}
+
+func (r *codexBackendRuntime) cancelNativePredictionLocked(job *predictionJob) {
+	if !job.sampled {
+		return
+	}
+	if job.sampleID != "" && !job.sampleSent {
+		r.translator.DiscardUnsentPrediction(job.command.CommandID)
+		return
+	}
+	r.queuePredictionCancelLocked(job.command.CommandID, job.frames)
 }
 
 func cancelRuntimePredictions(runtime backendRuntime) {

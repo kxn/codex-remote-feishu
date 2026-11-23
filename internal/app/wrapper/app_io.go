@@ -289,6 +289,9 @@ func writeChildFrameForRuntime(childStdin io.Writer, line []byte, runtime backen
 	if len(line) == 0 {
 		return nil
 	}
+	if codexRuntime, ok := runtime.(*codexBackendRuntime); ok && !codexRuntime.allowPredictionWrite(line) {
+		return nil
+	}
 	if debugf != nil {
 		debugf("write to child: %s", summarizeFrame(line))
 	}
