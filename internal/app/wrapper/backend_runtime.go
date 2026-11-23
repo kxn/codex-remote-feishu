@@ -326,13 +326,12 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 					events = append(events, r.invalidatePredictionPreferenceLocked())
 					continue
 				}
-				if r.predictionAccount.probeID != "" && event.Prediction != nil && event.Prediction.Suggestion != "" {
+				if r.predictionAccount.probeID != "" && predictionHasSuggestion(event) {
 					// Keep the original sample deadline while its authenticated principal is verified.
 					job.accountHeld = &event
 					continue
 				}
-				job.cancel()
-				delete(r.predictions.jobs, event.CommandID)
+				r.endPredictionJobLocked(job, predictionHasSuggestion(event))
 			}
 		}
 		events = append(events, event)

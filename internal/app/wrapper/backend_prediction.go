@@ -78,8 +78,7 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 		}
 		job := r.predictions.jobs[requestID]
 		if job != nil {
-			job.cancel()
-			delete(r.predictions.jobs, requestID)
+			r.endPredictionJobLocked(job, false)
 			r.cancelNativePredictionLocked(job)
 		}
 		r.mu.Unlock()
@@ -254,11 +253,10 @@ func (r *codexBackendRuntime) preparePrediction(relayCtx context.Context, job *p
 		}
 		r.mu.Lock()
 		current := r.predictions.jobs[command.CommandID] == job
-		if current {
-			delete(r.predictions.jobs, command.CommandID)
-		}
 		canceled := errors.Is(job.ctx.Err(), context.Canceled)
-		job.cancel()
+		if current {
+			r.endPredictionJobLocked(job, false)
+		}
 		r.mu.Unlock()
 		if current && !canceled {
 			_ = sender.SendEvents([]agentproto.Event{{Kind: agentproto.EventThreadPredictionResult, CommandID: command.CommandID, ThreadID: command.Target.ThreadID, Prediction: &agentproto.PredictionResult{SourceTurnID: command.Prediction.SourceTurnID}}})
@@ -341,8 +339,7 @@ func (r *codexBackendRuntime) waitPredictionSample(job *predictionJob, timer *ti
 		r.mu.Unlock()
 		return
 	}
-	delete(r.predictions.jobs, command.CommandID)
-	job.cancel()
+	r.endPredictionJobLocked(job, false)
 	r.cancelNativePredictionLocked(job)
 	r.mu.Unlock()
 	_ = sender.SendEvents([]agentproto.Event{{Kind: agentproto.EventThreadPredictionResult, CommandID: command.CommandID,

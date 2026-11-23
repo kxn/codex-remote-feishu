@@ -168,16 +168,14 @@ func (r *codexBackendRuntime) finishPredictionAccountProbeLocked(response predic
 			if !r.predictionResultAllowedLocked(job, *job.accountHeld) {
 				return []agentproto.Event{r.invalidatePredictionPreferenceLocked()}
 			}
-			job.cancel()
-			delete(r.predictions.jobs, id)
+			r.endPredictionJobLocked(job, predictionHasSuggestion(*job.accountHeld))
 			events = append(events, *job.accountHeld)
 		} else if job.delayedSample != nil {
 			select {
 			case job.frames <- job.delayedSample:
 				job.delayedSample = nil
 			default:
-				job.cancel()
-				delete(r.predictions.jobs, id)
+				r.endPredictionJobLocked(job, false)
 				r.cancelNativePredictionLocked(job)
 				events = append(events, agentproto.Event{Kind: agentproto.EventThreadPredictionResult, CommandID: id,
 					ThreadID: job.command.Target.ThreadID, Prediction: &agentproto.PredictionResult{SourceTurnID: job.command.Prediction.SourceTurnID}})

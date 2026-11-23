@@ -80,15 +80,18 @@ func (r *codexBackendRuntime) desktopPredictionAllowed(ctx context.Context, stat
 type predictionPreferenceWatch struct {
 	stop        context.CancelFunc
 	invalidated bool
+	published   bool
 }
 
 // Desktop clears an in-flight or published prediction when its setting changes.
-// Watch the persisted atom while a relay-visible suggestion may exist. Native
-// config/read is used only during preparation to resolve the fallback value.
+// Watch the persisted atom while a relay-visible suggestion may exist. Desktop
+// loads the native config fallback into SettingsStore at startup, so polling
+// for edits to the native config would introduce a different live behavior.
 func (r *codexBackendRuntime) watchPredictionPreferenceLocked(relayCtx context.Context, preference *predictionPreferenceState, sender relayEventSender) {
-	r.stopPredictionPreferenceWatchLocked()
+	previous := r.predictions.preferenceWatch
 	ctx, cancel := context.WithCancel(relayCtx)
-	watch := &predictionPreferenceWatch{stop: cancel}
+	watch := &predictionPreferenceWatch{stop: cancel, published: previous != nil && previous.published}
+	r.stopPredictionPreferenceWatchLocked()
 	r.predictions.preferenceWatch = watch
 	go func() {
 		ticker := time.NewTicker(time.Second)
@@ -132,8 +135,34 @@ func (r *codexBackendRuntime) stopPredictionPreferenceWatchLocked() {
 	}
 }
 
+func (r *codexBackendRuntime) stopIdlePredictionPreferenceWatchLocked() {
+	watch := r.predictions.preferenceWatch
+	if watch == nil || watch.published || watch.invalidated {
+		return
+	}
+	for _, job := range r.predictions.jobs {
+		if job.sampled {
+			return
+		}
+	}
+	r.stopPredictionPreferenceWatchLocked()
+}
+
+func (r *codexBackendRuntime) endPredictionJobLocked(job *predictionJob, published bool) {
+	job.cancel()
+	delete(r.predictions.jobs, job.command.CommandID)
+	if watch := r.predictions.preferenceWatch; watch != nil && published {
+		watch.published = true
+	}
+	r.stopIdlePredictionPreferenceWatchLocked()
+}
+
+func predictionHasSuggestion(event agentproto.Event) bool {
+	return event.Prediction != nil && event.Prediction.Suggestion != ""
+}
+
 func (r *codexBackendRuntime) predictionResultAllowedLocked(job *predictionJob, event agentproto.Event) bool {
-	return event.Prediction == nil || event.Prediction.Suggestion == "" || r.desktopPredictionAllowed(job.ctx, job.preference)
+	return !predictionHasSuggestion(event) || r.desktopPredictionAllowed(job.ctx, job.preference)
 }
 
 func (r *codexBackendRuntime) invalidatePredictionPreferenceLocked() agentproto.Event {
