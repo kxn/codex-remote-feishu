@@ -18,6 +18,10 @@ func newTestPredictionRuntime() *predictionRuntime {
 	p.desktopContext = func(context.Context, string) (map[string]any, error) {
 		return nil, errors.New("no desktop in unit test")
 	}
+	p.desktopPreferences = func(context.Context, predictionIdentity) (predictionDesktopPreferences, error) {
+		enabled := true
+		return predictionDesktopPreferences{owner: &enabled}, nil
+	}
 	return p
 }
 
@@ -74,7 +78,7 @@ func TestPredictionControlsMissingAndUnsupportedHash(t *testing.T) {
 	outer["statsigPayload"] = string(inner)
 	rawOuter, _ := json.Marshal(outer)
 	controls, err := parsePredictionControls(rawOuter, identity)
-	if err != nil || controls.InterruptOnCancel || len(controls.ModerationPolicy) != 0 {
+	if err != nil || !controls.Evaluated || controls.InterruptOnCancel || len(controls.ModerationPolicy) != 0 {
 		t.Fatalf("unavailable controls must stay unavailable: %+v %v", controls, err)
 	}
 }

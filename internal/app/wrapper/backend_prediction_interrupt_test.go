@@ -28,7 +28,7 @@ func TestPredictionInterruptFollowsOfficialGateAndNativeVersion(t *testing.T) {
 				config:  predictionConfig{Enabled: true, Prompt: "cached official prompt", LiveSampleRate: 1},
 				expires: time.Now().Add(time.Minute),
 			}
-			runtime.predictions.controls = map[string]predictionControls{"user\x00account": {InterruptOnCancel: tc.gate}}
+			runtime.predictions.controls = map[string]predictionControls{"user\x00account": {Evaluated: true, InterruptOnCancel: tc.gate}}
 			initialized, err := json.Marshal(map[string]any{"result": map[string]any{"userAgent": tc.userAgent}})
 			if err != nil {
 				t.Fatal(err)

@@ -35,7 +35,12 @@ type predictionRPCResponse struct {
 }
 
 func newPredictionRuntime() *predictionRuntime {
-	return &predictionRuntime{jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse), cache: make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(), now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext}
+	return &predictionRuntime{
+		jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse),
+		cache: make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(),
+		now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext,
+		desktopPreferences: readPredictionDesktopPreferences,
+	}
 }
 
 // HandlePrediction returns immediately so native preparation never blocks relay commands.
@@ -240,7 +245,7 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 		return
 	}
 	token, identity, routing, err := r.predictionAuthentication(job.ctx, frames)
-	if err != nil {
+	if err != nil || !r.predictionEnabledForJob(job, identity) {
 		return
 	}
 	config, err := r.predictionConfigForJob(job, token, identity, routing)
@@ -263,6 +268,9 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 		return
 	}
 	controls := r.predictionControlsForJob(job, token, identity, routing)
+	if !controls.Evaluated {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if job.ctx.Err() != nil || r.predictions.jobs[command.CommandID] != job {

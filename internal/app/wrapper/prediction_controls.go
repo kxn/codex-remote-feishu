@@ -10,6 +10,7 @@ import (
 )
 
 type predictionControls struct {
+	Evaluated         bool
 	InterruptOnCancel bool
 	ModerationPolicy  json.RawMessage
 }
@@ -68,6 +69,7 @@ func parsePredictionControls(raw []byte, identity predictionIdentity) (predictio
 		return predictionControls{}, invalid
 	}
 	return predictionControls{
+		Evaluated:         true,
 		InterruptOnCancel: bytes.Equal(bytes.TrimSpace(payload.Gates[key("codex-app-cumberbatch-interrupt-on-cancel")].Value), []byte("true")),
 		ModerationPolicy:  payload.Configs[key("codex-app-cumberbatch-mod-policy")].Value,
 	}, nil

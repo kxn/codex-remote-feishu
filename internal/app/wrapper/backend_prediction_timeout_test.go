@@ -16,7 +16,7 @@ func predictionTimeoutFixture(t *testing.T) (*codexBackendRuntime, chan []byte, 
 	runtime.predictions.cache["user\x00account"] = predictionConfigCache{
 		config: predictionConfig{Enabled: true, Prompt: "official prompt", LiveSampleRate: 1}, expires: time.Now().Add(time.Minute),
 	}
-	runtime.predictions.controls = map[string]predictionControls{"user\x00account": {}}
+	runtime.predictions.controls = map[string]predictionControls{"user\x00account": {Evaluated: true}}
 	frames := make(chan []byte, 16)
 	events := predictionEventRecorder{make(chan []agentproto.Event, 4)}
 	t.Cleanup(runtime.CancelPredictions)

@@ -306,11 +306,12 @@ type predictionRuntime struct {
 	canceledRequests    [predictionCanceledRequestLimit]string
 	nextCanceledRequest int
 
-	configMu       sync.Mutex
-	cache          map[string]predictionConfigCache
-	controls       map[string]predictionControls
-	httpClient     *http.Client
-	now            func() time.Time
-	sample         func() float64
-	desktopContext func(context.Context, string) (map[string]any, error)
+	configMu           sync.Mutex
+	cache              map[string]predictionConfigCache
+	controls           map[string]predictionControls
+	httpClient         *http.Client
+	now                func() time.Time
+	sample             func() float64
+	desktopContext     func(context.Context, string) (map[string]any, error)
+	desktopPreferences func(context.Context, predictionIdentity) (predictionDesktopPreferences, error)
 }
