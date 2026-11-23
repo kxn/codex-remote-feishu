@@ -9,6 +9,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
+type runtimeNoticeFlush struct {
+	retired bool
+}
+
 func normalizeGlobalRuntimeNoticeEvent(event eventcontract.Event) (eventcontract.Event, bool) {
 	if event.Kind != eventcontract.KindNotice || event.Notice == nil || !event.Notice.IsGlobalRuntime() {
 		return event, false
@@ -102,21 +106,40 @@ func (a *App) flushPendingGlobalRuntimeNoticesLocked(surfaceID string) {
 	if surfaceID == "" {
 		return
 	}
-	pending := a.pendingGlobalRuntimeNotices[surfaceID]
-	if len(pending) == 0 {
+	if len(a.pendingGlobalRuntimeNotices[surfaceID]) == 0 || a.runtimeNoticeFlushes[surfaceID] != nil {
 		return
 	}
-	for _, event := range pending {
-		event, _ = normalizeGlobalRuntimeNoticeEvent(event)
+	flush := &runtimeNoticeFlush{}
+	a.runtimeNoticeFlushes[surfaceID] = flush
+	defer func() {
+		if !flush.retired {
+			delete(a.runtimeNoticeFlushes, surfaceID)
+		}
+	}()
+	for len(a.pendingGlobalRuntimeNotices[surfaceID]) != 0 {
+		event, _ := normalizeGlobalRuntimeNoticeEvent(a.pendingGlobalRuntimeNotices[surfaceID][0])
 		if attention := a.globalRuntimeAttentionAnnotationForEventLocked(event, time.Now(), false); !attention.Empty() {
 			event.Meta.Attention = attention
 		}
-		if err := a.deliverUIEventLocked(context.Background(), event); err != nil {
+		if err := a.deliverUIEventLocked(context.Background(), event); err != nil || flush.retired {
 			return
 		}
 		a.recordGlobalRuntimeNoticeLocked(event, time.Now())
+		// Delivery releases the lock, so commit the head against the live queue.
+		pending := a.pendingGlobalRuntimeNotices[surfaceID]
+		clear(pending[:1])
+		a.pendingGlobalRuntimeNotices[surfaceID] = pending[1:]
 	}
 	delete(a.pendingGlobalRuntimeNotices, surfaceID)
+}
+
+func (a *App) purgeGlobalRuntimeNoticesLocked(surfaceID string) {
+	delete(a.pendingGlobalRuntimeNotices, surfaceID)
+	delete(a.recentGlobalRuntimeNotices, surfaceID)
+	if flush := a.runtimeNoticeFlushes[surfaceID]; flush != nil {
+		flush.retired = true
+		delete(a.runtimeNoticeFlushes, surfaceID)
+	}
 }
 
 func (a *App) queueGlobalRuntimeNoticeLocked(event eventcontract.Event) {

@@ -124,6 +124,7 @@ type App struct {
 	upgradeStateIOMu sync.Mutex
 
 	pendingGlobalRuntimeNotices   map[string][]eventcontract.Event
+	runtimeNoticeFlushes          map[string]*runtimeNoticeFlush
 	recentGlobalRuntimeNotices    map[string]map[string]time.Time
 	headlessRuntime               HeadlessRuntimeConfig
 	vscodeDetect                  func() (vscodeDetectResponse, error)
@@ -215,6 +216,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		daemonStartedAt:             daemonStartedAt,
 		daemonLifecycleID:           daemonLifecycleID(serverIdentity, daemonStartedAt),
 		pendingGlobalRuntimeNotices: map[string][]eventcontract.Event{},
+		runtimeNoticeFlushes:        map[string]*runtimeNoticeFlush{},
 		recentGlobalRuntimeNotices:  map[string]map[string]time.Time{},
 		managedHeadlessRuntime:      headlessruntime.NewState(),
 		claudeWorkspaceProfileState: claudeWorkspaceProfileRuntimeState{},

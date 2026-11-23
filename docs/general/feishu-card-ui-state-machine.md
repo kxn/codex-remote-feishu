@@ -1,7 +1,7 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-11-20`
+> Updated: `2026-11-23`
 > Summary: 明确目标选择器的内存草稿导航与最终确认的实时校验边界。
 
 ## 1. 文档定位
@@ -698,6 +698,8 @@ MCP request 卡片当前新增的可视语义：
   - 它们通过 `control.Notice.DeliveryClass=global_runtime` 明确标记，不再只靠“刚好没传 `SourceMessageID`”这种隐式约定
   - projector 当前对所有 notice 都不会 reply 到任何 turn 源消息；`global runtime` 的特殊点只剩 dedupe / family 与独立系统车道
   - 当前这条车道覆盖真正脱离当前 owner-card / guidance-card 上下文的：surface resume failure、无 active guidance card 可复用的 VS Code resume failure / `open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
+  - 首次发生 `gateway_apply_failed` 时，daemon 在当前事件批次内尝试投递提示。提示自身投递失败时保留在队列中，下一批次可以继续投递。daemon 不重放原消息或命令，提示用户先查询当前状态。更新接口 `230001` 的明确非卡片原因（包括 `ext=` 扩展格式）标记为不可重试。
+  - 同一机器人身份下，同一会话的待投递通知串行发送；每次成功仅移除队首，发送期间追加的通知保留。旧机器人身份退役时丢弃旧队列，新身份独立投递。
   - 若 `VS Code` 兼容修复、`open VS Code` prompt、恢复成功/失败或 `not_attached_vscode` guidance 已经拥有当前 surface 的 active `vscode guidance card`，daemon 会先把 notice 改写成 patchable direct-command card 并回写同一张 guidance card；只有没有可复用 guidance card 的后台 runtime 路径才会落到这条独立车道
 - 这些真正的 global runtime 系统提示不会借用 final-card anchor 或 turn reply-chain；它们仍作为独立系统提示出现在主时间线
 - `/cron`、`/upgrade`、`/debug` 的 stamped 菜单入口与 stamped page callback，当前都会直接把下一张 page 或结果卡同位替回当前卡，不再先外跳 append 一张独立状态/输入卡。
@@ -1004,6 +1006,7 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 `/debug` 根页只保留迁移到系统管理后的入口按钮、`/debug admin` 会显式拒绝并提示 `/admin web`、以及 `/admin web` 会先发 preparing notice 再异步回填外链结果
 - [internal/app/daemon/app_global_runtime_notice_test.go](../../internal/app/daemon/app_global_runtime_notice_test.go)
   - 锁定 `global runtime` 提示维持独立 delivery lane，并按 family + dedupe key 做短窗节流 / pending queue 去重
+  - 锁定投递失败提示同批尝试、持续故障下的有界保留、并发投递与身份退役隔离，以及真实非卡片错误分类
 - [internal/app/daemon/app_attention_ping_test.go](../../internal/app/daemon/app_attention_ping_test.go)
   - 锁定 request prompt / final reply / `turn_failed` / `提案计划` / targeted `global runtime` notice 的 attention annotation 归属规则、reply/append 跟随原事件位置的语义、request anchor 失败后不会错误消耗 dedupe 且重试仍可补发，以及 same-batch suppressed runtime notice 不会额外泄漏第二条消息
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
