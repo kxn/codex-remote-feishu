@@ -322,6 +322,10 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 	for _, event := range result.Events {
 		if event.Kind == agentproto.EventThreadPredictionResult && r.predictions != nil {
 			if job := r.predictions.jobs[event.CommandID]; job != nil {
+				if !r.predictionResultAllowedLocked(job, event) {
+					events = append(events, r.invalidatePredictionPreferenceLocked())
+					continue
+				}
 				if r.predictionAccount.probeID != "" && event.Prediction != nil && event.Prediction.Suggestion != "" {
 					// Keep the original sample deadline while its authenticated principal is verified.
 					job.accountHeld = &event

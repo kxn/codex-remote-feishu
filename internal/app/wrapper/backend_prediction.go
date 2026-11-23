@@ -23,6 +23,7 @@ const predictionCanceledRequestLimit = 128
 
 type predictionJob struct {
 	ctx           context.Context
+	preference    *predictionPreferenceState
 	cancel        context.CancelFunc
 	command       agentproto.Command
 	sampled       bool
@@ -93,7 +94,7 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 	r.predictions.jobs[command.CommandID] = job
 	r.predictionAccount.frames, r.predictionAccount.sender = frames, sender
 	r.mu.Unlock()
-	go r.preparePrediction(job, frames, sender)
+	go r.preparePrediction(ctx, job, frames, sender)
 	return true
 }
 
@@ -243,7 +244,7 @@ func (r *codexBackendRuntime) predictionConfigForJob(job *predictionJob, token s
 	return r.predictions.fetchConfigWithAuthScope(job.ctx, authCtx, token, refreshed, routing)
 }
 
-func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<- []byte, sender relayEventSender) {
+func (r *codexBackendRuntime) preparePrediction(relayCtx context.Context, job *predictionJob, frames chan<- []byte, sender relayEventSender) {
 	command := job.command
 	completed := false
 	defer func() {
@@ -266,9 +267,14 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 		return
 	}
 	token, identity, routing, err := r.predictionAuthentication(job)
-	if err != nil || !r.predictionEnabledForJob(job, identity) {
+	if err != nil {
 		return
 	}
+	preferences, allowed := r.predictionPreferencesForJob(job, identity)
+	if !allowed {
+		return
+	}
+	job.preference = preferences
 	config, err := r.predictionConfigForJob(job, token, identity, routing)
 	if err != nil || !config.Enabled || config.LiveSampleRate <= r.predictions.sample() {
 		return
@@ -289,13 +295,17 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 		return
 	}
 	controls := r.predictionControlsForJob(job, token, identity, routing)
-	if !controls.Evaluated {
+	if !controls.Evaluated || !r.desktopPredictionAllowed(job.ctx, job.preference) {
 		return
 	}
 	if !r.lockVerifiedPredictionAccount(job) {
 		return
 	}
 	defer r.mu.Unlock()
+	// Keep invalidation ahead of a new sample if the relay outbox was full.
+	if watch := r.predictions.preferenceWatch; watch != nil && watch.invalidated {
+		return
+	}
 	r.translator.SetPredictionPolicy(controls.ModerationPolicy)
 	outbound, err := r.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: config.Prompt, PromptWithSchema: config.PromptWithSchema, Effort: config.Effort, GenerationTrigger: "live", InterruptOnCancel: controls.InterruptOnCancel && predictionInterruptSupported(r.nativeUserAgent)})
 	if err != nil {
@@ -311,6 +321,7 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 		return
 	}
 	job.sampled = true
+	r.watchPredictionPreferenceLocked(relayCtx, job.preference, sender)
 	completed = true
 	timer := time.NewTimer(predictionResponseTimeout)
 	go r.waitPredictionSample(job, timer, sender)
@@ -342,6 +353,7 @@ func (r *codexBackendRuntime) CancelPredictions() {
 	defer r.mu.Unlock()
 	r.invalidatePredictionAccountLocked(predictionIdentity{})
 	r.predictionAccount.frames, r.predictionAccount.sender = nil, nil
+	r.stopPredictionPreferenceWatchLocked()
 }
 
 func (r *codexBackendRuntime) queuePredictionCancelLocked(requestID string, frames chan<- []byte) {

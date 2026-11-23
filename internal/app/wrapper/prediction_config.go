@@ -317,4 +317,5 @@ type predictionRuntime struct {
 	sample             func() float64
 	desktopContext     func(context.Context, string) (map[string]any, error)
 	desktopPreferences func(context.Context, predictionIdentity) (predictionDesktopPreferences, error)
+	preferenceWatch    *predictionPreferenceWatch
 }

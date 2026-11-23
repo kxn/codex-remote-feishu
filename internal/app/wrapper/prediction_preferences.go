@@ -9,6 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 const desktopPredictionSetting = "composer-predictions-enabled"
@@ -18,17 +21,41 @@ type predictionDesktopPreferences struct {
 	legacy *bool
 }
 
-func (r *codexBackendRuntime) predictionEnabledForJob(job *predictionJob, identity predictionIdentity) bool {
+type predictionPreferenceState struct {
+	principal    predictionIdentity
+	configured   *bool
+	requireOwner bool
+}
+
+func (p predictionPreferenceState) allows(pref predictionDesktopPreferences) bool {
+	if pref.owner != nil {
+		return *pref.owner
+	}
+	if p.requireOwner {
+		return false // A known owner value disappeared and we did not read its fallback.
+	}
+	if p.configured != nil {
+		return *p.configured
+	}
+	if pref.legacy != nil {
+		return *pref.legacy
+	}
+	return true // Desktop setting registry default.
+}
+
+func (r *codexBackendRuntime) predictionPreferencesForJob(job *predictionJob, identity predictionIdentity) (*predictionPreferenceState, bool) {
 	preferences, err := r.predictions.desktopPreferences(job.ctx, identity)
 	if err != nil {
-		return false
+		return nil, false
 	}
+	state := &predictionPreferenceState{principal: identity}
 	if preferences.owner != nil {
-		return *preferences.owner
+		state.requireOwner = true
+		return state, state.allows(preferences)
 	}
 	result, err := r.predictionRPC(job.ctx, job.frames, "config/read", map[string]any{"includeLayers": false})
 	if err != nil {
-		return false
+		return nil, false
 	}
 	var response struct {
 		Config *struct {
@@ -36,15 +63,87 @@ func (r *codexBackendRuntime) predictionEnabledForJob(job *predictionJob, identi
 		} `json:"config"`
 	}
 	if json.Unmarshal(result, &response) != nil || response.Config == nil {
-		return false
+		return nil, false
 	}
-	if enabled := desktopPredictionBoolean(response.Config.Desktop[desktopPredictionSetting]); enabled != nil {
-		return *enabled
+	state.configured = desktopPredictionBoolean(response.Config.Desktop[desktopPredictionSetting])
+	return state, state.allows(preferences)
+}
+
+func (r *codexBackendRuntime) desktopPredictionAllowed(ctx context.Context, state *predictionPreferenceState) bool {
+	if state == nil {
+		return true
 	}
-	if preferences.legacy != nil {
-		return *preferences.legacy
+	preferences, err := r.predictions.desktopPreferences(ctx, state.principal)
+	return err == nil && state.allows(preferences)
+}
+
+type predictionPreferenceWatch struct {
+	stop        context.CancelFunc
+	invalidated bool
+}
+
+// Desktop clears an in-flight or published prediction when its setting changes.
+// Watch the persisted atom while a relay-visible suggestion may exist. Native
+// config/read is used only during preparation to resolve the fallback value.
+func (r *codexBackendRuntime) watchPredictionPreferenceLocked(relayCtx context.Context, preference *predictionPreferenceState, sender relayEventSender) {
+	r.stopPredictionPreferenceWatchLocked()
+	ctx, cancel := context.WithCancel(relayCtx)
+	watch := &predictionPreferenceWatch{stop: cancel}
+	r.predictions.preferenceWatch = watch
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			if !watch.invalidated && r.desktopPredictionAllowed(ctx, preference) {
+				continue
+			}
+			r.mu.Lock()
+			if r.predictions.preferenceWatch != watch || ctx.Err() != nil {
+				r.mu.Unlock()
+				return
+			}
+			if !watch.invalidated {
+				r.cancelPredictionJobsLocked()
+				watch.invalidated = true
+			}
+			// SendEvents enqueues to the bounded relay outbox. Keep the notification
+			// ordered before later samples, and retry if the connection queues are full.
+			err := sender.SendEvents([]agentproto.Event{predictionPreferenceInvalidated()})
+			if err == nil {
+				r.stopPredictionPreferenceWatchLocked()
+			}
+			r.mu.Unlock()
+			if err == nil {
+				return
+			}
+		}
+	}()
+}
+
+func (r *codexBackendRuntime) stopPredictionPreferenceWatchLocked() {
+	if r.predictions != nil && r.predictions.preferenceWatch != nil {
+		r.predictions.preferenceWatch.stop()
+		r.predictions.preferenceWatch = nil
 	}
-	return true // Desktop setting registry default.
+}
+
+func (r *codexBackendRuntime) predictionResultAllowedLocked(job *predictionJob, event agentproto.Event) bool {
+	return event.Prediction == nil || event.Prediction.Suggestion == "" || r.desktopPredictionAllowed(job.ctx, job.preference)
+}
+
+func (r *codexBackendRuntime) invalidatePredictionPreferenceLocked() agentproto.Event {
+	r.cancelPredictionJobsLocked()
+	r.stopPredictionPreferenceWatchLocked()
+	return predictionPreferenceInvalidated()
+}
+
+func predictionPreferenceInvalidated() agentproto.Event {
+	return agentproto.Event{Kind: agentproto.EventThreadPredictionInvalidated}
 }
 
 func readPredictionDesktopPreferences(ctx context.Context, principal predictionIdentity) (predictionDesktopPreferences, error) {

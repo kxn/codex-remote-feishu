@@ -165,6 +165,9 @@ func (r *codexBackendRuntime) finishPredictionAccountProbeLocked(response predic
 	var events []agentproto.Event
 	for id, job := range r.predictions.jobs {
 		if job.accountHeld != nil {
+			if !r.predictionResultAllowedLocked(job, *job.accountHeld) {
+				return []agentproto.Event{r.invalidatePredictionPreferenceLocked()}
+			}
 			job.cancel()
 			delete(r.predictions.jobs, id)
 			events = append(events, *job.accountHeld)
@@ -203,6 +206,7 @@ func (r *codexBackendRuntime) invalidatePredictionAccountLocked(identity predict
 	r.predictionAccount.epoch++
 	r.clearPredictionAccountProbeLocked()
 	r.cancelPredictionJobsLocked()
+	r.stopPredictionPreferenceWatchLocked()
 	return []agentproto.Event{{Kind: agentproto.EventThreadPredictionInvalidated}}
 }
 
