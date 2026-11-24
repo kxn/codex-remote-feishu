@@ -165,15 +165,7 @@ func (c *personalMigrationCoordinator) Advance(ctx context.Context, binding ingr
 		progress.Stage = "draining"
 		drained, e := c.app.teamRuntime.advanceBoundPersonalSourceDrain(ctx, c.router, binding, req.SourceHandle, now)
 		if e != nil {
-			var status workstore.PersonalMigrationDrainStatus
-			check := c.app.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
-				var x error
-				status, x = tx.PersonalMigrationStatus(binding.ScopeID)
-				return x
-			})
-			if check != nil || drained.Neutral.Digest == "" || drained.Source.Fence.ScopeID != binding.ScopeID || !personalSourceComponentsIsolated(status) {
-				return progress, errors.Join(e, check)
-			}
+			return progress, e
 		}
 		if e = c.recordLegacyCodexEvidence(ctx, binding.ScopeID, req.Owner, now); e != nil {
 			return progress, e

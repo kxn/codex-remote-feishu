@@ -4,12 +4,16 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -88,6 +92,13 @@ func TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier(t *testing.T) {
 			return e
 		}
 		if _, e = tx.RegisterNativeCommand(worker.CarrierIncarnation, command); e != nil {
+			return e
+		}
+		publish := work.Operation{ID: "uncertain-publication", ScopeID: worker.ScopeID, Actor: work.Actor{Kind: work.ActorSystem, ID: "output"}, Kind: "feishu.publish", TargetID: "chat", TargetGeneration: 1, IdempotencyKey: "uncertain-publication", RequestHash: "hash", State: work.OperationUnknown, Steps: []work.OperationStep{{ID: "first_send", State: work.OperationUnknown}}, Revision: 1, CreatedAt: now, UpdatedAt: now}
+		if _, _, e = tx.PutOperation(publish, 0); e != nil {
+			return e
+		}
+		if e = tx.PutOutbox(work.Outbox{ID: "uncertain-outbox", ScopeID: worker.ScopeID, OperationID: publish.ID, Target: "chat", EventID: "uncertain-publication", PayloadRef: commandBody.ID, State: work.OutboxUnknown, Revision: 1}, 0); e != nil {
 			return e
 		}
 		if e = tx.PutContext(work.WorkContext{ID: "historical-context", ScopeID: worker.ScopeID, RoleID: worker.RoleID, Workstream: "legacy:test", Revision: 1, CreatedAt: now, UpdatedAt: now}, 0); e != nil {
@@ -250,6 +261,9 @@ func TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier(t *testing.T) {
 	if err = r.isolateExitedPersonalWorkers(ctx, "scope", proofID, now); err != nil {
 		t.Fatal(err)
 	}
+	if err = r.holdUncertainPersonalPublications(ctx, "scope", proofID, now); err != nil {
+		t.Fatal(err)
+	}
 	if err = r.holdUncertainPersonalReactions(ctx, "scope", proofID, now); err != nil {
 		t.Fatal(err)
 	}
@@ -295,6 +309,104 @@ func TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier(t *testing.T) {
 	if err = r.verifyPersonalExecutionIsolation(ctx, isolation); err != nil {
 		t.Fatal(err)
 	}
+	// Restart changes coverage proof while each frozen component keeps its
+	// original intake proof. Repeat the production drain with all four kinds.
+	coverage.Epoch++
+	coverage.CutoverID = "active-fixture-restarted"
+	previous, _ = json.Marshal(map[string]string{"kind": "exclusive-daemon-lock", "router_id": router.RouterID(), "cutover_id": coverage.CutoverID})
+	coverageProof, _ = json.Marshal(startupCoverageEvidence{Startup: startup, Previous: previous})
+	if err = router.RecordGatewayCoverage(ctx, coverage, coverageProof); err != nil {
+		t.Fatal(err)
+	}
+	drained, err := r.advanceBoundPersonalSourceDrain(ctx, router, binding, migrationID, now)
+	if err != nil {
+		t.Fatalf("repeated source drain after coverage renewal: %v", err)
+	}
+	if drained.Neutral.Digest == proof.Digest {
+		t.Fatal("restart did not renew coverage proof")
+	}
+	if err = store.Within(ctx, func(tx *workstore.Tx) error {
+		for _, v := range []struct{ kind, id string }{{"execution", worker.ID}, {"control", "unknown-control"}, {"publication", "uncertain-outbox"}, {"reaction", "input-reaction:" + attempt.InputIDs[0]}} {
+			id, exists, e := tx.PersonalMigrationComponentProof("scope", v.kind, v.id, "new")
+			if e != nil {
+				return e
+			}
+			if !exists || id != proofID {
+				return fmt.Errorf("%s lost original proof", v.kind)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A changed published outbox cannot reuse its old component evidence.
+	rollback := errors.New("rollback deliberate drift")
+	if err = store.Within(ctx, func(tx *workstore.Tx) error {
+		out, e := tx.GetOutbox("uncertain-outbox")
+		if e != nil {
+			return e
+		}
+		old := out.Revision
+		out.Revision++
+		out.NextAttemptAt = &now
+		if e = tx.PutOutbox(out, old); e != nil {
+			return e
+		}
+		if e = tx.HoldPersonalUncertainPublication("scope", out.ID, proofID, now); e == nil {
+			return fmt.Errorf("changed outbox accepted: %v", e)
+		}
+		return rollback
+	}); !errors.Is(err, rollback) {
+		t.Fatalf("drift fixture: %v", err)
+	}
+	// A hold for this worker's current generation must not suppress
+	// reconciliation of a different-generation occupied attempt.
+	rawDB, e := sql.Open("sqlite", filepath.Join(stateDir, "work.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	var originalAttempt string
+	if e = rawDB.QueryRowContext(ctx, "SELECT payload FROM attempts WHERE id=?", attempt.ID).Scan(&originalAttempt); e != nil {
+		t.Fatal(e)
+	}
+	var stopScope, stopMedia, stopHash, stopCreated string
+	var stopData []byte
+	stopID := "private-stop:" + attempt.ID
+	if e = rawDB.QueryRowContext(ctx, "SELECT scope_id,media_type,sha256,data,created_at FROM content WHERE id=?", stopID).Scan(&stopScope, &stopMedia, &stopHash, &stopData, &stopCreated); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = rawDB.ExecContext(ctx, "DELETE FROM content WHERE id=?", stopID); e != nil {
+		t.Fatal(e)
+	}
+	otherGeneration := attempt
+	otherGeneration.RunRef.Generation++
+	otherRaw, _ := json.Marshal(otherGeneration)
+	if _, e = rawDB.ExecContext(ctx, "UPDATE attempts SET payload=? WHERE id=?", string(otherRaw), attempt.ID); e != nil {
+		t.Fatal(e)
+	}
+	_, crossGenerationErr := r.advancePersonalSourceDrain(ctx, "scope", migrationID, now)
+	if _, e = rawDB.ExecContext(ctx, "UPDATE attempts SET payload=? WHERE id=?", originalAttempt, attempt.ID); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = rawDB.ExecContext(ctx, "DELETE FROM content WHERE id=?", stopID); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = rawDB.ExecContext(ctx, "INSERT INTO content(id,scope_id,media_type,sha256,data,created_at) VALUES(?,?,?,?,?,?)", stopID, stopScope, stopMedia, stopHash, stopData, stopCreated); e != nil {
+		t.Fatal(e)
+	}
+	if e = rawDB.Close(); e != nil {
+		t.Fatal(e)
+	}
+	if crossGenerationErr == nil || !strings.Contains(crossGenerationErr.Error(), "attempt "+attempt.ID) {
+		t.Fatalf("different generation failed to reach reconciliation: %v", crossGenerationErr)
+	}
+	proof = drained.Neutral
+	// The public coordinator cannot bypass invalid coverage and reach seal.
+	router.SetGatewayCoverageVerifier(migrationCoverageDeniedFixture{})
+	if _, e = coordinator.AdvanceOwner(ctx, binding, migrationID, importID, now); !errors.Is(e, workstore.ErrScopeDenied) {
+		t.Fatalf("AdvanceOwner accepted unavailable coverage: %v", e)
+	}
+	router.SetGatewayCoverageVerifier(applicationCoverageVerifier{controller: controller, previous: daemonLockPreviousVerifier{lock: lock}})
 	targetBinding, e := coordinator.ClaimTargetBinding(ctx, binding, migrationID, now)
 	if e != nil {
 		t.Fatal(e)

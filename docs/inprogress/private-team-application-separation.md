@@ -289,7 +289,13 @@ cwd 是某次执行的参数，不能决定记忆属于谁。临时执行目录�
 
 后续现场检查继续发现旧 owner 的迁移仍受历史执行占用、跨代未确认控制、额外 context 和 stale 原生问题影响。处理方式是逐项冻结并验证原来源，贯通源排空、封口、导出、目标导入与激活：已停止执行不再送入通用重建；不同代次分别证明；额外历史 context 与失效问题保留为组件。旧控制输入不进入普通文字的确认重发路径。服务健康和 Bot 已连接不能代替这项迁移完成检查。
 
+线上重启另暴露了组件隔离重试不幂等：旧组件 hash 包含旧 coverage 证明，重启后的新证明导致登记冲突。修复保留各组件原证明，并通过 registry 逐一验证其与当前证明的继承关系及不变的 owner、迁移、binding、revision 和接收水位。验收必须调用生产 `AdvanceOwner`／`Advance` 完整入口，不能手动跳过已隔离组件，也不能忽略建立旧会话来源证明时的错误；副本接管证明仍属测试条件，不代替线上 ready 检查。
+
+完整入口还暴露了历史采证对当前启动流程的误用：只读旧 Codex history 也要求 OAuth 探测并生成 managed launch 文件。历史目录解析已与启动准入分开，保留冻结 namespace／session 的核验；当前连接身份与启动权限仍在真正恢复执行时校验。
+
 非当前 front 的历史上下文和会话记录只作为来源证据保留；当前没有面向用户的历史目录或续接入口，不能将留证描述为已可浏览或继续旧会话。
+
+现场旧 front 的 journal 与唯一 session metadata 可核验，但 worker 的 namespace 是历史字面标记 `codex`，launch 没有冻结 history namespace／环境。当前实现不会将该标记视为新版目录 hash，故不生成自动续接证明；这条会话也不能通过现有 `/list` 或 `/use` 恢复。新私人 owner ready 不解决此限制。后续若支持恢复，需独立、版本化记录派生来源（旧标记、冻结 profile/CWD、精确 journal、唯一会话元数据及解析目录），并继续满足旧执行静止与当前启动鉴权，不能修改旧记录或放宽通用历史归属检查。
 
 2026-11-23 对实际运行数据只读盘点：一个个人 scope、两个 recovering Codex worker；原 worker 保存了会话和 namespace，旧 launch 缺少后来添加的 namespace/account 字段。353 条 unknown 操作中，350 条是只读查询，三条是控制写；另有一条发送结果未知的发布。两条载体的进程身份均已失效，原生 journal 和对应会话文件仍存在。不能将旧记录缺新字段等同于丢失会话，也不能将本地投影步骤成功等同于飞书收到消息。
 
@@ -309,7 +315,7 @@ cwd 是某次执行的参数，不能决定记忆属于谁。临时执行目录�
 | 设置、历史、停止与升级 | 私人 checkpoint、设置 reconciliation、历史查询和停止均有对应测试；`TestSharedCodexUpgradeRestartsAuthenticatedPrivateCarrier` 验证实际测试载体的停止/重建/hello，`TestSharedCodexUpgradeRunsTrackedInstallUnderBackendFence` 单独验证受控安装 | 尚未在同一真实环境把在线载体、实际安装和登录后端一起验收；Cron、VS Code 人工接管和 `/bendtomywill` 不恢复 |
 | 团队运行时与旧源 | 中立入口及生产启动装配已接；`TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier` 覆盖测试进程、真实本地锁与 gateway hook 下的源封口、导入和目标恢复 | 真实旧库和平台的安全切换；不能将旧路径对照或测试凭据当作线上切换证明 |
 
-最终全仓检查和独立收口仍待本轮最后结果，不以本表声明全部通过或已部署。
+本表描述受控验收范围，不是线上验收或部署状态；每轮发布须核对当次测试、安装事务和各 owner 的实际迁移阶段。
 以下是当时审计提出的接线清单；独立私人 service 与中立入口现已装配，逐条只作为源代码追踪和回归依据：
 
 1. `internal/adapter/feishu/gateway_runtime.go`、`gateway_durable_ingress.go`：已认证事件先按可信 app、tenant、chat type 和卡片/原消息归属分派，私人 journal 成功提交后才确认接收；菜单、回调、撤回和反应也需同样的归属。
@@ -319,4 +325,4 @@ cwd 是某次执行的参数，不能决定记忆属于谁。临时执行目录�
 5. daemon 的 `handleUIEventsLocked`、投影及 `app_final_card*.go`：把旧核心事件交由共享飞书发送层，真实 message ID、卡片回执及生命周期写回私人 service；最终文件与临时预览继续按个人设置投影。
 6. `app_surface_resume*.go`：历史会话、cwd、账户与设置的受控导入；旧 resume 文件不包含完整 durable 输入队列，不能把它当作完整恢复或跳过 owner epoch 切换。
 
-以上旧路径对照与新增装配旅程共同作为回归依据。独立 journal 已接入开发中的生产入口；真实飞书、真实 native 和实际旧数据迁移验收仍未全部完成，线上流量未切换。
+以上旧路径对照与新增装配旅程共同作为回归依据。独立 journal 已接入生产入口；真实飞书交互、登录后的 native 会话与旧数据迁移分开验收。不得从服务健康推断全部会话已切换，也不得从副本 ready 推断旧原生会话可以自动续接。

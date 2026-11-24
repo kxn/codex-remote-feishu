@@ -49,7 +49,13 @@ func (r *teamRuntime) isolatePersonalControlOperations(ctx context.Context, scop
 			}
 			continue
 		}
-		if err = r.store.Within(ctx, func(tx *workstore.Tx) error { return tx.RecordPersonalControlIsolation(scope, proofID, candidate, now) }); err != nil {
+		if err = r.store.Within(ctx, func(tx *workstore.Tx) error {
+			id, _, e := tx.PersonalMigrationComponentProof(scope, "control", op.ID, proofID)
+			if e != nil {
+				return e
+			}
+			return tx.RecordPersonalControlIsolation(scope, id, candidate, now)
+		}); err != nil {
 			return err
 		}
 	}

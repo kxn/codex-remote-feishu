@@ -56,8 +56,12 @@ func (r *teamRuntime) holdUncertainPersonalPublications(ctx context.Context, sco
 			if out.State != work.OutboxSending && out.State != work.OutboxUnknown {
 				continue
 			}
-			err = tx.HoldPersonalUncertainPublication(scope, out.ID, proofID, now)
-			if errors.Is(err, workstore.ErrConflict) {
+			id, existing, e := tx.PersonalMigrationComponentProof(scope, "publication", out.ID, proofID)
+			if e != nil {
+				return e
+			}
+			err = tx.HoldPersonalUncertainPublication(scope, out.ID, id, now)
+			if errors.Is(err, workstore.ErrConflict) && !existing {
 				continue
 			}
 			if err != nil {
@@ -78,7 +82,11 @@ func (r *teamRuntime) holdUncertainPersonalReactions(ctx context.Context, scope,
 			return err
 		}
 		for _, reaction := range reactions {
-			if err = tx.HoldPersonalUncertainReaction(scope, reaction.ID, proofID, now); err != nil {
+			id, _, e := tx.PersonalMigrationComponentProof(scope, "reaction", reaction.ID, proofID)
+			if e != nil {
+				return e
+			}
+			if err = tx.HoldPersonalUncertainReaction(scope, reaction.ID, id, now); err != nil {
 				return err
 			}
 		}

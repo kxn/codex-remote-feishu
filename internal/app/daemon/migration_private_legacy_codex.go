@@ -18,7 +18,9 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/runtimejournal"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
@@ -32,6 +34,30 @@ type legacyCodexSessionEvidence struct {
 func legacyCodexEvidenceID(scope, worker string, generation int64) string {
 	raw, _ := json.Marshal([]any{scope, worker, generation})
 	return "migration-legacy-codex:" + migrationBytesHash(raw)
+}
+
+// History discovery only needs the configured native history root. It must
+// not run OAuth/capability probes or materialize current launch files. The
+// result remains subject to the frozen namespace and exact session evidence;
+// actual resume independently validates current launch authorization.
+func (a *App) legacyCodexHistoryEnv(profileID string) ([]string, error) {
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return nil, err
+	}
+	id := state.NormalizeCodexProfileID(profileID)
+	if id != config.CodexNativeProfileID && id != config.CodexOAuthProfileID {
+		index := config.IndexOfCodexAPIProfile(loaded.Config.Codex.Profiles, id)
+		if index < 0 {
+			return nil, workstore.ErrConflict
+		}
+		if _, ok := config.CurrentCodexAPIProfile(loaded.Config.Codex.Profiles[index]); !ok {
+			return nil, workstore.ErrConflict
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.headlessRuntime.BaseEnv...), nil
 }
 
 // recordLegacyCodexEvidence uses only original source records, an exact exited
@@ -101,9 +127,7 @@ func (c *personalMigrationCoordinator) recordLegacyCodexEvidence(ctx context.Con
 	if err != nil {
 		return nil
 	}
-	c.app.mu.Lock()
-	env, _, _, err := c.app.applyCodexHeadlessProfileConfigLocked(c.app.headlessRuntime.BaseEnv, c.app.headlessRuntime.LaunchArgs, agentproto.BackendCodex, launch.ProfileID, nil)
-	c.app.mu.Unlock()
+	env, err := c.app.legacyCodexHistoryEnv(launch.ProfileID)
 	if err != nil {
 		return err
 	}
@@ -268,9 +292,7 @@ func (c *personalMigrationCoordinator) verifyLegacyCodexEvidence(ctx context.Con
 	if launchHash != evidence.LaunchSnapshotHash || eventHash != evidence.JournalEventHash {
 		return workstore.ErrConflict
 	}
-	c.app.mu.Lock()
-	env, _, _, err := c.app.applyCodexHeadlessProfileConfigLocked(c.app.headlessRuntime.BaseEnv, c.app.headlessRuntime.LaunchArgs, agentproto.BackendCodex, launch.ProfileID, nil)
-	c.app.mu.Unlock()
+	env, err := c.app.legacyCodexHistoryEnv(launch.ProfileID)
 	if err != nil {
 		return err
 	}

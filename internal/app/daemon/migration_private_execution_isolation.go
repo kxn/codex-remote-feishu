@@ -75,7 +75,13 @@ func (r *teamRuntime) isolateExitedPersonalWorkers(ctx context.Context, scope, p
 			continue
 		}
 		hold := workstore.PersonalExecutionIsolation{Worker: worker, Process: process, LaunchHash: evidence.LaunchHash, JournalLaunchHash: evidence.JournalLaunchHash, SourceReceiptHash: evidence.SourceReceiptHash, InventoryHash: evidence.InventoryHash, NativeCommandsIdle: evidence.NativeCommandsIdle, InputsIdle: evidence.InputsIdle, ToolsIdle: evidence.ToolsIdle, GoalsIdle: evidence.GoalsIdle, TasksIdle: evidence.TasksIdle, TurnsTerminal: evidence.TurnsTerminal, UncertaintiesEmpty: evidence.UncertaintiesEmpty, ProcessScopesStopped: evidence.ProcessScopesStopped}
-		if err = r.store.Within(ctx, func(tx *workstore.Tx) error { return tx.HoldPersonalExecutionIsolation(scope, proofID, hold, now) }); err != nil {
+		if err = r.store.Within(ctx, func(tx *workstore.Tx) error {
+			id, _, e := tx.PersonalMigrationComponentProof(scope, "execution", worker.ID, proofID)
+			if e != nil {
+				return e
+			}
+			return tx.HoldPersonalExecutionIsolation(scope, id, hold, now)
+		}); err != nil {
 			return err
 		}
 	}

@@ -54,17 +54,20 @@ func (r *teamRuntime) advanceBoundPersonalSourceDrain(ctx context.Context, route
 		if e != nil {
 			return out, errors.Join(err, e)
 		}
+		if e = r.verifyPersonalComponentProofs(ctx, router, binding, proof); e != nil {
+			return out, errors.Join(err, fmt.Errorf("component intake proof: %w", e))
+		}
 		if e = r.holdUncertainPersonalPublications(ctx, binding.ScopeID, "migration-intake-proof:"+proof.Digest, now); e != nil {
-			return out, errors.Join(err, e)
+			return out, errors.Join(err, fmt.Errorf("publication isolation: %w", e))
 		}
 		if e = r.holdUncertainPersonalReactions(ctx, binding.ScopeID, "migration-intake-proof:"+proof.Digest, now); e != nil {
-			return out, errors.Join(err, e)
+			return out, errors.Join(err, fmt.Errorf("reaction isolation: %w", e))
 		}
 		if e = r.isolateExitedPersonalWorkers(ctx, binding.ScopeID, "migration-intake-proof:"+proof.Digest, now); e != nil {
-			return out, errors.Join(err, e)
+			return out, errors.Join(err, fmt.Errorf("execution isolation: %w", e))
 		}
 		if e = r.isolatePersonalControlOperations(ctx, binding.ScopeID, "migration-intake-proof:"+proof.Digest, now); e != nil {
-			return out, errors.Join(err, e)
+			return out, errors.Join(err, fmt.Errorf("control isolation: %w", e))
 		}
 	}
 	if e := router.VerifyBoundOwnerMigrationDrain(ctx, binding, migrationID, proof); e != nil {
@@ -150,6 +153,31 @@ func (r *teamRuntime) advancePersonalSourceDrain(ctx context.Context, scopeID, m
 	}
 	var failures []error
 	for _, id := range result.StopAttempts {
+		var held workstore.PersonalExecutionIsolation
+		holdErr := r.store.Within(ctx, func(tx *workstore.Tx) error {
+			attempt, e := tx.GetAttempt(id)
+			if e != nil {
+				return e
+			}
+			held, e = tx.GetPersonalExecutionIsolation(scopeID, attempt.RunRef.WorkerID)
+			if e != nil {
+				return e
+			}
+			if attempt.RunRef.Generation != held.Worker.Generation {
+				return workstore.ErrNotFound
+			}
+			return nil
+		})
+		if holdErr == nil {
+			if holdErr = r.verifyPersonalExecutionIsolation(ctx, held); holdErr != nil {
+				failures = append(failures, fmt.Errorf("attempt %s isolation: %w", id, holdErr))
+			}
+			continue
+		}
+		if !errors.Is(holdErr, workstore.ErrNotFound) {
+			failures = append(failures, fmt.Errorf("attempt %s isolation: %w", id, holdErr))
+			continue
+		}
 		if err = r.coordinator.Reconcile(ctx, id); err != nil {
 			failures = append(failures, fmt.Errorf("attempt %s: %w", id, err))
 		}
