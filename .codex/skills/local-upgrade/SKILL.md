@@ -5,99 +5,27 @@ description: "Use when the user asks for this repository's local upgrade flow: �
 
 # local-upgrade
 
-Use this skill when the task is to refresh the locally installed `codex-remote` daemon from the current repository checkout.
+Use this skill to upgrade the locally installed `codex-remote` daemon from a repository checkout. The normal deployment has one daemon; do not infer a second service from a branch, checkout, historical label, or stale repository binding.
 
-## Default path
+## Identify the target first
 
-Prefer this command from the repo root:
+- An explicit user target takes precedence. For a session-hosted request, use the session's actual runtime identity when available and verify it against the running service and its install state.
+- If there is no session environment or trustworthy worktree binding, inspect the running service (on Linux, `systemctl --user status codex-remote.service`), its process, service unit and command line. Find the corresponding `install-state.json` and compare its `instanceId`, `serviceUnitPath`, and `currentBinaryPath` with the running service. Resolve the config and base directory from the installation and service environment; those paths need not be fields in install-state. Confirm the actual admin port and logs. Do not rely on a leftover main-repository binding to select a target.
+- Inspect `bash scripts/install/repo-install-target.sh` output before using the repository helper: it resolves a repository target and may select an old binding. `self-install-target.sh` and `self-target-request.sh` require a resolvable runtime environment; they are not evidence of a target when that environment is absent.
+- If evidence is missing, contradictory, or identifies more than one plausible service, do not guess or operate on another instance; obtain the missing target information. Do not bootstrap merely because a guessed install-state path is missing.
+
+## Upgrade
+
+After verifying that its resolved target is the intended running installation, use:
 
 ```bash
 ./upgrade-local.sh
 ```
 
-That script does all of the following:
+If the repository binding does not match, explicitly pass the verified `--instance <id>` and/or `--base-dir <dir>` as needed, and check the resolver output matches the intended state path before invoking the upgrade. The helper runs `git pull --ff-only`, builds the binary, stages the fixed local-upgrade artifact and invokes the built-in local upgrade transaction. Its default rejects tracked dirty changes; use `--allow-dirty` only when the user explicitly wants that.
 
-1. `git pull --ff-only`
-2. rebuild `./bin/codex-remote`
-3. copy the new binary to the fixed local artifact path
-4. run `./bin/codex-remote local-upgrade`
+For an explicitly identified session-hosting daemon whose self target is verifiable, `./upgrade-self.sh` builds a fresh binary and targets that daemon. Explicit daemon slash commands act on the daemon that receives them. Do not send a slash command as a substitute for a requested repository build.
 
-For upgrading the daemon instance that is currently hosting the active Codex conversation, prefer:
+Run service lifecycle and upgrade operations serially; do not overlap stop, start, restart or bootstrap for the same daemon. For local status or logs, use the verified installation's admin address and log path, clear proxy variables for localhost, and verify the actual process and port. The `scripts/install/*-target-request.sh` helpers are appropriate only when their resolved target has been verified.
 
-```bash
-./upgrade-self.sh
-```
-
-## Natural-Language Boundary
-
-- Natural-language `本地升级` requests are repository tasks, not daemon slash-command requests.
-- For repo-build local upgrade requests:
-  - use `./upgrade-local.sh`
-  - when the user names a target instance, keep that target explicit with `--instance <id>`
-  - do **not** send `/upgrade ...` back into whichever daemon is currently hosting the Codex conversation
-- For self-recovery requests where the current daemon is too old or too broken to rely on its own `/upgrade dev` or `upgrade local` entrypoints:
-  - use `./upgrade-self.sh`
-  - this path builds a fresh repo binary first, then uses that fresh binary to drive `local-upgrade` against the current daemon self target
-- Natural-language debug/status/log/bug requests such as `debug 一下`, `看下当前实例状态`, `查日志`, or `报个 bug` default to the current daemon **self target**, not the repo-bound target.
-- Only use `bash scripts/install/repo-install-target.sh --format shell` or `bash scripts/install/repo-target-request.sh ...` when the user explicitly asks for:
-  - the repo-bound target
-  - or a named install target such as `stable` / `beta` / `master`
-- Explicit slash commands such as `/upgrade`, `/upgrade local`, `/upgrade latest`, and `/debug` remain direct daemon actions on the daemon that received that slash command.
-
-## Variants
-
-- Different install base dir:
-
-```bash
-./upgrade-local.sh --base-dir /path/to/base
-```
-
-- Explicit target instance:
-
-```bash
-./upgrade-local.sh --instance beta
-```
-
-- Upgrade the daemon that is currently hosting this Codex session:
-
-```bash
-./upgrade-self.sh
-```
-
-- Explicit slot label:
-
-```bash
-./upgrade-local.sh --slot local-test
-```
-
-- Dirty worktree:
-  - default behavior is to stop before `git pull`
-  - only use `--allow-dirty` when the user explicitly wants to keep going despite local changes
-
-## Notes
-
-- The built-in CLI entry is `codex-remote local-upgrade`.
-- The fixed artifact path is `~/.local/share/codex-remote/local-upgrade/codex-remote` for the default base dir.
-- For explanation or debugging of the current self-upgrade transaction, prefer `docs/general/local-self-upgrade-flow.md` before re-reading install code.
-- If the script says `install-state.json` is missing, bootstrap the local install first with `./setup.sh` or point `--base-dir` at the installed environment.
-- For explicit repo-bound or named-target debug/status HTTP calls, prefer:
-
-```bash
-bash scripts/install/repo-target-request.sh admin /v1/status | jq .
-```
-
-```bash
-bash scripts/install/repo-target-request.sh admin /api/admin/bootstrap-state | jq .
-```
-
-```bash
-bash scripts/install/repo-target-request.sh --instance beta admin /v1/status | jq .
-```
-
-- For explicit current self-target debug/status HTTP calls, prefer:
-
-```bash
-bash scripts/install/self-target-request.sh admin /v1/status | jq .
-```
-
-- For explanation-only requests, `./upgrade-local.sh --help` is usually enough.
+For implementation details see `docs/general/local-self-upgrade-flow.md`; `./upgrade-local.sh --help` lists supported options. The default base directory's artifact is `~/.local/share/codex-remote/local-upgrade/codex-remote`.

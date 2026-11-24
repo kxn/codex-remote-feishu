@@ -10,26 +10,26 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u al
 
 ## One-shot diagnostics
 
-Prefer this first when you need the fixed evidence bundle:
+First verify the intended service and its install state as described in the playbook. Pass its actual base directory and ports; the helper defaults do not identify the target:
 
 ```bash
-./scripts/relay/collect-diagnostics.sh
+./scripts/relay/collect-diagnostics.sh --base-dir <verified-base-dir> --relay-port <verified-relay-port> --admin-port <verified-admin-port>
 ```
 
 ## Proxy-safe relay status query
 
-Prefer this over `curl` when localhost requests may be intercepted:
+Use the verified admin port and clear proxy variables when localhost requests may be intercepted (replace the placeholder with the verified numeric port):
 
 ```bash
-env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy bash -lc 'exec 3<>/dev/tcp/127.0.0.1/9501 && printf "GET /v1/status HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" >&3 && cat <&3'
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy curl --noproxy '*' 'http://127.0.0.1:<verified-admin-port>/v1/status'
 ```
 
 ## Process and port checks
 
 ```bash
-ps -ef | rg 'relayd|relay-wrapper' | rg -v rg
-ss -ltnp | rg '9500|9501'
-tail -n 200 "${XDG_STATE_HOME:-$HOME/.local/state}/codex-relay/logs/relayd.log"
+ps -ef | rg 'codex-remote|relayd|relay-wrapper' | rg -v rg
+ss -ltnp
+tail -n 200 '<verified-log-path>'
 ```
 
 ## Symptom shortcuts

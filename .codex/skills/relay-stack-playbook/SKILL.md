@@ -36,8 +36,8 @@ Escalate to the full checks below when the task depends on live relayd state, ga
 
 When the task is a real-stack debug or has escalated beyond the fast path, gather these facts in order:
 
-0. Prefer the repo helper script first.
-   - Run `./scripts/relay/collect-diagnostics.sh`.
+0. Identify the intended running daemon from the explicit user target or the authenticated session. Without either, compare the running service and process with its `install-state.json` (instance, base directory, unit, config and binary), and establish its real ports and log paths. Do not infer a service from a branch or an old checkout binding. If the evidence is ambiguous, resolve the target before acting.
+   - Run `./scripts/relay/collect-diagnostics.sh` with the verified `--base-dir`, `--relay-port`, and `--admin-port` where applicable. Its defaults are not proof of the target, and its service status check uses the default service name; check the actual unit separately if different.
    - It captures the fixed low-level evidence in one pass:
      - proxy env
      - service status
@@ -96,7 +96,7 @@ When the task is a real-stack debug or has escalated beyond the fast path, gathe
 ## Validation
 
 - Clear proxy variables before local tests and localhost checks.
-- Prefer `./scripts/relay/collect-diagnostics.sh` for fixed evidence collection, then use the lower-level commands in `references/commands.md` when you need a narrower repro.
+- Prefer `./scripts/relay/collect-diagnostics.sh` with verified target parameters for fixed evidence collection, then use the lower-level commands in `references/commands.md` when you need a narrower repro.
 - After protocol or state-machine edits, run:
   - `go test ./...`
 - When the bug is user-visible, verify the exact symptom path:
