@@ -23,10 +23,12 @@ type operations struct {
 	install     func(context.Context, string, string) error
 	readVersion func(context.Context, string) (string, error)
 	now         func() time.Time
+	policy      func(context.Context) (string, error)
 }
 
 type checkRecord struct {
 	Latest    string    `json:"latest"`
+	Policy    string    `json:"policy,omitempty"`
 	CheckedAt time.Time `json:"checkedAt"`
 }
 
@@ -53,7 +55,8 @@ func EnsureWithEnv(ctx context.Context, configuredBinary, root string, env []str
 	}
 	configuredBinary = resolved
 	return ensure(ctx, configuredBinary, root, operations{
-		lookup: func(ctx context.Context) (string, error) { return lookupLatestWithEnv(ctx, env) },
+		lookup: func(ctx context.Context) (string, error) { return resolveLatestWithNPM(ctx, env) },
+		policy: func(ctx context.Context) (string, error) { return npmPolicyFingerprint(ctx, env) },
 		install: func(ctx context.Context, staging, target string) error {
 			return installPrivateWithEnv(ctx, staging, target, env)
 		},
@@ -206,10 +209,18 @@ func newestPrivate(ctx context.Context, root string, ops operations) (candidate,
 
 func latestVersion(ctx context.Context, root string, ops operations) (version, error) {
 	cachePath := filepath.Join(root, "check.json")
+	policy := "legacy-test"
+	if ops.policy != nil {
+		var err error
+		policy, err = ops.policy(ctx)
+		if err != nil {
+			return version{}, err
+		}
+	}
 	var cached checkRecord
 	if raw, err := os.ReadFile(cachePath); err == nil && json.Unmarshal(raw, &cached) == nil {
 		age := ops.now().Sub(cached.CheckedAt)
-		if age >= 0 && age < checkInterval {
+		if age >= 0 && age < checkInterval && cached.Policy == policy {
 			if parsed, err := parseVersion(cached.Latest); err == nil && parsed.preview == "" {
 				return parsed, nil
 			}
@@ -226,7 +237,7 @@ func latestVersion(ctx context.Context, root string, ops operations) (version, e
 	if parsed.preview != "" {
 		return version{}, fmt.Errorf("stable Codex channel returned preview version %q", text)
 	}
-	if err := writeCheckRecord(root, cachePath, checkRecord{Latest: text, CheckedAt: ops.now().UTC()}); err != nil {
+	if err := writeCheckRecord(root, cachePath, checkRecord{Latest: text, Policy: policy, CheckedAt: ops.now().UTC()}); err != nil {
 		// A cache failure must not disguise an already-confirmed update as an
 		// offline check and allow an old version to start.
 		log.Printf("codex managed: cannot cache successful version check: %v", err)

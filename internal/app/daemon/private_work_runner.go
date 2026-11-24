@@ -23,6 +23,8 @@ type privateWorkRunner struct {
 	native        *privateNativeHost
 	ingress       *applicationIngress
 	wake          chan struct{}
+	deadlineMu    sync.Mutex
+	exitProbeAt   map[string]time.Time
 	effectMu      sync.Mutex
 	effectWG      sync.WaitGroup
 	running       map[string]struct{}
@@ -117,12 +119,19 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			break
 		}
 	}
+	if err := r.runOwnerDeadlines(ctx); err != nil {
+		return err
+	}
+
 	for _, state := range []string{"running", "draining", "sealed"} {
 		records, e := r.native.store.byState(ctx, state)
 		if e != nil {
 			return e
 		}
 		for _, rec := range records {
+			if state == "running" {
+				r.observeExitedPendingCarrier(ctx, rec)
+			}
 			lease, e := r.native.lease(ctx, rec, nil)
 			if e != nil {
 				continue

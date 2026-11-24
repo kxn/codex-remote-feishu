@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -243,7 +244,7 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 			return nil, fmt.Errorf("%w: card plan: %v", ErrProcessorPoisoned, err)
 		}
 	}
-	effects, err := p.freezeEffects(o, fmt.Sprintf("ingress:%d", seq), events)
+	effects, err := p.freezeEffects(o, generation, fmt.Sprintf("ingress:%d", seq), events)
 	if err != nil {
 		p.poisoned = true
 		return nil, fmt.Errorf("%w: freeze: %v", ErrProcessorPoisoned, err)
@@ -317,14 +318,27 @@ func (p *Processor) ensureOwner(ctx context.Context, o Owner, generation int64) 
 	p.app.ownerGenerations[o.SurfaceID] = generation
 	return state, nil
 }
-func (p *Processor) freezeEffects(o Owner, key string, events []eventcontract.Event) ([]Effect, error) {
+func (p *Processor) freezeEffects(o Owner, generation int64, key string, events []eventcontract.Event) ([]Effect, error) {
+	if !validOwner(o) || generation < 1 {
+		return nil, ErrJournalState
+	}
 	effects := make([]Effect, 0, len(events))
 	for i, event := range events {
 		event = event.Normalized()
 		if event.PendingInput != nil && event.PendingInput.SourceMessageID == "" {
 			return nil, fmt.Errorf("pending input lacks source message identity")
 		}
-		digest := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%d", o.TenantID, o.AppID, key, i)))
+		identity, err := json.Marshal(struct {
+			Version    int
+			Owner      Owner
+			Generation int64
+			Key        string
+			Index      int
+		}{2, o, generation, key, i})
+		if err != nil {
+			return nil, err
+		}
+		digest := sha256.Sum256(identity)
 		effectID := "private-effect:" + hex.EncodeToString(digest[:])
 		if event.Command != nil {
 			if event.SurfaceSessionID != o.SurfaceID {

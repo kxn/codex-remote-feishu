@@ -16,6 +16,12 @@
 
 私人消息以原始平台消息和认证真人为来源，进入独立私人 checkpoint 的 session、队列和原生 turn；不会创建团队 WorkContext、ExecutionAttempt 或私人管理 Agent。私人 `/list`、`/use`、`/new`、`/history` 和菜单复用已有私人 core 语义，工作区和会话选择仍需精确载体与后端归属。真人引用、图片、文件和待处理输入保留原始关联；未知原生接收或发送不能当作成功，也不能自动重跑。
 
+私人 effect 和派生命令 ID 的命名空间包含完整 owner 与 generation，再结合原输入／定时事件键及事件序号；同 Bot 不同用户或不同代次的相同时间戳、设置 revision 不得碰撞。已持久化的效果仍按原 ID 和回执恢复，不因 ID 生成规则改动重新发送。
+
+### 私聊启动失败与无连接超时
+
+私人启动期限由 owner／generation 的持久 checkpoint 调度，不依赖原生 hello、已在线实例或存活 socket。该路径只处理到期启动与本地确认输入期限，原子保存投影和精确实例的停止／提示效果，不通过无连接 tick 派发队列或伪造原生租约。重启恢复时只能移除对应启动的 hold，未知输入、执行和发布的其他 hold 保留。宿主核验精确 PID、启动身份和本机归属后，可对仍处于启动阶段的同一实例记录早退；它不证明原生任务或后代已完成。无完整进程范围及 journal 证据的旧 carrier 继续单独隔离，不得假报退休或阻塞无关新实例。
+
 ### 私聊停止、资料与发布
 
 私人和新团队载体分别鉴权、分别路由，同时使用精确连接身份发送原生命令和事件回执。已认证团队连接不等于私人连接；事件提交后，回执仍绑定提交该事件的连接，不能转发到后来替换的 socket。历史团队协议的兼容依据是原启动记录，认证失败不得降级到历史入口。
@@ -1736,9 +1742,9 @@ G1 PendingHeadlessStarting
 
 Codex 自有 headless 的版本与上游服务边界（2026-11-13）：
 
-1. daemon 在 API 已开始服务、能力探测和 headless pool 启动之前，先准备私有稳定版，最长等待两分钟；后续每十五分钟在后台检查并下载。成功的官方 npm 稳定版检查缓存十五分钟，失败不缓存。安装目录为 runtime `StateDir/codex-runtime/releases/<version>`，先在独立 staging 安装、验证真实二进制版本，再原子发布；并发启动共用更新锁，坏 release 会隔离后重新安装。更新锁记录先写入同目录临时文件并关闭，再通过硬链接原子创建锁路径，避免竞争进程读到空文件或半条 JSON；已有 owner 不被覆盖，不支持硬链接的文件系统直接返回发布错误。
+1. daemon 在 API 已开始服务、能力探测和 headless pool 启动之前，先准备私有稳定版，最长等待两分钟；后续每十五分钟在后台检查并下载。稳定版由 npm 自身按有效安装策略解析，尊重用户的发布日期限制及排除规则；查询与安装使用相同的隔离工作目录规则。成功结果按策略指纹缓存十五分钟，策略变化或旧无指纹缓存必须重新解析，失败不缓存。安装目录为 runtime `StateDir/codex-runtime/releases/<version>`，先在独立 staging 安装、验证真实二进制版本，再原子发布；并发启动共用更新锁，坏 release 会隔离后重新安装。更新锁记录先写入同目录临时文件并关闭，再通过硬链接原子创建锁路径，避免竞争进程读到空文件或半条 JSON；已有 owner 不被覆盖，不支持硬链接的文件系统直接返回发布错误。
 2. 每次 daemon-owned managed headless 的真实 child 启动仍检查版本，最长五秒，选择配置版本和已验证私有版本中较新的版本；不降级，显式预览版本保留原选择。确认有更新但安装失败时，不悄悄启动已知旧版；官方 registry 不可达时允许使用已验证的现有版本，并记录检查失败。
-3. 自动检查和下载不停止正在运行的 child。`process.child.restart` 在停止旧 child、重置协议状态之前完成版本准备；准备失败直接返回错误并保留旧 child，准备成功才进入原有的 stop → launch → restore 合同。初次启动失败仍由 `G1 PendingHeadlessStarting` 的现有超时、`/detach` 和 `/mode` 退出路径收口，不增加持久 gate。
+3. 自动检查和下载不停止正在运行的 child。`process.child.restart` 在停止旧 child、重置协议状态之前完成版本准备；准备失败直接返回错误并保留旧 child，准备成功才进入原有的 stop → launch → restore 合同。初次启动早退与超时由私人 owner 级生命周期收口，不依赖已经建立的原生连接；`/detach` 和 `/mode` 仍可退出，不增加持久 gate。
 4. wrapper 只包装私有 stdio app-server，明确使用 `--listen=stdio://`；拒绝 app-server 子命令、Unix/WebSocket/off transport、`--managed-daemon` 和启动时的 `--remote-control`。所有本机 config/OAuth/capability probes 同样显式使用 stdio，并通过进程级环境标记关闭继承的 Remote Control enrollment，不修改用户持久化偏好。
 5. 私有自动更新只用于 daemon-owned managed headless，不改变 VS Code host-bound 客户端自己的版本、全局 npm CLI、上游默认 daemon 的安装包或控制 socket；`CODEX_HOME` 和现有凭据保留。现有显式 standalone Codex upgrade 事务仍是独立的全局升级入口，不用作后台自动更新。
 

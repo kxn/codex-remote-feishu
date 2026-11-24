@@ -94,7 +94,7 @@ func (p *Processor) applySettingsReconcileLocked(ctx context.Context, o Owner, g
 		p.poisoned = true
 		return nil, err
 	}
-	effects, err := p.freezeEffects(o, "settings:"+version, events)
+	effects, err := p.freezeEffects(o, generation, "settings:"+version, events)
 	if err != nil {
 		p.poisoned = true
 		return nil, err

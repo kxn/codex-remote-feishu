@@ -117,7 +117,7 @@ func (p *Processor) applyHostReceipt(ctx context.Context, o Owner, generation in
 			return nil, err
 		}
 	}
-	effects, err := p.freezeEffects(o, "host:"+id, events)
+	effects, err := p.freezeEffects(o, generation, "host:"+id, events)
 	if err != nil {
 		p.poisoned = true
 		return nil, fmt.Errorf("%w: host effects: %v", ErrProcessorPoisoned, err)

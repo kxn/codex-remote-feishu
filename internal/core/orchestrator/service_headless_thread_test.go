@@ -52,6 +52,24 @@ func TestPreselectedHeadlessLaunchBlocksNormalInput(t *testing.T) {
 	if len(blocked) != 1 || blocked[0].Notice == nil || blocked[0].Notice.Code != "headless_starting" {
 		t.Fatalf("expected headless_starting notice while preselected launch pending, got %#v", blocked)
 	}
+	if snapshot.PendingHeadless.Purpose != state.HeadlessLaunchPurposeThreadRestore || !strings.Contains(blocked[0].Notice.Text, "恢复") {
+		t.Fatalf("existing thread should retain restore purpose and notice: %#v %#v", snapshot.PendingHeadless, blocked[0].Notice)
+	}
+}
+
+func TestFreshWorkspacePendingShowsStarting(t *testing.T) {
+	now := time.Date(2026, 4, 8, 10, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionStatus, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1"})
+	svc.root.Surfaces["surface-1"].PendingHeadless = &state.HeadlessLaunchRecord{InstanceID: "new", Purpose: state.HeadlessLaunchPurposeFreshWorkspace}
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot.PendingHeadless.Purpose != state.HeadlessLaunchPurposeFreshWorkspace {
+		t.Fatalf("fresh launch purpose lost in snapshot: %#v", snapshot.PendingHeadless)
+	}
+	events := svc.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", MessageID: "msg-1", Text: "你好"})
+	if len(events) != 1 || events[0].Notice == nil || !strings.Contains(events[0].Notice.Text, "启动") || strings.Contains(events[0].Notice.Text, "恢复") {
+		t.Fatalf("fresh launch should report starting: %#v", events)
+	}
 }
 
 func TestDetachedUseFreezesHeadlessLaunchContractIntoPendingAndCommand(t *testing.T) {

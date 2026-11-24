@@ -45,7 +45,7 @@ func (p *Processor) ApplyNativeDisconnect(ctx context.Context, l *NativeLease, c
 		if e != nil {
 			return e
 		}
-		effects, e := p.freezeEffects(l.surface, "disconnect:"+ref.Incarnation+":"+ref.ConnectionID, events)
+		effects, e := p.freezeEffects(l.surface, l.generation, "disconnect:"+ref.Incarnation+":"+ref.ConnectionID, events)
 		if e != nil {
 			p.poisoned = true
 			return e

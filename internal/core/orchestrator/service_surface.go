@@ -193,6 +193,9 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 }
 
 func pendingHeadlessTimeoutNotice(pending *state.HeadlessLaunchRecord) *control.Notice {
+	if pending != nil && pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
+		return &control.Notice{Code: "headless_start_timeout", Title: "启动超时", Text: "新会话启动超时，已自动取消。请重新选择工作区或新建会话。"}
+	}
 	if pending != nil && pending.AutoRestore {
 		return &control.Notice{
 			Code:  "headless_restore_start_timeout",

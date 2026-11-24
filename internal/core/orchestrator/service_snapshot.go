@@ -28,6 +28,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 	snapshot.Gate = s.snapshotGateSummary(surface)
 	if pending := surface.PendingHeadless; pending != nil {
 		snapshot.PendingHeadless = control.PendingHeadlessSummary{
+			Purpose:               pending.Purpose,
 			InstanceID:            pending.InstanceID,
 			ThreadID:              pending.ThreadID,
 			ThreadTitle:           pending.ThreadTitle,

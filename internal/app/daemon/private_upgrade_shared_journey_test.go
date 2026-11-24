@@ -53,15 +53,8 @@ func TestSharedCodexUpgradeRestartsAuthenticatedPrivateCarrier(t *testing.T) {
 	}
 	root, cwd := app.headlessRuntime.Paths.StateDir, t.TempDir()
 	binary := filepath.Join(t.TempDir(), "codex")
-	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'codex-cli 0.159.3\\n'; exit; fi\nPRIVATE_OPENCODE_FIXTURE=codex exec %q -test.run '^TestPrivateOpenCodeRelayFixtureProcess$'\n", exe)
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'codex-cli 0.159.3-dev.1\\n'; exit; fi\nPRIVATE_OPENCODE_FIXTURE=codex exec %q -test.run '^TestPrivateOpenCodeRelayFixtureProcess$'\n", exe)
 	if err = os.WriteFile(binary, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err = os.MkdirAll(filepath.Join(root, "codex-runtime"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	cache, _ := json.Marshal(map[string]any{"latest": "0.159.3", "checkedAt": time.Now().UTC()})
-	if err = os.WriteFile(filepath.Join(root, "codex-runtime", "check.json"), cache, 0600); err != nil {
 		t.Fatal(err)
 	}
 	app.headlessRuntime.BaseEnv = []string{"HOME=" + t.TempDir(), "PATH=" + os.Getenv("PATH"), "FIXTURE_TRACE=" + filepath.Join(t.TempDir(), "trace")}

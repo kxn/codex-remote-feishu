@@ -54,7 +54,7 @@ func (p *Processor) ApplyPrivateTick(ctx context.Context, l *NativeLease, tickID
 			return ErrJournalConflict
 		}
 		events := p.app.Service().TickPrivateSurface(o.SurfaceID, now)
-		effects, e := p.freezeEffects(o, "tick:"+tickID, events)
+		effects, e := p.freezeEffects(o, l.generation, "tick:"+tickID, events)
 		if e != nil {
 			p.poisoned = true
 			return e

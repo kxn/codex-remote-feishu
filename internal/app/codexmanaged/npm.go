@@ -3,10 +3,8 @@ package codexmanaged
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,40 +13,6 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
-
-const registryURL = "https://registry.npmjs.org/@openai%2fcodex/latest"
-
-func lookupLatest(ctx context.Context) (string, error) {
-	return lookupLatestWithEnv(ctx, os.Environ())
-}
-
-func lookupLatestWithEnv(ctx context.Context, env []string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, registryURL, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Accept", "application/json")
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = proxyFromEnv(env)
-	defer transport.CloseIdleConnections()
-	response, err := (&http.Client{Timeout: 5 * time.Second, Transport: transport}).Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("official Codex registry returned HTTP %d", response.StatusCode)
-	}
-	var record struct {
-		Version string `json:"version"`
-	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1024*1024)).Decode(&record); err != nil {
-		return "", err
-	}
-	return record.Version, nil
-}
 
 func readBinaryVersion(ctx context.Context, binary string) (string, error) {
 	return readBinaryVersionWithEnv(ctx, binary, os.Environ())
@@ -105,7 +69,7 @@ func installPrivateWithEnv(ctx context.Context, staging, target string, env []st
 	defer cancel()
 	// Explicit prefix and registry keep both install destination and release
 	// source independent of user npm defaults. Auth and CODEX_HOME are inherited.
-	args := []string{"install", "--prefix", staging, "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "@openai/codex@" + target}
+	args := []string{"install", "--prefix", staging, "--no-audit", "--no-fund", "--json", "--registry=https://registry.npmjs.org", "@openai/codex@" + target}
 	binary := "npm"
 	if runtime.GOOS == "windows" {
 		npm, err := executableFromEnv("npm", env)
@@ -126,9 +90,13 @@ func installPrivateWithEnv(ctx context.Context, staging, target string, env []st
 	cmd := execlaunch.CommandContext(ctx, binary, args...)
 	cmd.Env = append([]string{}, env...)
 	cmd.Dir = staging
-	// npm output can contain registry credentials; report exit status only.
-	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-	return cmd.Run()
+	// npm output can contain credentials. Only accept a restricted structured error code.
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, io.Discard
+	if err := cmd.Run(); err != nil {
+		return npmFailure(err, output.Bytes())
+	}
+	return nil
 }
 
 // Use the native executable so Windows does not need a .cmd shell launcher.

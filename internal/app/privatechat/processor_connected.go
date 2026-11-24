@@ -110,7 +110,7 @@ func (p *Processor) applyNativeConnectedLocked(ctx context.Context, l *NativeLea
 		return nil, ErrJournalConflict
 	}
 	events := p.app.Service().ApplyInstanceConnected(l.native.InstanceID)
-	effects, err := p.freezeEffects(l.surface, "native-connect:"+l.native.CarrierIncarnation+":"+connectionID, events)
+	effects, err := p.freezeEffects(l.surface, l.generation, "native-connect:"+l.native.CarrierIncarnation+":"+connectionID, events)
 	if err != nil {
 		p.poisoned = true
 		return nil, err

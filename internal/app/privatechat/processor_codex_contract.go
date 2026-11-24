@@ -57,7 +57,7 @@ func (p *Processor) applyCodexContractsLocked(ctx context.Context, o Owner, gene
 	if !changed {
 		return nil, nil
 	}
-	effects, e := p.freezeEffects(o, fmt.Sprintf("codex-contract:%s:%d", version, state.revision+1), events)
+	effects, e := p.freezeEffects(o, generation, fmt.Sprintf("codex-contract:%s:%d", version, state.revision+1), events)
 	if e != nil {
 		p.poisoned = true
 		return nil, e

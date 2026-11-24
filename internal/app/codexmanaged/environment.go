@@ -2,9 +2,6 @@ package codexmanaged
 
 import (
 	"fmt"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,54 +19,6 @@ func envValue(env []string, names ...string) string {
 		}
 	}
 	return ""
-}
-
-func proxyFromEnv(env []string) func(*http.Request) (*url.URL, error) {
-	proxy := envValue(env, "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy")
-	noProxy := envValue(env, "NO_PROXY", "no_proxy")
-	return func(req *http.Request) (*url.URL, error) {
-		if proxy == "" || bypassProxy(req.URL, noProxy) {
-			return nil, nil
-		}
-		parsed, err := url.Parse(proxy)
-		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "socks5" && parsed.Scheme != "socks5h") {
-			return nil, fmt.Errorf("invalid Codex registry proxy configuration")
-		}
-		return parsed, nil
-	}
-}
-
-func bypassProxy(target *url.URL, list string) bool {
-	host := strings.ToLower(target.Hostname())
-	ip := net.ParseIP(host)
-	port := target.Port()
-	if port == "" {
-		if target.Scheme == "https" {
-			port = "443"
-		} else {
-			port = "80"
-		}
-	}
-	for _, item := range strings.Split(list, ",") {
-		item = strings.ToLower(strings.TrimSpace(item))
-		if item == "*" {
-			return true
-		}
-		if _, network, err := net.ParseCIDR(item); err == nil && ip != nil && network.Contains(ip) {
-			return true
-		}
-		if bypassHost, bypassPort, err := net.SplitHostPort(item); err == nil {
-			if port != bypassPort {
-				continue
-			}
-			item = bypassHost
-		}
-		item = strings.TrimPrefix(strings.TrimPrefix(item, "*"), ".")
-		if item != "" && (host == item || strings.HasSuffix(host, "."+item)) {
-			return true
-		}
-	}
-	return false
 }
 
 // exec.LookPath reads the process PATH before cmd.Env can be assigned. Resolve

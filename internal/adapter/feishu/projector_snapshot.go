@@ -124,7 +124,7 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		if recovery.ClaimedInputs > 0 || recovery.OtherInputs > 0 || recovery.SuspendedInputs > 0 {
 			details = append(details, "发送 /recover 可查看保留的历史输入。")
 		}
-		details = append(details, "选择新会话后可继续交流。")
+		details = append(details, "以上为保留的旧记录，系统不会自动重发或重跑。")
 		sections = append(sections, control.FeishuCardTextSection{Label: "历史记录待核对", Lines: details})
 	}
 	if permissionGaps := formatSnapshotPermissionGapsPlain(snapshot.PermissionGaps); len(permissionGaps) != 0 {
@@ -134,8 +134,12 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		})
 	}
 	if headlessLines := pendingHeadlessSectionLines(snapshot.PendingHeadless); len(headlessLines) != 0 {
+		label := "后台恢复中"
+		if snapshot.PendingHeadless.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
+			label = "后台启动中"
+		}
 		sections = append(sections, control.FeishuCardTextSection{
-			Label: "后台恢复中",
+			Label: label,
 			Lines: headlessLines,
 		})
 	}

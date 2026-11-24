@@ -50,7 +50,7 @@ func (p *Processor) ApplyHostLifecycle(ctx context.Context, id string, at time.T
 					return result, ErrJournalConflict
 				}
 			}
-			effects, e := p.freezeEffects(o, ref.ID, events)
+			effects, e := p.freezeEffects(o, state.generation, ref.ID, events)
 			if e != nil {
 				p.poisoned = true
 				return result, e

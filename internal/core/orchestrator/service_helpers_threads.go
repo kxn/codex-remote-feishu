@@ -373,6 +373,9 @@ func headlessPendingNoticeCode(pending *state.HeadlessLaunchRecord) string {
 }
 
 func headlessPendingNoticeText(pending *state.HeadlessLaunchRecord) string {
+	if pending != nil && pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
+		return "新会话正在启动中，请等待完成，或执行 /detach 取消。"
+	}
 	if pending != nil && pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
 		return "当前工作区正在重新准备运行环境，请等待完成，或执行 /detach 取消。"
 	}

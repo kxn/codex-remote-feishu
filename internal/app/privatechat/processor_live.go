@@ -90,7 +90,7 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 				return fmt.Errorf("%w: live event produced command", ErrProcessorPoisoned)
 			}
 		}
-		effects, e := p.freezeEffects(l.surface, fmt.Sprintf("live:%s:%d", ref.Incarnation, ref.Sequence), events)
+		effects, e := p.freezeEffects(l.surface, l.generation, fmt.Sprintf("live:%s:%d", ref.Incarnation, ref.Sequence), events)
 		if e != nil {
 			p.poisoned = true
 			return e

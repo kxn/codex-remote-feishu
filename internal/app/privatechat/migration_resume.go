@@ -104,7 +104,7 @@ func (p *Processor) PrepareMigrationResume(ctx context.Context, o Owner, generat
 		p.poisoned = true
 		return nil, e
 	}
-	effects, e := p.freezeEffects(o, "migration-resume:"+importID, events)
+	effects, e := p.freezeEffects(o, generation, "migration-resume:"+importID, events)
 	if e != nil {
 		p.poisoned = true
 		return nil, e

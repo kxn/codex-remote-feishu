@@ -166,7 +166,7 @@ func (p *Processor) ApplyNative(ctx context.Context, l *NativeLease, ref NativeE
 			}
 			events = append(events, follow...)
 		}
-		effects, e := p.freezeEffects(l.surface, fmt.Sprintf("native:%s:%d", ref.Incarnation, ref.Sequence), events)
+		effects, e := p.freezeEffects(l.surface, l.generation, fmt.Sprintf("native:%s:%d", ref.Incarnation, ref.Sequence), events)
 		if e != nil {
 			p.poisoned = true
 			return fmt.Errorf("%w: native effects: %v", ErrProcessorPoisoned, e)

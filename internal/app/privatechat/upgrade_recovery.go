@@ -257,7 +257,7 @@ func (p *Processor) PrepareUpgradeRecovery(ctx context.Context, plan UpgradeReco
 			p.poisoned = true
 			return err
 		}
-		effects, err := p.freezeEffects(plan.Owner, "upgrade-recovery:"+plan.MaintenanceID+":"+plan.OldOwner.CarrierIncarnation, events)
+		effects, err := p.freezeEffects(plan.Owner, plan.Generation, "upgrade-recovery:"+plan.MaintenanceID+":"+plan.OldOwner.CarrierIncarnation, events)
 		if err != nil {
 			p.poisoned = true
 			return err
@@ -374,7 +374,7 @@ func (p *Processor) ResumeUpgradeRecovery(ctx context.Context, plan UpgradeRecov
 		if err != nil {
 			return err
 		}
-		effects, err := p.freezeEffects(plan.Owner, "upgrade-resumed:"+plan.MaintenanceID+":"+plan.OldOwner.CarrierIncarnation, events)
+		effects, err := p.freezeEffects(plan.Owner, plan.Generation, "upgrade-resumed:"+plan.MaintenanceID+":"+plan.OldOwner.CarrierIncarnation, events)
 		if err != nil {
 			p.poisoned = true
 			return err

@@ -56,21 +56,11 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 	versionOutput := "2.1.4"
 	if backend == agentproto.BackendCodex {
 		nativeMode = "codex"
-		versionOutput = "codex-cli 0.159.3"
+		versionOutput = "codex-cli 0.159.3-dev.1"
 	}
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n'; exit; fi\nPRIVATE_OPENCODE_FIXTURE=%s exec %q -test.run '^TestPrivateOpenCodeRelayFixtureProcess$'\n", versionOutput, nativeMode, exe)
 	if e = os.WriteFile(binary, []byte(script), 0700); e != nil {
 		t.Fatal(e)
-	}
-	if backend == agentproto.BackendCodex {
-		cacheDir := filepath.Join(root, "codex-runtime")
-		if e = os.MkdirAll(cacheDir, 0700); e != nil {
-			t.Fatal(e)
-		}
-		cache, _ := json.Marshal(map[string]any{"latest": "0.159.3", "checkedAt": time.Now().UTC()})
-		if e = os.WriteFile(filepath.Join(cacheDir, "check.json"), cache, 0600); e != nil {
-			t.Fatal(e)
-		}
 	}
 	trace := filepath.Join(t.TempDir(), "native-frames.jsonl")
 	app.headlessRuntime.BaseEnv = []string{"HOME=" + t.TempDir(), "PATH=" + os.Getenv("PATH"), "OPENCODE_BIN=" + binary, "FIXTURE_TRACE=" + trace}

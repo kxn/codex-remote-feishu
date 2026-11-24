@@ -255,6 +255,7 @@ type AttachmentSummary struct {
 }
 
 type PendingHeadlessSummary struct {
+	Purpose                 state.HeadlessLaunchPurpose
 	InstanceID              string
 	ThreadID                string
 	ThreadTitle             string

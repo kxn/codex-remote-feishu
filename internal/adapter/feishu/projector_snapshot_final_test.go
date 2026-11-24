@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
@@ -1634,6 +1635,32 @@ func TestProjectSnapshotIncludesBackgroundRestoreAttachmentAndPendingLaunch(t *t
 	}
 	if strings.Contains(rendered, "在线实例：") {
 		t.Fatalf("status card should not include online instance list, got %q", rendered)
+	}
+}
+
+func TestProjectSnapshotFreshWorkspaceShowsStarting(t *testing.T) {
+	ops := NewProjector().ProjectEvent("chat-1", eventcontract.Event{Kind: eventcontract.KindSnapshot, Snapshot: &control.Snapshot{
+		PendingHeadless: control.PendingHeadlessSummary{Purpose: state.HeadlessLaunchPurposeFreshWorkspace, InstanceID: "new", ThreadCWD: "/workspace"},
+	}})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !strings.Contains(rendered, "**后台启动中**") || strings.Contains(rendered, "**后台恢复中**") {
+		t.Fatalf("unexpected fresh launch rendering: %q", rendered)
+	}
+}
+
+func TestProjectSnapshotHistoricalRecoveryDescribesPreservedRecords(t *testing.T) {
+	ops := NewProjector().ProjectEvent("chat-1", eventcontract.Event{Kind: eventcontract.KindSnapshot, Snapshot: &control.Snapshot{
+		HistoricalRecovery: &control.HistoricalRecoverySummary{ClaimedInputs: 1, UnresolvedExecutions: 1},
+	}})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered, "历史记录待核对", "执行结果尚待核对", "以上为保留的旧记录，系统不会自动重发或重跑。") || strings.Contains(rendered, "选择新会话后可继续交流") {
+		t.Fatalf("unexpected historical recovery rendering: %q", rendered)
 	}
 }
 
