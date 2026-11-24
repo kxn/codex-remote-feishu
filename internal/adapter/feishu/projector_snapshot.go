@@ -101,7 +101,7 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 	}
 
 	sections := []control.FeishuCardTextSection{{Lines: lines}}
-	if recovery := snapshot.HistoricalRecovery; recovery != nil && (recovery.UnconfirmedReplies > 0 || recovery.ClaimedInputs > 0 || recovery.OtherInputs > 0 || recovery.SuspendedInputs > 0 || recovery.UnresolvedExecutions > 0) {
+	if recovery := snapshot.HistoricalRecovery; recovery != nil && (recovery.UnconfirmedReplies > 0 || recovery.ClaimedInputs > 0 || recovery.OtherInputs > 0 || recovery.SuspendedInputs > 0 || recovery.UnresolvedExecutions > 0 || recovery.UnresolvedControls > 0) {
 		var details []string
 		if recovery.UnconfirmedReplies > 0 {
 			details = append(details, fmt.Sprintf("%d 条历史答复的发送结果尚未确认，系统不会自动重复发送。", recovery.UnconfirmedReplies))
@@ -117,6 +117,9 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		}
 		if recovery.UnresolvedExecutions > 0 {
 			details = append(details, fmt.Sprintf("%d 个历史执行的结果尚待核对，系统不会自动重复运行。", recovery.UnresolvedExecutions))
+		}
+		if recovery.UnresolvedControls > 0 {
+			details = append(details, fmt.Sprintf("旧会话控制有 %d 条结果未确认，已保留记录，不自动重发。", recovery.UnresolvedControls))
 		}
 		if recovery.ClaimedInputs > 0 || recovery.OtherInputs > 0 || recovery.SuspendedInputs > 0 {
 			details = append(details, "发送 /recover 可查看保留的历史输入。")

@@ -15,15 +15,31 @@ import (
 )
 
 type historicalInbox struct {
-	ID        string `json:"id"`
-	MessageID string `json:"message_id"`
-	ScopeID   string `json:"scope_id"`
+	ID                  string `json:"id"`
+	MessageID           string `json:"message_id"`
+	ScopeID             string `json:"scope_id"`
+	RecipientContextID  string `json:"recipient_context_id"`
+	TaskID              string `json:"task_id"`
+	RelatedTaskID       string `json:"related_task_id"`
+	ShellOperationID    string `json:"shell_operation_id"`
+	ControlOfInputID    string `json:"control_of_input_id"`
+	AutomationEpisodeID string `json:"automation_episode_id"`
+	SessionGoalIntentID string `json:"session_goal_intent_id"`
 }
 type historicalMessage struct {
 	ID          string                 `json:"id"`
 	ScopeID     string                 `json:"scope_id"`
 	BodyRef     string                 `json:"body_ref"`
 	Attachments []HistoricalAttachment `json:"attachments"`
+	Source      struct {
+		Kind string `json:"kind"`
+		ID   string `json:"id"`
+	} `json:"source"`
+	PlatformKey *struct {
+		Tenant    string `json:"tenant"`
+		ChatID    string `json:"chat_id"`
+		MessageID string `json:"message_id"`
+	} `json:"platform_key"`
 }
 type HistoricalAttachment struct {
 	ContentRef      string `json:"content_ref"`
@@ -46,6 +62,7 @@ type HistoricalInput struct {
 	Text          string
 	TextAvailable bool
 	Attachments   []HistoricalInputAttachment
+	inbox         historicalInbox
 }
 type HistoricalInputAttachment struct {
 	Attachment HistoricalAttachment
@@ -79,11 +96,11 @@ func (j *Journal) historicalInputPage(ctx context.Context, owner Owner, generati
 		return nil, ErrJournalState
 	}
 	var total int
-	err := j.db.QueryRowContext(ctx, `SELECT count(*) FROM private_migration_input_holds h JOIN private_migration_imports i ON i.import_id=h.import_id WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=?`, owner.TenantID, owner.AppID, owner.GatewayID, owner.SurfaceID, owner.ChatID, owner.UserID, generation).Scan(&total)
+	err := j.db.QueryRowContext(ctx, `SELECT count(*) FROM private_migration_input_holds h JOIN private_migration_imports i ON i.import_id=h.import_id WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND h.reason<>'internal_component_nonreplayable'`, owner.TenantID, owner.AppID, owner.GatewayID, owner.SurfaceID, owner.ChatID, owner.UserID, generation).Scan(&total)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := j.db.QueryContext(ctx, `SELECT i.import_id,i.source_scope,h.inbox_id,h.message_id,h.payload_hash,r.payload,r.payload_hash,m.payload,m.payload_hash,c.data,c.data_hash,c.payload,c.payload_hash FROM private_migration_input_holds h JOIN private_migration_imports i ON i.import_id=h.import_id LEFT JOIN private_migration_records r ON r.import_id=h.import_id AND r.source_table='inbox' AND r.source_key=h.inbox_id AND r.source_scope=i.source_scope LEFT JOIN private_migration_records m ON m.import_id=h.import_id AND m.source_table='messages' AND m.source_key=h.message_id AND m.source_scope=i.source_scope LEFT JOIN private_migration_records c ON c.import_id=h.import_id AND c.source_table='content' AND c.source_key=json_extract(m.payload,'$.body_ref') AND c.source_scope=i.source_scope WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? ORDER BY r.source_order LIMIT ? OFFSET ?`, owner.TenantID, owner.AppID, owner.GatewayID, owner.SurfaceID, owner.ChatID, owner.UserID, generation, limit, offset)
+	rows, err := j.db.QueryContext(ctx, `SELECT i.import_id,i.source_scope,h.inbox_id,h.message_id,h.payload_hash,r.payload,r.payload_hash,m.payload,m.payload_hash,c.data,c.data_hash,c.payload,c.payload_hash FROM private_migration_input_holds h JOIN private_migration_imports i ON i.import_id=h.import_id LEFT JOIN private_migration_records r ON r.import_id=h.import_id AND r.source_table='inbox' AND r.source_key=h.inbox_id AND r.source_scope=i.source_scope LEFT JOIN private_migration_records m ON m.import_id=h.import_id AND m.source_table='messages' AND m.source_key=h.message_id AND m.source_scope=i.source_scope LEFT JOIN private_migration_records c ON c.import_id=h.import_id AND c.source_table='content' AND c.source_key=json_extract(m.payload,'$.body_ref') AND c.source_scope=i.source_scope WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND h.reason<>'internal_component_nonreplayable' ORDER BY r.source_order LIMIT ? OFFSET ?`, owner.TenantID, owner.AppID, owner.GatewayID, owner.SurfaceID, owner.ChatID, owner.UserID, generation, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +127,7 @@ func (j *Journal) historicalInputPage(ctx context.Context, owner Owner, generati
 		if json.Unmarshal(contentRaw, &contentMeta) != nil {
 			return nil, ErrJournalConflict
 		}
-		v := HistoricalInput{InboxID: id, ImportID: importID, PayloadHash: holdHash, Kind: "inbox", Message: m}
+		v := HistoricalInput{InboxID: id, ImportID: importID, PayloadHash: holdHash, Kind: "inbox", Message: m, inbox: inbox}
 		if strings.HasPrefix(contentMeta.MediaType, "text/plain") && utf8.Valid(body) {
 			v.Text = string(body)
 			v.TextAvailable = true

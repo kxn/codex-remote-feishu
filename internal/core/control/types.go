@@ -223,7 +223,7 @@ type Snapshot struct {
 	Threads            []ThreadSummary
 }
 
-type HistoricalRecoverySummary struct{ UnconfirmedReplies, ClaimedInputs, OtherInputs, SuspendedInputs, UnresolvedExecutions int }
+type HistoricalRecoverySummary struct{ UnconfirmedReplies, ClaimedInputs, OtherInputs, SuspendedInputs, UnresolvedExecutions, UnresolvedControls int }
 
 type PermissionGapSummary struct {
 	Scope        string

@@ -52,21 +52,21 @@ func mapPersonalMigrationInputs(report *PrivateMigrationReport, c *orchestrator.
 			raw, _ := json.Marshal(in)
 			report.InputHolds = append(report.InputHolds, PrivateMigrationInputHold{InboxID: in.ID, MessageID: in.MessageID, Reason: reason, PayloadHash: migrationBytesHash(raw)})
 		}
+		if nav.Mode != work.PrivatePersonal || in.RecipientContextID != nav.FrontContextID || in.TaskID != "" || in.RelatedTaskID != "" || in.ShellOperationID != "" || in.ControlOfInputID != "" || in.AutomationEpisodeID != "" || in.SessionGoalIntentID != "" {
+			block("internal_component_nonreplayable")
+			continue
+		}
+		m, ok := messages[in.MessageID]
+		if !ok || m.Source.Kind != work.ActorPrincipal || m.Source.ID != sourcePrincipal(report, rows) || m.PlatformKey == nil || m.PlatformKey.Tenant != owner.TenantID || m.PlatformKey.ChatID != owner.ChatID {
+			block("input_platform_source_unverified")
+			continue
+		}
 		if in.State == work.InboxClaimed {
 			block("claimed_input_requires_native_reconciliation")
 			continue
 		}
 		if in.ContentState == work.InputContentPending || in.ContentState == work.InputContentPartial {
 			block("input_content_not_complete")
-			continue
-		}
-		if nav.Mode != work.PrivatePersonal || in.RecipientContextID != nav.FrontContextID || in.TaskID != "" || in.RelatedTaskID != "" || in.ShellOperationID != "" || in.ControlOfInputID != "" || in.AutomationEpisodeID != "" || in.SessionGoalIntentID != "" {
-			block("input_route_requires_reconciliation")
-			continue
-		}
-		m, ok := messages[in.MessageID]
-		if !ok || m.Source.Kind != work.ActorPrincipal || m.Source.ID != sourcePrincipal(report, rows) || m.PlatformKey == nil || m.PlatformKey.Tenant != owner.TenantID || m.PlatformKey.ChatID != owner.ChatID {
-			block("input_platform_source_unverified")
 			continue
 		}
 		images := []PersonalMigrationAsset{}

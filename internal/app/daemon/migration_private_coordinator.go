@@ -63,6 +63,9 @@ func (r *teamRuntime) advanceBoundPersonalSourceDrain(ctx context.Context, route
 		if e = r.isolateExitedPersonalWorkers(ctx, binding.ScopeID, "migration-intake-proof:"+proof.Digest, now); e != nil {
 			return out, errors.Join(err, e)
 		}
+		if e = r.isolatePersonalControlOperations(ctx, binding.ScopeID, "migration-intake-proof:"+proof.Digest, now); e != nil {
+			return out, errors.Join(err, e)
+		}
 	}
 	if e := router.VerifyBoundOwnerMigrationDrain(ctx, binding, migrationID, proof); e != nil {
 		return out, errors.Join(err, e)
@@ -166,6 +169,22 @@ func (r *teamRuntime) advancePersonalSourceDrain(ctx context.Context, scopeID, m
 	if result.Status.UnsettledAttempts == 0 && result.Status.OccupiedCarriers == 0 && result.Status.OccupiedResources == 0 && result.Status.OccupiedControllers == 0 {
 		for _, worker := range result.Workers {
 			if worker.State == work.WorkerRetired {
+				continue
+			}
+			var isolated workstore.PersonalExecutionIsolation
+			holdErr := r.store.Within(ctx, func(tx *workstore.Tx) error {
+				var e error
+				isolated, e = tx.GetPersonalExecutionIsolation(scopeID, worker.ID)
+				return e
+			})
+			if holdErr == nil {
+				if holdErr = r.verifyPersonalExecutionIsolation(ctx, isolated); holdErr != nil {
+					failures = append(failures, fmt.Errorf("worker %s isolation: %w", worker.ID, holdErr))
+				}
+				continue
+			}
+			if !errors.Is(holdErr, workstore.ErrNotFound) {
+				failures = append(failures, fmt.Errorf("worker %s isolation: %w", worker.ID, holdErr))
 				continue
 			}
 			if worker.State == work.WorkerPreparing {

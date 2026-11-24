@@ -27,7 +27,7 @@ func verifiedPersonalExecutionHolds(rows map[string][]workstore.PersonalExportRe
 		err := json.Compact(&b, raw)
 		return b.Bytes(), err
 	}
-	heldWorkers := map[string]bool{}
+	heldWorkers := map[string]int64{}
 	carriers := map[string]bool{}
 	for _, r := range rows["personal_migration_execution_holds"] {
 		var h struct {
@@ -66,7 +66,7 @@ func verifiedPersonalExecutionHolds(rows map[string][]workstore.PersonalExportRe
 		if e != nil || !bytes.Equal(a, b) {
 			return nil, nil, nil, fmt.Errorf("execution process changed")
 		}
-		heldWorkers[worker.ID] = true
+		heldWorkers[worker.ID] = worker.Generation
 		carriers[worker.CarrierIncarnation] = true
 	}
 	heldAttempts := map[string]bool{}
@@ -75,7 +75,7 @@ func verifiedPersonalExecutionHolds(rows map[string][]workstore.PersonalExportRe
 		if json.Unmarshal(r.Payload, &a) != nil {
 			return nil, nil, nil, fmt.Errorf("invalid execution attempt")
 		}
-		if heldWorkers[a.RunRef.WorkerID] {
+		if generation, ok := heldWorkers[a.RunRef.WorkerID]; ok && generation == a.RunRef.Generation {
 			heldAttempts[r.Key] = true
 		}
 	}

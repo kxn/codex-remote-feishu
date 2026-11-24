@@ -120,13 +120,13 @@ func (r privateHostReducer) withHistoricalRecovery(app *privatechat.App, action 
 	if err != nil {
 		return nil, err
 	}
-	if summary.UnconfirmedReplies == 0 && summary.ClaimedInputs == 0 && summary.OtherInputs == 0 && summary.SuspendedInputs == 0 && summary.UnresolvedExecutions == 0 {
+	if summary.UnconfirmedReplies == 0 && summary.ClaimedInputs == 0 && summary.OtherInputs == 0 && summary.SuspendedInputs == 0 && summary.UnresolvedExecutions == 0 && summary.UnresolvedControls == 0 {
 		return events, nil
 	}
 	for i := range events {
 		if events[i].Snapshot != nil {
 			snapshot := *events[i].Snapshot
-			snapshot.HistoricalRecovery = &control.HistoricalRecoverySummary{UnconfirmedReplies: summary.UnconfirmedReplies, ClaimedInputs: summary.ClaimedInputs, OtherInputs: summary.OtherInputs, SuspendedInputs: summary.SuspendedInputs, UnresolvedExecutions: summary.UnresolvedExecutions}
+			snapshot.HistoricalRecovery = &control.HistoricalRecoverySummary{UnconfirmedReplies: summary.UnconfirmedReplies, ClaimedInputs: summary.ClaimedInputs, OtherInputs: summary.OtherInputs, SuspendedInputs: summary.SuspendedInputs, UnresolvedExecutions: summary.UnresolvedExecutions, UnresolvedControls: summary.UnresolvedControls}
 			events[i].Snapshot = &snapshot
 			events[i].Payload = nil
 		}

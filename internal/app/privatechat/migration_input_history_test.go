@@ -1,6 +1,7 @@
 package privatechat
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,13 +72,13 @@ func TestHistoricalConfirmationCommitsOnceAndDoesNotReuseOldSession(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	inbox := []byte(`{"id":"inbox","message_id":"message","scope_id":"source"}`)
-	msg := []byte(`{"id":"message","scope_id":"source","body_ref":"body"}`)
+	inbox := []byte(`{"id":"inbox","message_id":"message","scope_id":"source","recipient_context_id":"front"}`)
+	msg, _ := json.Marshal(map[string]any{"id": "message", "scope_id": "source", "body_ref": "body", "source": map[string]string{"kind": "principal", "id": "principal"}, "platform_key": map[string]string{"tenant": o.TenantID, "chat_id": o.ChatID, "message_id": "source-message"}})
 	body := []byte("原始需求")
 	for _, r := range []struct {
 		table, key    string
 		payload, data []byte
-	}{{"inbox", "inbox", inbox, nil}, {"messages", "message", msg, nil}, {"content", "body", []byte(`{"media_type":"text/plain"}`), body}, {"workers", "worker", []byte(`{"native_session_id":"old-thread"}`), nil}} {
+	}{{"inbox", "inbox", inbox, nil}, {"messages", "message", msg, nil}, {"scopes", "source", []byte(`{"principal_id":"principal"}`), nil}, {"private_navigation", "navigation", []byte(`{"mode":"personal","front_context_id":"front"}`), nil}, {"content", "body", []byte(`{"media_type":"text/plain"}`), body}, {"workers", "worker", []byte(`{"native_session_id":"old-thread"}`), nil}} {
 		_, err = j.db.ExecContext(ctx, `INSERT INTO private_migration_records(import_id,source_table,source_key,source_scope,source_order,source_revision,payload,payload_hash,data,data_hash) VALUES('i',?,?,'source',1,1,?,?,?,?)`, r.table, r.key, r.payload, migrationSHA(r.payload), r.data, migrationSHA(r.data))
 		if err != nil {
 			t.Fatal(err)
@@ -304,5 +305,53 @@ func TestHistoricalAssetRequiresExactBytesAndPrivateFile(t *testing.T) {
 	}
 	if err := verifyHistoricalAsset(path, migrationSHA(body), int64(len(body))); err == nil {
 		t.Fatal("public asset accepted")
+	}
+}
+
+func TestHistoricalRecoveryServerRejectsClaimedControlAndSlash(t *testing.T) {
+	ctx := t.Context()
+	j, p, _, o, _ := effectFixture(t)
+	_, err := j.db.ExecContext(ctx, `INSERT INTO private_migration_imports(import_id,source_scope,source_hash,proof_hash,tenant,app_id,gateway,surface,chat,user_id,generation,receipt) VALUES('guard','source','hash','proof',?,?,?,?,?,?,1,'{}')`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(table, key string, order int, payload, data []byte) {
+		t.Helper()
+		_, e := j.db.ExecContext(ctx, `INSERT INTO private_migration_records(import_id,source_table,source_key,source_scope,source_order,source_revision,payload,payload_hash,data,data_hash) VALUES('guard',?,?, 'source',?,1,?,?,?,?)`, table, key, order, payload, migrationSHA(payload), data, migrationSHA(data))
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
+	add("scopes", "source", 1, []byte(`{"principal_id":"principal"}`), nil)
+	add("private_navigation", "source", 1, []byte(`{"mode":"personal","front_context_id":"front"}`), nil)
+	for i, v := range []struct{ id, text, extra string }{{"control", "旧控制内容", `,"control_of_input_id":"input-old"`}, {"slash", "/stop", ""}} {
+		inbox := []byte(fmt.Sprintf(`{"id":%q,"message_id":%q,"scope_id":"source","recipient_context_id":"front"%s}`, v.id, v.id, v.extra))
+		msg, _ := json.Marshal(map[string]any{"id": v.id, "scope_id": "source", "body_ref": v.id, "source": map[string]string{"kind": "principal", "id": "principal"}, "platform_key": map[string]string{"tenant": o.TenantID, "chat_id": o.ChatID, "message_id": v.id}})
+		add("inbox", v.id, i+1, inbox, nil)
+		add("messages", v.id, i+1, msg, nil)
+		add("content", v.id, i+1, []byte(`{"media_type":"text/plain"}`), []byte(v.text))
+		_, err = j.db.ExecContext(ctx, `INSERT INTO private_migration_input_holds(import_id,inbox_id,message_id,reason,payload_hash) VALUES('guard',?,?,'claimed_input_requires_native_reconciliation',?)`, v.id, v.id, migrationSHA(inbox))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = j.db.ExecContext(ctx, `INSERT INTO private_migration_input_holds(import_id,inbox_id,message_id,reason,payload_hash) VALUES('guard','internal','internal','internal_component_nonreplayable','unused')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible, err := j.HistoricalInputs(ctx, o, 1, 10)
+	if err != nil || len(visible) != 2 {
+		t.Fatalf("internal component entered recoverable list: %v %v", visible, err)
+	}
+	surface := p.app.Service().Surface(o.SurfaceID)
+	surface.RouteMode = state.RouteModeNewThreadReady
+	surface.SelectedThreadID = ""
+	for _, n := range []string{"1", "2"} {
+		action := privateAction(o, control.ActionTextMessage)
+		action.Text = "/recover confirm " + n
+		got, ref, e := p.prepareHistoricalInput(ctx, o, 1, action)
+		if e != nil || ref != nil || got.Text != "/recover unavailable" {
+			t.Fatalf("unsafe historical recovery %s: %q %+v %v", n, got.Text, ref, e)
+		}
 	}
 }

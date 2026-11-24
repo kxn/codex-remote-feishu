@@ -134,9 +134,8 @@ func mapPersonalMigrationSourceAssets(source PersonalMigrationSource, owner priv
 			return report, err
 		}
 		report.Evidence = append(report.Evidence, PrivateMigrationEvidence{"contexts", r.Key, append(json.RawMessage(nil), r.Payload...)})
-		if context.ID != nav.FrontContextID {
-			block("contexts", context.ID, "additional_context_requires_mapping")
-		}
+		// Non-front contexts remain imported source records. They never select
+		// the current private session or authorize replay of their inputs.
 	}
 	for _, r := range rows["context_preferences"] {
 		var p work.ContextPreferences
@@ -226,6 +225,20 @@ func mapPersonalMigrationSourceAssets(source PersonalMigrationSource, owner priv
 	if err != nil {
 		return report, err
 	}
+	heldControlOps, heldControlCommands, err := verifiedPersonalControlHolds(rows)
+	if err != nil {
+		return report, err
+	}
+	for id := range heldControlOps {
+		heldExecutionOps[id] = true
+	}
+	for id := range heldControlCommands {
+		heldExecutionCommands[id] = true
+	}
+	heldRequests, err := verifiedPersonalRequestComponents(rows, heldAttempts)
+	if err != nil {
+		return report, err
+	}
 	preservedOps, preservedOutbox, err := verifiedPersonalPreserved(rows)
 	if err != nil {
 		return report, err
@@ -238,12 +251,12 @@ func mapPersonalMigrationSourceAssets(source PersonalMigrationSource, owner priv
 			}
 			stateValue, _ := x["state"].(string)
 			stage, _ := x["stage"].(string)
-			pending := table == "attempts" && (stateValue == "prepared" || stateValue == "dispatch_pending" || stateValue == "running" || stateValue == "reconciling") || table == "operations" && stateValue != "confirmed" && stateValue != "terminal" || table == "outbox" && stateValue != "sent" && stateValue != "terminal" || table == "native_commands" || table == "native_ui_requests" || table == "native_upgrades" && stage != "completed"
+			pending := table == "attempts" && (stateValue == "prepared" || stateValue == "dispatch_pending" || stateValue == "running" || stateValue == "reconciling") || table == "operations" && stateValue != "confirmed" && stateValue != "terminal" || table == "outbox" && stateValue != "sent" && stateValue != "terminal" || table == "native_commands" || table == "native_ui_requests" && stateValue != "resolved" && stateValue != "stale" || table == "native_upgrades" && stage != "completed"
 			report.Evidence = append(report.Evidence, PrivateMigrationEvidence{table, r.Key, append(json.RawMessage(nil), r.Payload...)})
 			if table == "team_ui_views" || table == "menu_interactions" || table == "outbox" {
 				block(table, r.Key, "target_journal_or_view_import_unavailable")
 			}
-			if pending && !(table == "operations" && preservedOps[r.Key]) && !(table == "outbox" && preservedOutbox[r.Key]) && !((table == "operations" || table == "native_commands") && archivedReads[r.Key]) && !(table == "operations" && heldPublications[r.Key]) && !(table == "outbox" && heldOutboxes[r.Key]) && !(table == "attempts" && heldAttempts[r.Key]) && !(table == "operations" && heldExecutionOps[r.Key]) && !(table == "native_commands" && heldExecutionCommands[r.Key]) {
+			if pending && !(table == "operations" && preservedOps[r.Key]) && !(table == "outbox" && preservedOutbox[r.Key]) && !((table == "operations" || table == "native_commands") && archivedReads[r.Key]) && !(table == "operations" && heldPublications[r.Key]) && !(table == "outbox" && heldOutboxes[r.Key]) && !(table == "attempts" && heldAttempts[r.Key]) && !(table == "operations" && heldExecutionOps[r.Key]) && !(table == "native_commands" && heldExecutionCommands[r.Key]) && !(table == "native_ui_requests" && heldRequests[r.Key]) {
 				block(table, r.Key, "requires_recovery_reconciliation")
 				c.Holds = append(c.Holds, orchestrator.PrivateRecoveryHold{Kind: "source_" + table, Frozen: append(json.RawMessage(nil), r.Payload...)})
 			}

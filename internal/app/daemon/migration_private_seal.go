@@ -61,6 +61,9 @@ func (a *App) sealPersonalSource(ctx context.Context, router *ingressowner.Route
 	if err := r.waitPersonalSourceActivities(ctx, binding.ScopeID); err != nil {
 		return zero, err
 	}
+	if err := r.verifyPersonalControlIsolations(ctx, binding.ScopeID); err != nil {
+		return zero, err
+	}
 	source, err := a.capturePersonalMigrationSource(ctx, r.store, binding.ScopeID, limits)
 	if err != nil {
 		return zero, err
@@ -142,6 +145,9 @@ func (a *App) verifyPersonalSourceSeal(ctx context.Context, router *ingressowner
 func (a *App) verifyPersonalSourceSealLocal(ctx context.Context, seal workstore.PersonalMigrationSeal, limits workstore.PersonalExportLimits) error {
 	if a.teamRuntime == nil {
 		return workstore.ErrConflict
+	}
+	if err := a.teamRuntime.verifyPersonalControlIsolations(ctx, seal.ScopeID); err != nil {
+		return err
 	}
 	var saved workstore.PersonalMigrationSeal
 	if err := a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {

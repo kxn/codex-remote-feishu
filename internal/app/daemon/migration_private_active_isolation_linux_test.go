@@ -66,6 +66,37 @@ func TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.Within(ctx, func(tx *workstore.Tx) error {
+		carrier, e := tx.GetCarrier(worker.CarrierIncarnation)
+		if e != nil {
+			return e
+		}
+		binding := carrier.Owner
+		binding.AttemptID = attempt.ID
+		binding.RunRef = attempt.RunRef.RunID
+		command := agentproto.Command{CommandID: "unknown-control", Kind: agentproto.CommandThreadGoalClear, Execution: &binding, Target: agentproto.Target{ThreadID: "native-thread"}}
+		commandRaw, e := json.Marshal(command)
+		if e != nil {
+			return e
+		}
+		commandBody := work.NewContent("unknown-control:request", worker.ScopeID, "application/json", commandRaw, now)
+		if e = tx.PutContent(commandBody); e != nil {
+			return e
+		}
+		operation := work.Operation{ID: command.CommandID, ScopeID: worker.ScopeID, ContextID: worker.ContextID, Actor: work.Actor{Kind: work.ActorSystem, ID: "admission-gate"}, Kind: "native.gate_stop", TargetID: worker.ID, TargetGeneration: worker.Generation, IdempotencyKey: command.CommandID, RequestHash: commandBody.SHA256, RequestRef: commandBody.ID, State: work.OperationUnknown, Revision: 1, CreatedAt: now, UpdatedAt: now}
+		if _, _, e = tx.PutOperation(operation, 0); e != nil {
+			return e
+		}
+		if _, e = tx.RegisterNativeCommand(worker.CarrierIncarnation, command); e != nil {
+			return e
+		}
+		if e = tx.PutContext(work.WorkContext{ID: "historical-context", ScopeID: worker.ScopeID, RoleID: worker.RoleID, Workstream: "legacy:test", Revision: 1, CreatedAt: now, UpdatedAt: now}, 0); e != nil {
+			return e
+		}
+		return tx.PutNativeRequest(workstore.NativeRequest{ID: "stale-request", ScopeID: worker.ScopeID, CarrierIncarnation: worker.CarrierIncarnation, Binding: binding, NativeRequestID: "native-old", State: "stale", Revision: 1, CreatedAt: now, UpdatedAt: now}, 0)
+	}); err != nil {
+		t.Fatal(err)
+	}
 	// Simulate the old carrier dying; the test owns this child process.
 	proc, err := os.FindProcess(process.PID)
 	if err != nil {
@@ -222,6 +253,9 @@ func TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier(t *testing.T) {
 	if err = r.holdUncertainPersonalReactions(ctx, "scope", proofID, now); err != nil {
 		t.Fatal(err)
 	}
+	if err = r.isolatePersonalControlOperations(ctx, "scope", proofID, now); err != nil {
+		t.Fatal(err)
+	}
 
 	var isolation workstore.PersonalExecutionIsolation
 	if err = store.Within(ctx, func(tx *workstore.Tx) error {
@@ -281,8 +315,29 @@ func TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier(t *testing.T) {
 	coordinator.limits = limits
 	targetOwner := privatechat.Owner{GatewayID: "gateway", SurfaceID: gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "human"), ChatID: "chat", UserID: "human", TenantID: "tenant", AppID: "app"}
 	testAdapter := teamSealedImportVerifier{app: configured, router: router, binding: binding, target: targetBinding.Owner, admitter: privateApplicationAdmitter{router: router}, assetRoot: privateDir, limits: limits}
-	if _, e = testAdapter.LoadVerifiedMigration(ctx, privatechat.MigrationImportRequest{ImportID: importID, SourceHandle: migrationID, Owner: targetOwner, Generation: targetBinding.Owner.Epoch}); e != nil {
+	bundle, e := testAdapter.LoadVerifiedMigration(ctx, privatechat.MigrationImportRequest{ImportID: importID, SourceHandle: migrationID, Owner: targetOwner, Generation: targetBinding.Owner.Epoch})
+	if e != nil {
 		t.Fatalf("source adapter: %v", e)
+	}
+	preservedContext, preservedRequest := false, false
+	for _, record := range bundle.Records {
+		if record.Table == "contexts" && record.Key == "historical-context" {
+			preservedContext = true
+		}
+		if record.Table == "native_ui_requests" && record.Key == "stale-request" {
+			preservedRequest = true
+		}
+	}
+	if !preservedContext || !preservedRequest {
+		t.Fatal("historical context or stale request evidence lost")
+	}
+	for _, hold := range bundle.Checkpoint.Holds {
+		if hold.Kind == "source_native_ui_requests" {
+			t.Fatal("stale request blocked unrelated owner")
+		}
+		if hold.Kind == "source_operations" || hold.Kind == "source_native_commands" {
+			t.Fatalf("isolated control blocked owner: %s", hold.Kind)
+		}
 	}
 	progress, err := coordinator.AdvanceOwner(ctx, binding, migrationID, importID, now)
 	if err != nil || progress.Stage != "activated" {
@@ -315,6 +370,9 @@ func TestActiveSourceCrashIsolatesOnlyProvenDeadCarrier(t *testing.T) {
 	summary, err := targetJournal.MigrationRecoverySummary(ctx, target, progress.Receipt.Generation)
 	if err != nil || summary.ClaimedInputs != 1 || summary.UnresolvedExecutions != 1 {
 		t.Fatalf("missing component recovery: %+v %v", summary, err)
+	}
+	if summary.UnresolvedControls != 1 {
+		t.Fatalf("missing uncertain control explanation: %+v", summary)
 	}
 	owner := privatechat.Owner{GatewayID: "gateway", SurfaceID: gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "human"), ChatID: "chat", UserID: "human", TenantID: "tenant", AppID: "app"}
 	if target != owner {

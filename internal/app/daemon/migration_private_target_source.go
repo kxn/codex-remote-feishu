@@ -68,7 +68,7 @@ func (v teamSealedImportVerifier) LoadVerifiedMigration(ctx context.Context, req
 		return out, err
 	}
 	for _, blocker := range report.Blockers {
-		if blocker.Reason == "missing_or_ambiguous_navigation" || blocker.Reason == "project_view_requires_separate_restore" || blocker.Reason == "additional_context_requires_mapping" {
+		if blocker.Reason == "missing_or_ambiguous_navigation" || blocker.Reason == "project_view_requires_separate_restore" {
 			return out, fmt.Errorf("unmapped source %s/%s: %s", blocker.Table, blocker.Key, blocker.Reason)
 		}
 	}

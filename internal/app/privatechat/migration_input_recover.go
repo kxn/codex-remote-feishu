@@ -3,7 +3,10 @@ package privatechat
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -70,6 +73,20 @@ func (p *Processor) prepareHistoricalInput(ctx context.Context, o Owner, generat
 		action.Text = "/recover unavailable"
 		return action, nil, nil
 	}
+	if strings.HasPrefix(strings.TrimSpace(item.Text), "/") {
+		action.Text = "/recover unavailable"
+		return action, nil, nil
+	}
+	if item.Kind == "inbox" {
+		valid, err := p.journal.historicalUserInputEligible(ctx, o, item)
+		if err != nil {
+			return action, nil, err
+		}
+		if !valid {
+			action.Text = "/recover unavailable"
+			return action, nil, nil
+		}
+	}
 	action.RecoveryNewThread = newThread
 	if proof != nil {
 		action.RecoverySessionID = proof.SessionID
@@ -103,6 +120,38 @@ func (p *Processor) prepareHistoricalInput(ctx context.Context, o Owner, generat
 		return action, nil, ErrJournalState
 	}
 	return action, &historicalRecoveryRef{ImportID: item.ImportID, InboxID: item.InboxID, PayloadHash: item.PayloadHash, Kind: item.Kind, Session: proof}, nil
+}
+
+// The imported record remains the authority even for imports produced by an
+// older mapper which accidentally labelled a control inbox as user input.
+func (j *Journal) historicalUserInputEligible(ctx context.Context, owner Owner, item HistoricalInput) (bool, error) {
+	in := item.inbox
+	if in.RecipientContextID == "" || in.TaskID != "" || in.RelatedTaskID != "" || in.ShellOperationID != "" || in.ControlOfInputID != "" || in.AutomationEpisodeID != "" || in.SessionGoalIntentID != "" {
+		return false, nil
+	}
+	if item.Message.PlatformKey == nil || item.Message.PlatformKey.Tenant != owner.TenantID || item.Message.PlatformKey.ChatID != owner.ChatID || item.Message.PlatformKey.MessageID == "" || item.Message.Source.Kind != "principal" || item.Message.Source.ID == "" {
+		return false, nil
+	}
+	var scopeRaw, navRaw []byte
+	var scopeHash, navHash string
+	err := j.db.QueryRowContext(ctx, `SELECT s.payload,s.payload_hash,n.payload,n.payload_hash FROM private_migration_records s JOIN private_migration_records n ON n.import_id=s.import_id AND n.source_table='private_navigation' AND n.source_scope=s.source_scope WHERE s.import_id=? AND s.source_table='scopes' AND s.source_key=? AND s.source_scope=?`, item.ImportID, in.ScopeID, in.ScopeID).Scan(&scopeRaw, &scopeHash, &navRaw, &navHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	var scope struct {
+		PrincipalID string `json:"principal_id"`
+	}
+	var nav struct {
+		Mode           string `json:"mode"`
+		FrontContextID string `json:"front_context_id"`
+	}
+	if migrationSHA(scopeRaw) != scopeHash || migrationSHA(navRaw) != navHash || json.Unmarshal(scopeRaw, &scope) != nil || json.Unmarshal(navRaw, &nav) != nil {
+		return false, ErrJournalConflict
+	}
+	return scope.PrincipalID == item.Message.Source.ID && nav.Mode == "personal" && nav.FrontContextID == in.RecipientContextID, nil
 }
 func verifyHistoricalAsset(path, digest string, size int64) error {
 	if !filepath.IsAbs(path) || size < 0 {
