@@ -61,8 +61,10 @@ type pendingThreadResume struct {
 }
 
 type pendingReviewStart struct {
-	ThreadID  string
-	Initiator agentproto.Initiator
+	CommandID     string
+	PrivateNative bool
+	ThreadID      string
+	Initiator     agentproto.Initiator
 }
 
 type pendingReviewThread struct {

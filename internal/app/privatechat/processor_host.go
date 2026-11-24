@@ -110,6 +110,11 @@ func (p *Processor) applyHostReceipt(ctx context.Context, o Owner, generation in
 		p.poisoned = true
 		return nil, fmt.Errorf("%w: host receipt: %v", ErrProcessorPoisoned, err)
 	}
+	follow, err := p.reconcileRecoveryGate(ctx, o, generation)
+	if err != nil {
+		return nil, err
+	}
+	events = append(events, follow...)
 	if fanout, ok := reducer.(HostSettingsFanout); ok {
 		ref.SettingsVersion, err = fanout.SettingsFanout(effect, receipt)
 		if err != nil {

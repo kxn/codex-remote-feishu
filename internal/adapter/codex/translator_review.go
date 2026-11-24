@@ -51,6 +51,7 @@ func (t *Translator) translateReviewStart(command agentproto.Command) ([][]byte,
 	}
 	requestID := t.NextRequest("review-start")
 	t.pendingReviewStart[requestID] = pendingReviewStart{
+		CommandID: command.CommandID, PrivateNative: command.NativeBinding != nil,
 		ThreadID:  threadID,
 		Initiator: reviewStartInitiator(command),
 	}

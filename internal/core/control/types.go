@@ -665,6 +665,7 @@ const (
 	DaemonCommandPrivateProjectShare        DaemonCommandKind = "private.project.share"
 	DaemonCommandPrivateMkdir               DaemonCommandKind = "private.workspace.mkdir"
 	DaemonCommandPrivateBotSettings         DaemonCommandKind = "private.bot.settings"
+	DaemonCommandPrivateClaudeWorkspace     DaemonCommandKind = "private.claude.workspace"
 	DaemonCommandPrivateStageInput          DaemonCommandKind = "private.input.stage"
 	DaemonCommandPrivateWorktreeObserve     DaemonCommandKind = "private.worktree.observe"
 	DaemonCommandGitWorkspaceWorktreeCreate DaemonCommandKind = "workspace.git_worktree.create"

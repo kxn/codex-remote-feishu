@@ -57,61 +57,6 @@ func (r privateHostReducer) reduceSettingsTransitionIntent(app *privatechat.App,
 	return []eventcontract.Event{{Kind: eventcontract.KindDaemonCommand, GatewayID: action.GatewayID, SurfaceSessionID: action.SurfaceSessionID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandPrivateBotSettings, SurfaceSessionID: action.SurfaceSessionID, Text: string(raw)}}}, nil
 }
 
-func (r privateHostReducer) reduceSettingsIntent(app *privatechat.App, action control.Action) ([]eventcontract.Event, error) {
-	value, ok := r.host.privateSettingsCache.Load(action.GatewayID)
-	if !ok {
-		return nil, privatechat.ErrDeferred
-	}
-	entry := value.(privateBotSettingsCacheEntry)
-	owner, owned := app.OwnerForSurface(action.SurfaceSessionID)
-	if !owned || entry.Owner.GatewayID != action.GatewayID || entry.Owner.TenantID != owner.TenantID || entry.Owner.AppID != owner.AppID || r.host.privateSettingsRevision.Load() != entry.Snapshot.Revision {
-		return nil, privatechat.ErrDeferred
-	}
-	before := entry.Snapshot.Record
-	events, err := app.Action(action)
-	if err != nil {
-		return nil, err
-	}
-	var after state.BotCapabilitySettingsRecord
-	found := false
-	for _, candidate := range app.Service().BotCapabilitySettings() {
-		if candidate.GatewayID == action.GatewayID {
-			after = candidate
-			found = true
-			break
-		}
-	}
-	if !found {
-		return events, nil
-	}
-	oldJSON, _ := json.Marshal(before)
-	newJSON, _ := json.Marshal(after)
-	if string(oldJSON) == string(newJSON) {
-		return events, nil
-	}
-	// Do not expose the uncommitted settings in this processor. The exact old
-	// core result remains frozen inside the intent until config owner receipt.
-	if err := app.Service().ApplyPrivateBotSettingsToSurface(before, action.SurfaceSessionID); err != nil {
-		return nil, err
-	}
-	intent := privateSettingsIntent{Version: 1, GatewayID: action.GatewayID, AppID: entry.Owner.AppID, ActorID: action.ActorUserID, Expected: entry.Snapshot.Fingerprint, Requested: after}
-	if action.Inbound != nil && action.Inbound.CardCallback {
-		intent.CardMessageID = action.Inbound.OpenMessageID
-	}
-	for _, event := range events {
-		raw, e := privatechat.EncodeEffectEvent(event)
-		if e != nil {
-			return nil, e
-		}
-		intent.Events = append(intent.Events, raw)
-	}
-	raw, err := json.Marshal(intent)
-	if err != nil {
-		return nil, err
-	}
-	return []eventcontract.Event{{Kind: eventcontract.KindDaemonCommand, GatewayID: action.GatewayID, SurfaceSessionID: action.SurfaceSessionID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandPrivateBotSettings, SurfaceSessionID: action.SurfaceSessionID, Text: string(raw)}}}, nil
-}
-
 // runPrivateBotSettings consumes one committed config intent. Unknown writes
 // are reconciled against the same authoritative owner, not blindly replayed.
 func runPrivateBotSettings(ctx context.Context, host *App, p *privatechat.Processor, j *privatechat.Journal, o privatechat.Owner, generation int64, id string) ([]privatechat.EffectRecord, error) {

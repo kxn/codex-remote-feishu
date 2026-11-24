@@ -35,6 +35,11 @@ func (l *NativeLease) PrepareEffectDispatch(ctx context.Context, effectID string
 		}
 		defer tx.Rollback()
 		o := l.surface
+		// A detached carrier's already committed input remains evidence; it
+		// must not acquire a new native dispatch after navigation moved on.
+		if err = assertCarrierNotDetached(ctx, tx, o, l.generation, l.native.InstanceID); err != nil {
+			return err
+		}
 		var body []byte
 		var effectState, lane string
 		err = tx.QueryRowContext(ctx, `SELECT body,state,lane FROM private_effect WHERE id=? AND tenant=? AND app_id=? AND gateway=? AND surface=? AND chat=? AND user_id=? AND generation=?`, effectID, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, l.generation).Scan(&body, &effectState, &lane)
@@ -110,6 +115,9 @@ func (l *NativeLease) PrepareEffectDispatch(ctx context.Context, effectID string
 		if err = storeNativeCommandTx(ctx, tx, d, raw, hex.EncodeToString(hash[:])); err != nil {
 			return err
 		}
+		if err = preparePrivateCompactTx(ctx, tx, l, command); err != nil {
+			return err
+		}
 		return tx.Commit()
 	})
 	if err != nil {
@@ -176,4 +184,15 @@ func effectInputSequences(ctx context.Context, tx *sql.Tx, o Owner, generation i
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out, nil
+}
+
+func assertCarrierNotDetached(ctx context.Context, tx *sql.Tx, o Owner, generation int64, instance string) error {
+	var detached bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM private_checkpoint c, json_each(c.data,'$.DetachedExecutions') d WHERE c.tenant=? AND c.app_id=? AND c.gateway=? AND c.surface=? AND c.chat=? AND c.user_id=? AND c.generation=? AND json_extract(d.value,'$.InstanceID')=?)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, instance).Scan(&detached); err != nil {
+		return err
+	}
+	if detached {
+		return ErrRecoveryHeld
+	}
+	return nil
 }

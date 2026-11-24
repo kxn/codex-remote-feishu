@@ -20,6 +20,59 @@ type NativeReducer interface {
 type CoreNativeReducer struct{}
 
 func (CoreNativeReducer) ReduceNative(a *App, instance string, event agentproto.Event) ([]eventcontract.Event, error) {
+	if event.Kind == agentproto.EventNativeTurnInputAccepted {
+		return a.Service().HandlePrivateSteerAccepted(instance, event.CommandID), nil
+	}
+	if event.Kind == agentproto.EventNativeShellRPCResult && event.Status == "acknowledged" {
+		return a.Service().HandlePrivateShellRequestAcknowledged(instance, event.CommandID), nil
+	}
+	if event.Kind == agentproto.EventNativeTurnInputRejected || event.Kind == agentproto.EventNativeShellRPCResult && event.Status == "failed" {
+		surface := a.instances[instance]
+		if surface == "" || event.CommandID == "" {
+			return nil, ErrJournalConflict
+		}
+		return a.Service().HandleCommandDispatchFailure(surface, event.CommandID, fmt.Errorf("%s", event.ErrorMessage)), nil
+	}
+	if event.Kind == agentproto.EventNativeShellItemObserved {
+		switch event.Action {
+		case "started":
+			event.Kind = agentproto.EventItemStarted
+		case "completed":
+			event.Kind = agentproto.EventItemCompleted
+		default:
+			return nil, ErrJournalConflict
+		}
+		return a.AgentEvent(instance, event)
+	}
+	if event.Kind == agentproto.EventNativeControlResult && event.Action == "request.response.written" && event.Status == "sent" {
+		return a.Service().HandlePrivateRequestResponseWritten(instance, event.CommandID), nil
+	}
+	if event.Kind == agentproto.EventNativeControlResult && event.Action == "review.start" {
+		if event.Status == "accepted" {
+			return a.Service().HandlePrivateReviewStartAcknowledged(instance, event.CommandID), nil
+		}
+		if event.Status == "failed" {
+			surface := a.instances[instance]
+			if surface == "" || event.CommandID == "" {
+				return nil, ErrJournalConflict
+			}
+			return a.Service().HandleCommandDispatchFailure(surface, event.CommandID, fmt.Errorf("%s", event.ErrorMessage)), nil
+		}
+	}
+	if event.Kind == agentproto.EventSystemError && event.Problem != nil && event.Problem.Operation == "thread.compact.start" && event.Problem.Stage == "thread_resume_response" {
+		surface := a.instances[instance]
+		if surface == "" || event.CommandID == "" {
+			return nil, ErrJournalConflict
+		}
+		return a.Service().HandleCommandDispatchFailure(surface, event.CommandID, *event.Problem), nil
+	}
+	if event.Kind == agentproto.EventNativeControlResult && event.Action == "thread.compact.start" && event.Status == "failed" {
+		surface := a.instances[instance]
+		if surface == "" || event.CommandID == "" {
+			return nil, ErrJournalConflict
+		}
+		return a.Service().HandleCommandDispatchFailure(surface, event.CommandID, fmt.Errorf("%s", event.ErrorMessage)), nil
+	}
 	if event.Kind == agentproto.EventNativeCommandRejected {
 		surface := a.instances[instance]
 		if surface == "" || event.CommandID == "" || event.Problem == nil || event.Problem.CommandID != event.CommandID {
@@ -55,6 +108,9 @@ func (p *Processor) RegisterNativeHello(ctx context.Context, l *NativeLease, hel
 func (p *Processor) registerNativeHelloLocked(ctx context.Context, l *NativeLease, hello agentproto.Hello) error {
 	if _, err := p.ensureOwner(ctx, l.surface, l.generation); err != nil {
 		return err
+	}
+	if p.app.Service().PrivateDetachedInstance(l.surface.SurfaceID, l.native.InstanceID) {
+		return nil
 	}
 	if old, ok := p.app.instances[l.native.InstanceID]; ok && old != l.surface.SurfaceID {
 		return ErrJournalConflict
@@ -106,6 +162,20 @@ func (p *Processor) ApplyNative(ctx context.Context, l *NativeLease, ref NativeE
 		if event.Live != nil || event.Journal == nil || event.Journal.CarrierIncarnation != l.native.CarrierIncarnation || event.Seq != ref.Sequence || event.Journal.PayloadHash != ref.PayloadHash || event.NativeBinding != nil && event.NativeBinding.Owner != l.native {
 			return ErrJournalConflict
 		}
+		var compactCommand string
+		if isNativeTurnProjection(event.Kind) {
+			binding, command, err := p.journal.compactBindingForTurn(ctx, l, event)
+			if err != nil {
+				return err
+			}
+			if binding != nil {
+				if event.NativeBinding != nil && *event.NativeBinding != *binding {
+					return ErrJournalConflict
+				}
+				event.NativeBinding = binding
+				compactCommand = command
+			}
+		}
 		if isNativeTurnProjection(event.Kind) && event.NativeBinding == nil {
 			binding, e := p.journal.nativeBindingFromProof(ctx, l, event)
 			if e != nil {
@@ -121,28 +191,99 @@ func (p *Processor) ApplyNative(ctx context.Context, l *NativeLease, ref NativeE
 			if !ready {
 				return ErrJournalState
 			}
-			if event.Kind == agentproto.EventNativeCommandRejected {
-				var status string
-				if e = p.journal.db.QueryRowContext(ctx, `SELECT d.state FROM native_commands n JOIN dispatch d ON d.id=n.dispatch_id WHERE n.command_id=? AND d.carrier=?`, event.CommandID, l.native.CarrierIncarnation).Scan(&status); e != nil {
-					return e
-				}
-				if status != "failed" {
-					return ErrJournalConflict
-				}
+			if e = p.journal.validateNativeProjectionFact(ctx, l, ref, event); e != nil {
+				return e
 			}
+
 		}
 		current, e := p.ensureOwner(ctx, l.surface, l.generation)
 		if e != nil {
 			return e
 		}
+		if p.app.Service().PrivateDetachedInstance(l.surface.SurfaceID, l.native.InstanceID) {
+			if !p.app.Service().RecordPrivateDetachedEvent(l.surface.SurfaceID, l.native.InstanceID, ref.Incarnation, ref.Sequence, ref.PayloadHash) {
+				return ErrJournalConflict
+			}
+			core, e := p.app.Service().ExportPrivateCheckpoint(l.surface.SurfaceID)
+			if e != nil {
+				p.poisoned = true
+				return e
+			}
+			cp := Checkpoint{Owner: l.surface, Generation: l.generation, Revision: current.revision + 1, Cursor: current.cursor, Core: core}
+			if e = p.journal.commitCheckpoint(ctx, cp, current.revision, nil, 0, &ref); e != nil {
+				p.poisoned = true
+				return fmt.Errorf("%w: detached native event: %v", ErrProcessorPoisoned, e)
+			}
+			p.owners[l.surface] = processorOwner{cp.Revision, cp.Cursor, l.generation}
+			out, e = p.journal.processorEffects(ctx, l.surface, l.generation, cp.Revision)
+			return e
+		}
 		if p.app.instances[l.native.InstanceID] != l.surface.SurfaceID || p.app.Service().Instance(l.native.InstanceID) == nil || !p.app.Service().Instance(l.native.InstanceID).Online {
 			return fmt.Errorf("authenticated native hello required: %w", ErrJournalState)
 		}
-		if isNativeTurnProjection(event.Kind) {
+		if event.Kind == agentproto.EventRequestResolved || event.Kind == agentproto.EventNativeControlResult && event.Action == "request.response.written" {
+			commandID := ""
+			if event.Kind == agentproto.EventNativeControlResult {
+				commandID = event.CommandID
+			}
+			if e = p.app.Service().RestorePrivateRequestProjection(l.surface.SurfaceID, l.native.InstanceID, event.RequestID, commandID, event.ThreadID, event.TurnID); e != nil {
+				return e
+			}
+		}
+		if event.Kind == agentproto.EventNativeControlResult && (event.Action == "review.start" || event.Action == "thread.compact.start") {
+			kind := agentproto.CommandReviewStart
+			if event.Action == "thread.compact.start" {
+				kind = agentproto.CommandThreadCompactStart
+			}
+			reviewThread, _ := event.Metadata["reviewThreadID"].(string)
+			if e = p.app.Service().RestorePrivateControlProjection(l.surface.SurfaceID, l.native.InstanceID, event.CommandID, kind, event.ThreadID, reviewThread, event.TurnID); e != nil {
+				return e
+			}
+		}
+		if event.Kind == agentproto.EventNativeCommandRejected || event.Kind == agentproto.EventSystemError && event.Problem != nil && event.Problem.Operation == "thread.compact.start" && event.Problem.Stage == "thread_resume_response" {
+			var raw []byte
+			if e = p.journal.db.QueryRowContext(ctx, `SELECT n.payload FROM native_commands n JOIN dispatch d ON d.id=n.dispatch_id WHERE n.command_id=? AND d.carrier=?`, event.CommandID, l.native.CarrierIncarnation).Scan(&raw); e != nil {
+				return e
+			}
+			var command agentproto.Command
+			if e = json.Unmarshal(raw, &command); e != nil {
+				return e
+			}
+			if command.Kind == agentproto.CommandReviewStart || command.Kind == agentproto.CommandThreadCompactStart {
+				if e = p.app.Service().RestorePrivateControlProjection(l.surface.SurfaceID, l.native.InstanceID, event.CommandID, command.Kind, command.Target.ThreadID, "", ""); e != nil {
+					return e
+				}
+			}
+		}
+		if compactCommand != "" {
+			if e = p.app.Service().RestorePrivateControlProjection(l.surface.SurfaceID, l.native.InstanceID, compactCommand, agentproto.CommandThreadCompactStart, event.ThreadID, event.ThreadID, event.TurnID); e != nil {
+				return e
+			}
+		}
+		reviewEvent, e := p.journal.isPrivateReviewTurn(ctx, l, event)
+		if e != nil {
+			return e
+		}
+		projectedCommand := ""
+		if reviewEvent {
+			var command, parent string
+			var count int
+			if e = p.journal.db.QueryRowContext(ctx, `SELECT n.command_id,json_extract(n.payload,'$.target.threadId'),count(*) OVER() FROM native_commands n JOIN dispatch d ON d.id=n.dispatch_id WHERE d.carrier=? AND json_extract(n.payload,'$.kind')=? AND json_extract(n.payload,'$.nativeBinding.executionId')=?`, l.native.CarrierIncarnation, string(agentproto.CommandReviewStart), event.NativeBinding.ExecutionID).Scan(&command, &parent, &count); e != nil {
+				return e
+			}
+			if count != 1 {
+				return ErrJournalConflict
+			}
+			if e = p.app.Service().RestorePrivateControlProjection(l.surface.SurfaceID, l.native.InstanceID, command, agentproto.CommandReviewStart, parent, event.ThreadID, event.TurnID); e != nil {
+				return e
+			}
+		}
+		if isNativeTurnProjection(event.Kind) && !reviewEvent && compactCommand == "" {
 			command, e := p.journal.nativeProjectionCommand(ctx, l, event)
 			if e != nil {
 				return e
 			}
+			projectedCommand = command
 			if event.Kind == agentproto.EventTurnCompleted && event.TurnID != "" {
 				if e = p.journal.prepareNativeImageCleanup(ctx, l, event, command); e != nil {
 					return e
@@ -153,18 +294,34 @@ func (p *Processor) ApplyNative(ctx context.Context, l *NativeLease, ref NativeE
 				return e
 			}
 		}
-		events, e := reducer.ReduceNative(p.app, l.native.InstanceID, event)
+		var events []eventcontract.Event
+		if (event.Kind == agentproto.EventThreadHistoryRead || event.Kind == agentproto.EventNativeCommandRejected) && p.app.Service().PrivateReconnectQueryMatches(l.surface.SurfaceID, l.native.InstanceID, event.CommandID) {
+			pending, _ := p.app.Service().PrivateReconnectPendingText(l.surface.SurfaceID)
+			allowed, check := p.reconnectPendingInputProven(ctx, l.surface, l.generation, pending)
+			if check != nil {
+				return check
+			}
+			events = p.app.Service().CompletePrivateReconnectQuery(l.surface.SurfaceID, l.native.InstanceID, event, allowed)
+		} else {
+			events, e = reducer.ReduceNative(p.app, l.native.InstanceID, event)
+		}
 		if e != nil {
 			p.poisoned = true
 			return fmt.Errorf("%w: native reducer: %v", ErrProcessorPoisoned, e)
 		}
 		if event.Kind == agentproto.EventTurnCompleted {
-			follow, e := p.app.Service().ResolvePrivateOfflineAfterTerminal(l.surface.SurfaceID)
+			p.app.Service().ResolvePrivateOfflineStopTerminal(l.surface.SurfaceID, l.native.InstanceID, projectedCommand, event.ThreadID, event.TurnID)
+		}
+		{
+			follow, e := p.reconcileRecoveryGate(ctx, l.surface, l.generation)
 			if e != nil {
 				p.poisoned = true
 				return e
 			}
 			events = append(events, follow...)
+		}
+		if event.Kind != agentproto.EventTurnCompleted {
+			events = append(events, p.app.Service().ResumePrivateOfflineStop(l.surface.SurfaceID, l.native.InstanceID)...)
 		}
 		effects, e := p.freezeEffects(l.surface, l.generation, fmt.Sprintf("native:%s:%d", ref.Incarnation, ref.Sequence), events)
 		if e != nil {
@@ -280,7 +437,7 @@ func (j *Journal) nativeCommandProjectionReady(ctx context.Context, l *NativeLea
 	if err != nil {
 		return false, err
 	}
-	return status == "accepted" || status == "failed", nil
+	return status == "accepted" || status == "failed" || status == "sent" || status == "resolved", nil
 }
 
 // nativeBindingFromProof associates an early unbound notification only after a
@@ -290,7 +447,7 @@ func (j *Journal) nativeBindingFromProof(ctx context.Context, l *NativeLease, ev
 	if event.ThreadID == "" || event.TurnID == "" {
 		return nil, ErrJournalState
 	}
-	rows, err := j.db.QueryContext(ctx, `SELECT payload FROM native_events WHERE incarnation=? AND json_extract(payload,'$.threadId')=? AND json_extract(payload,'$.turnId')=? AND json_extract(payload,'$.commandId') IS NOT NULL`, l.native.CarrierIncarnation, event.ThreadID, event.TurnID)
+	rows, err := j.db.QueryContext(ctx, `SELECT payload FROM native_events WHERE incarnation=? AND (json_extract(payload,'$.threadId')=? OR (json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.metadata.reviewThreadID')=?)) AND json_extract(payload,'$.turnId')=? AND json_extract(payload,'$.commandId') IS NOT NULL`, l.native.CarrierIncarnation, event.ThreadID, event.ThreadID, event.TurnID)
 	if err != nil {
 		return nil, err
 	}
@@ -310,6 +467,9 @@ func (j *Journal) nativeBindingFromProof(ctx context.Context, l *NativeLease, ev
 			continue
 		}
 		valid := (l.native.Backend == agentproto.BackendCodex || l.native.Backend == agentproto.BackendOpenCode) && proof.Kind == agentproto.EventNativeTurnBindingObserved && proof.Status == "accepted" || l.native.Backend == agentproto.BackendClaude && proof.Kind == agentproto.EventTurnStarted && proof.Metadata["turnIdSource"] == "synthetic_from_observed_user_uuid" && proof.Metadata["nativeUserUUID"] == proof.RequestID && proof.TurnID == "relay-claude-turn-"+proof.RequestID
+		if proof.Kind == agentproto.EventNativeControlResult && proof.Action == "review.start" && proof.Status == "accepted" && proof.Metadata["reviewThreadID"] == event.ThreadID {
+			valid = true
+		}
 		if valid {
 			proofs = append(proofs, proof)
 		}
@@ -338,4 +498,21 @@ func (j *Journal) nativeBindingFromProof(ctx context.Context, l *NativeLease, ev
 		return nil, ErrJournalState
 	}
 	return binding, nil
+}
+
+// isPrivateReviewTurn recognizes only the durable exact native review RPC
+// result, never a thread prefix or current surface selection.
+func (j *Journal) isPrivateReviewTurn(ctx context.Context, l *NativeLease, event agentproto.Event) (bool, error) {
+	if !isNativeTurnProjection(event.Kind) || event.NativeBinding == nil || event.ThreadID == "" || event.TurnID == "" {
+		return false, nil
+	}
+	var n int
+	err := j.db.QueryRowContext(ctx, `SELECT count(*) FROM native_events e JOIN native_commands c ON c.command_id=e.command_id JOIN dispatch d ON d.id=c.dispatch_id WHERE e.incarnation=? AND d.state='accepted' AND d.event_sequence=e.sequence AND json_extract(c.payload,'$.kind')=? AND json_extract(c.payload,'$.nativeBinding.executionId')=? AND json_extract(e.payload,'$.action')='review.start' AND json_extract(e.payload,'$.status')='accepted' AND json_extract(e.payload,'$.metadata.reviewThreadID')=? AND json_extract(e.payload,'$.turnId')=?`, l.native.CarrierIncarnation, string(agentproto.CommandReviewStart), event.NativeBinding.ExecutionID, event.ThreadID, event.TurnID).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	if n > 1 {
+		return false, ErrJournalConflict
+	}
+	return n == 1, nil
 }

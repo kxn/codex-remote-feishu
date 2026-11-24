@@ -19,6 +19,12 @@ func (s *Service) PrivateOwnerDeadlineDue(surfaceID string, now time.Time) bool 
 	if surface == nil {
 		return false
 	}
+	if s.privateDetachDeadlineDue(surfaceID, now) {
+		return true
+	}
+	if q, ok := s.privateReconnectQueries[surfaceID]; ok && !q.Deadline.IsZero() && !now.Before(q.Deadline) {
+		return true
+	}
 	if held, ok := s.privateRecoveryHolds[surfaceID]; ok {
 		_, launch := expiredPrivateHeldLaunch(held, now)
 		return launch != nil
@@ -33,6 +39,13 @@ func (s *Service) TickPrivateOwnerDeadlines(surfaceID string, now time.Time) []e
 		return nil
 	}
 	surface := s.root.Surfaces[surfaceID]
+	if s.privateDetachDeadlineDue(surfaceID, now) {
+		return s.detachPrivateUnknown(surfaceID)
+	}
+	if q, ok := s.privateReconnectQueries[surfaceID]; ok && !q.Deadline.IsZero() && !now.Before(q.Deadline) {
+		delete(s.privateReconnectQueries, surfaceID)
+		return notice(surface, "private_reconnect_thread_unavailable", "原会话暂未确认，请稍后重试；也可使用 /detach 后 /list 或 /new。")
+	}
 	if held, ok := s.privateRecoveryHolds[surfaceID]; ok {
 		index, launch := expiredPrivateHeldLaunch(held, now)
 		if launch == nil || surface.PendingHeadless != nil {

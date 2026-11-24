@@ -13,6 +13,7 @@ func TestVerifyLegacySessionUsesExactLaunchAndOwner(t *testing.T) {
 	path := filepath.Join(root, "journal.db")
 	s := openTestStore(t, path, root, cwd, "carrier")
 	owner := *testCommand().Execution
+	owner.AttemptID, owner.RunRef = "", ""
 	snapshot := agentproto.RuntimeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: path, CarrierIncarnation: "carrier"}
 	if err := s.BindLaunchSnapshot(snapshot); err != nil {
 		t.Fatal(err)
@@ -34,5 +35,41 @@ func TestVerifyLegacySessionUsesExactLaunchAndOwner(t *testing.T) {
 	wrong.Owner.WorkerSessionID = "other"
 	if _, _, err = VerifyLegacySessionProvenance(ctx, wrong, root, "thread"); err == nil {
 		t.Fatal("other owner accepted")
+	}
+}
+
+func TestVerifyLegacySessionRejectsDifferentOwnerDimensions(t *testing.T) {
+	for _, field := range []string{"context", "role", "controller", "bot"} {
+		t.Run(field, func(t *testing.T) {
+			root, cwd := t.TempDir(), t.TempDir()
+			path := filepath.Join(root, "journal.db")
+			store := openTestStore(t, path, root, cwd, "carrier")
+			owner := *testCommand().Execution
+			owner.AttemptID, owner.RunRef = "", ""
+			snapshot := agentproto.RuntimeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: path, CarrierIncarnation: "carrier"}
+			if err := store.BindLaunchSnapshot(snapshot); err != nil {
+				t.Fatal(err)
+			}
+			other := owner
+			switch field {
+			case "context":
+				other.ContextID = "other"
+			case "role":
+				other.RoleID = "other"
+			case "controller":
+				other.ControllerGeneration++
+			case "bot":
+				other.BotGeneration++
+			}
+			if _, err := store.PersistEvents([]agentproto.Event{{Kind: agentproto.EventThreadDiscovered, ThreadID: "thread", Execution: &other}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := VerifyLegacySessionProvenance(t.Context(), snapshot, root, "thread"); err == nil {
+				t.Fatal("different source owner accepted")
+			}
+		})
 	}
 }

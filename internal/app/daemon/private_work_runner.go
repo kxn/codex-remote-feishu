@@ -105,7 +105,15 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			if e != nil && len(pending) > 0 && item.Lane == "input" {
 				continue
 			}
-			if err = r.ingress.refreshPrivateThreadPolicy(ctx, r.native, r.processor, item.Owner, item.Generation); err != nil {
+			entry, readErr := r.journal.ReadIngressAction(ctx, item.Owner, item.Generation, item.Sequence)
+			if readErr != nil {
+				continue
+			}
+			scanSeq := int64(0)
+			if historyAliasNeedsRefresh(entry.Ingress.Payload) {
+				scanSeq = item.Sequence
+			}
+			if err = r.ingress.refreshPrivateThreadPolicy(ctx, r.native, r.processor, item.Owner, item.Generation, scanSeq); err != nil {
 				continue
 			}
 			if _, err = r.processor.ApplyIngress(ctx, item.Owner, item.Generation, item.Sequence); err != nil {
@@ -306,6 +314,8 @@ func (r *privateWorkRunner) runEffect(ctx context.Context, work privatechat.Pend
 		case control.DaemonCommandPrivateBotSettings:
 			_, err = runPrivateBotSettings(ctx, r.host, r.processor, r.journal, work.Owner, work.Generation, e.Effect.ID)
 			return err
+		case control.DaemonCommandPrivateClaudeWorkspace:
+			return runPrivateClaudeWorkspace(ctx, r.host, r.processor, r.journal, work.Owner, work.Generation, e.Effect.ID)
 		case control.DaemonCommandPrivateStageInput:
 			_, err = runPrivateStageInput(ctx, r.host, r.processor, r.journal, work.Owner, work.Generation, e.Effect.ID)
 			return err
@@ -405,13 +415,19 @@ func (r *privateWorkRunner) runNativeEffect(ctx context.Context, work privatecha
 				return e
 			}
 			if restricted {
-				return privatechat.ErrJournalConflict
+				allowed, aliasErr := r.ingress.legacyHistoryAllowed(ctx, rec.Surface, rec.SurfaceGeneration, rec.Snapshot.Owner.Backend, rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID, true)
+				if aliasErr != nil {
+					return aliasErr
+				}
+				if !allowed {
+					return privatechat.ErrJournalConflict
+				}
 			}
 		}
 	}
 	binding := agentproto.NativeTurnBinding{Version: agentproto.PrivateNativeProtocolVersion, Owner: rec.Snapshot.Owner}
 	switch command.Kind {
-	case agentproto.CommandPromptSend, agentproto.CommandThreadShellCommand, agentproto.CommandReviewStart:
+	case agentproto.CommandPromptSend, agentproto.CommandThreadShellCommand, agentproto.CommandReviewStart, agentproto.CommandThreadCompactStart:
 		sum := sha256.Sum256([]byte(work.Effect.Effect.ID))
 		binding.ExecutionID = "execution_" + hex.EncodeToString(sum[:20])
 	case agentproto.CommandTurnSteer, agentproto.CommandTurnInterrupt, agentproto.CommandRequestRespond:

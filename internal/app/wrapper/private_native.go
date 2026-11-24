@@ -3,6 +3,7 @@ package wrapper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,13 +19,14 @@ import (
 )
 
 type privateNativeState struct {
-	snapshot     agentproto.PrivateNativeLaunchSnapshot
-	journal      *runtimejournal.Store
-	inspection   *workInspectionState
-	mu           sync.Mutex
-	frames       map[*byte]workFrameReference
-	requests     map[string]string
-	liveBindings map[string]agentproto.NativeTurnBinding
+	snapshot       agentproto.PrivateNativeLaunchSnapshot
+	journal        *runtimejournal.Store
+	inspection     *workInspectionState
+	mu             sync.Mutex
+	frames         map[*byte]workFrameReference
+	requests       map[string]string
+	liveBindings   map[string]agentproto.NativeTurnBinding
+	publishWritten func([]agentproto.Event) error
 }
 
 func readPrivateNativeLaunch(path string) (*agentproto.PrivateNativeLaunchSnapshot, error) {
@@ -311,7 +313,22 @@ func (r *privateNativeRuntime) BeforeChildWrite(frame []byte) error {
 	if !ok {
 		return nil
 	}
-	return r.state.journal.StartFrame(ref.id, frame)
+	err := r.state.journal.StartFrame(ref.id, frame)
+	if !errors.Is(err, runtimejournal.ErrPrivateCompactNotIdle) {
+		return err
+	}
+	events, e := r.state.journal.RejectPrivatePreparedFrame(ref.id, err)
+	if e != nil {
+		return e
+	}
+	r.state.mu.Lock()
+	delete(r.state.frames, &frame[0])
+	publish := r.state.publishWritten
+	r.state.mu.Unlock()
+	if publish != nil {
+		_ = publish(events)
+	}
+	return runtimejournal.ErrPrivateCompactNotIdle
 }
 func (r *privateNativeRuntime) AfterChildWrite(frame []byte, writeErr error) error {
 	if len(frame) == 0 {
@@ -324,7 +341,19 @@ func (r *privateNativeRuntime) AfterChildWrite(frame []byte, writeErr error) err
 	if !ok {
 		return nil
 	}
-	return r.state.journal.FinishFrame(ref.id, writeErr)
+	event, err := r.state.journal.FinishPrivateFrame(ref.id, writeErr)
+	if err != nil {
+		return err
+	}
+	if event != nil {
+		r.state.mu.Lock()
+		publish := r.state.publishWritten
+		r.state.mu.Unlock()
+		if publish != nil {
+			_ = publish([]agentproto.Event{*event})
+		}
+	}
+	return nil
 }
 func (r *privateNativeRuntime) BuildChildRestartRestoreFrame(commandID string) ([]byte, string, bool, error) {
 	frame, request, ok, err := r.backendRuntime.BuildChildRestartRestoreFrame(commandID)

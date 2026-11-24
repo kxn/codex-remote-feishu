@@ -148,8 +148,10 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 	if settingsEvent, ok := threadSettingsEventForCurrentModel(sessionID, session); ok {
 		events = append(events, settingsEvent)
 	}
-	if settingsEvent, ok := threadSettingsEventForCurrentEffort(sessionID, session); ok {
-		events = append(events, settingsEvent)
+	if len(openCodeReasoningEffortCatalogOptions(session.EffortOptions)) > 0 {
+		if catalogEvent, ok := modelCatalogEventForConfigOptions(session, ""); ok {
+			events = append(events, catalogEvent)
+		}
 	}
 	promptResult, err := t.startPromptForSession(sessionID, command)
 	if err != nil {
@@ -885,8 +887,9 @@ func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[stri
 
 func threadSettingsEventForCurrentModel(sessionID string, session sessionState) (agentproto.Event, bool) {
 	settings := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
-		ThreadID: sessionID,
-		Model:    session.CurrentModel,
+		ThreadID:        sessionID,
+		Model:           session.CurrentModel,
+		ReasoningEffort: session.CurrentEffort,
 	})
 	if settings == nil {
 		return agentproto.Event{}, false
@@ -901,6 +904,7 @@ func threadSettingsEventForCurrentModel(sessionID string, session sessionState) 
 func threadSettingsEventForCurrentEffort(sessionID string, session sessionState) (agentproto.Event, bool) {
 	settings := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
 		ThreadID:        sessionID,
+		Model:           session.CurrentModel,
 		ReasoningEffort: session.CurrentEffort,
 	})
 	if settings == nil {

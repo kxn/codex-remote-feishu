@@ -31,20 +31,21 @@ func (s *Service) ApplyPrivateTransportDisconnected(surfaceID, instanceID string
 	return []eventcontract.Event{{Kind: eventcontract.KindNotice, GatewayID: surface.GatewayID, SurfaceSessionID: surfaceID, Notice: &control.Notice{Code: "private_transport_offline", Title: "连接暂时中断", Text: "运行环境连接已中断，正在恢复连接并核对未完成的操作。"}}}, nil
 }
 
-// ResolvePrivateOfflineAfterTerminal may run only after an exact, durable
-// native terminal event. Other unresolved holds prevent queue resumption.
-func (s *Service) ResolvePrivateOfflineAfterTerminal(surfaceID string) ([]eventcontract.Event, error) {
+// ReconcilePrivateRecoveryGate runs after a verified durable recovery fact.
+// It releases the gate only when all other unresolved state has cleared.
+func (s *Service) ReconcilePrivateRecoveryGate(surfaceID string, queueProven bool) ([]eventcontract.Event, error) {
 	if !s.config.PrivateApplication {
 		return nil, fmt.Errorf("private service required")
 	}
-	if _, held := s.privateRecoveryHolds[surfaceID]; !held {
+	held, ok := s.privateRecoveryHolds[surfaceID]
+	if !ok {
 		return nil, nil
 	}
 	checkpoint, err := s.ExportPrivateCheckpoint(surfaceID)
 	if err != nil {
 		return nil, err
 	}
-	if len(checkpoint.Holds) != 0 || checkpoint.ActiveQueueItemID != "" {
+	if len(checkpoint.Holds) != 0 || checkpoint.ActiveQueueItemID != "" || checkpoint.AutoWhip.PendingReason != "" || checkpoint.AutoContinue.Episode != nil || len(checkpoint.QueuedQueueItemIDs) != 0 && !queueProven && !held.MigrationRecoveryReleased {
 		return nil, nil
 	}
 	delete(s.privateRecoveryHolds, surfaceID)

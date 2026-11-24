@@ -3,10 +3,12 @@ package daemon
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -137,7 +139,11 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 	}
 	owner := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: bindingOwnerID, Epoch: epoch, CarrierIncarnation: "journey-inc", InstanceID: "journey-instance", HostID: r.native.hostID, InstanceGeneration: 1, ProcessGeneration: 1, Backend: backend}
 	rec := privateCarrierRecord{Snapshot: agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: filepath.Join(root, "journey-native.db")}, Surface: o, SurfaceGeneration: epoch}
-	if _, e = app.launchPrivateNative(ctx, r.native, privateNativeLaunchRequest{Record: rec}); e != nil {
+	request := privateNativeLaunchRequest{Record: rec}
+	if backend == agentproto.BackendCodex {
+		request.CodexProfileID = "cp_native"
+	}
+	if _, e = app.launchPrivateNative(ctx, r.native, request); e != nil {
 		t.Fatal(e)
 	}
 	for {
@@ -244,6 +250,7 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 			t.Logf("model picker operations: %+v", gateway.snapshotOperations()[before:])
 			t.Fatal("native model catalog missing from SDK model picker")
 		}
+		exerciseAssembledSDKModelChoice(t, ctx, app, gateway, before)
 		send("seed", "establish session")
 		for {
 			checkpoint, e := r.journal.LoadCheckpoint(ctx, o, epoch)
@@ -262,6 +269,21 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 			case <-time.After(10 * time.Millisecond):
 			}
 		}
+		status, e := r.processor.ReadRuntimeStatus(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		usageSeen := false
+		for _, inst := range status.Instances {
+			if inst.InstanceID == owner.InstanceID {
+				thread := inst.Threads["session"]
+				usageSeen = thread != nil && thread.TokenUsage != nil && thread.TokenUsage.Total.TotalTokens == 500
+			}
+		}
+		if !usageSeen {
+			t.Fatal("native token usage did not reach private core")
+		}
+
 	}
 	send("message", "hello")
 	for {
@@ -441,6 +463,72 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 			case <-time.After(10 * time.Millisecond):
 			}
 		}
+		// A native acceptance must finish the original queue/reaction state,
+		// not merely write a turn/steer frame to the subprocess.
+		for {
+			checkpoint, e := r.journal.LoadCheckpoint(ctx, o, epoch)
+			steered := false
+			if e == nil {
+				for _, item := range checkpoint.Core.QueueItems {
+					if item != nil && item.SourceMessageID == "description" && string(item.Status) == "steered" {
+						steered = true
+					}
+				}
+			}
+			if steered {
+				break
+			}
+			select {
+			case err := <-errorsCh:
+				t.Fatal(err)
+			case <-ctx.Done():
+				t.Fatal("native steer acceptance did not finish queued input")
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		send("shell-input", "queued for shell")
+		for {
+			checkpoint, e := r.journal.LoadCheckpoint(ctx, o, epoch)
+			queued := false
+			if e == nil {
+				for _, item := range checkpoint.Core.QueueItems {
+					if item != nil && item.SourceMessageID == "shell-input" && string(item.Status) == "queued" {
+						queued = true
+					}
+				}
+			}
+			if queued {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("shell input not queued")
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		applause := platformingress.PlatformIngressEvent{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", EventID: "applause", Kind: "reaction.created", MessageID: "shell-input", OperatorType: "user", OperatorIDs: platformingress.SenderIDs{OpenID: "user"}, Emoji: "APPLAUSE", ReceivedAt: time.Now()}
+		if e = r.hook.ReceivePlatformEvent(ctx, applause); e != nil {
+			t.Fatal(e)
+		}
+		for {
+			checkpoint, e := r.journal.LoadCheckpoint(ctx, o, epoch)
+			commanded := false
+			if e == nil {
+				for _, item := range checkpoint.Core.QueueItems {
+					if item != nil && item.SourceMessageID == "shell-input" && string(item.Status) == "shell-commanded" {
+						commanded = true
+					}
+				}
+			}
+			if commanded {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("native shell acknowledgment did not finish reaction")
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
 		send("stop", "/stop")
 		for {
 			traceData, _ := os.ReadFile(trace)
@@ -494,15 +582,18 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 			}
 		}
 	}
-	if e = r.native.Shutdown(ctx); e != nil {
-		t.Fatal(e)
-	}
 	if backend == agentproto.BackendCodex {
-		testPrivateSDKRestart(t, ctx, app, gateway, daemonLock, raw, o, epoch, trace)
+		testPrivateSDKRestart(t, ctx, app, gateway, daemonLock, raw, o, epoch, trace, server, owner.InstanceID)
+	} else {
+		send("opencode-stop", "/stop")
+		exerciseAssembledSDKOpenCodeReasoning(t, ctx, app, gateway)
+		if e = r.native.Shutdown(ctx); e != nil {
+			t.Fatal(e)
+		}
 	}
 }
 
-func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway *messageIDAssigningGateway, lock *relayruntime.FileLock, raw platformingress.RawIngressEnvelope, owner privatechat.Owner, epoch int64, trace string) {
+func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway *messageIDAssigningGateway, lock *relayruntime.FileLock, raw platformingress.RawIngressEnvelope, owner privatechat.Owner, epoch int64, trace string, oldServer *httptest.Server, instanceID string) {
 	t.Helper()
 	r := old.applications
 	if e := r.platformDeliveries.drain(ctx); e != nil {
@@ -511,6 +602,13 @@ func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway 
 	if e := r.stopWorkers(ctx); e != nil {
 		t.Fatal(e)
 	}
+	beforeTrace, _ := os.ReadFile(trace)
+	priorReads := bytes.Count(beforeTrace, []byte(`"method":"thread/read"`))
+	addr := oldServer.Listener.Addr().String()
+	if e := old.relay.Close(); e != nil {
+		t.Fatal(e)
+	}
+	oldServer.Close()
 	if e := r.drainNativeDeliveries(ctx); e != nil {
 		t.Fatal(e)
 	}
@@ -518,6 +616,14 @@ func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway 
 	if e != nil {
 		t.Fatal(e)
 	}
+	if before.Core.Navigation == nil {
+		t.Fatalf("confirmed navigation snapshot missing before restart: backend=%s route=%s history=%+v profiles=%q/%q/%q", before.Core.Backend, before.Core.RouteMode, before.Core.HistoricalInstance, before.Core.CodexProfileID, before.Core.ClaudeProfileID, before.Core.OpenCodeProfileID)
+	}
+	var beforeKinds []string
+	for _, h := range before.Core.Holds {
+		beforeKinds = append(beforeKinds, h.Kind)
+	}
+	t.Logf("before restart: route=%s attached=%t selected=%t active=%t holds=%v", before.Core.RouteMode, before.Core.AttachedInstanceID != "", before.Core.SelectedThreadID != "", before.Core.ActiveQueueItemID != "", beforeKinds)
 	if e = r.close(); e != nil {
 		t.Fatal(e)
 	}
@@ -546,6 +652,15 @@ func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway 
 		t.Fatal(e)
 	}
 	r2 := app.applications
+	app.relay.SetServerIdentity(agentproto.ServerIdentity{BinaryIdentity: agentproto.BinaryIdentity{Product: relayruntime.ProductName, Version: "fixture", BuildFingerprint: "fixture"}})
+	listener, e := net.Listen("tcp", addr)
+	if e != nil {
+		t.Fatal(e)
+	}
+	relayServer := httptest.NewUnstartedServer(app.relay)
+	relayServer.Listener = listener
+	relayServer.Start()
+	defer relayServer.Close()
 	defer func() {
 		finish, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -564,8 +679,75 @@ func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway 
 	if e != nil {
 		t.Fatal(e)
 	}
-	if after.Revision != before.Revision {
-		t.Fatalf("checkpoint changed across restart: %d → %d", before.Revision, after.Revision)
+	if after.Revision < before.Revision {
+		t.Fatal("checkpoint regressed across restart")
+	}
+	for {
+		r2.native.mu.Lock()
+		connection := r2.native.connections[instanceID]
+		r2.native.mu.Unlock()
+		if connection != 0 {
+			break
+		}
+		select {
+		case err := <-errs:
+			t.Fatal(err)
+		case <-ctx.Done():
+			t.Fatal("existing wrapper failed to reconnect")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	afterTrace, _ := os.ReadFile(trace)
+	if bytes.Count(afterTrace, []byte(`"method":"thread/read"`)) != priorReads {
+		t.Fatal("confirmed navigation unexpectedly used fallback query")
+	}
+	resumed := raw
+	resumed.EventID = "resumed-after-restart"
+	resumed.MessageID = resumed.EventID
+	resumed.RawContent = `{"text":"continue same session"}`
+	if e = r2.hook.Receive(ctx, resumed); e != nil {
+		t.Fatal(e)
+	}
+	for {
+		data, _ := os.ReadFile(trace)
+		if bytes.Count(data, []byte(`"method":"turn/start"`)) >= 4 {
+			break
+		}
+		select {
+		case err := <-errs:
+			t.Fatal(err)
+		case <-ctx.Done():
+			cp, _ := r2.journal.LoadCheckpoint(context.Background(), owner, epoch)
+			var kinds []string
+			for _, h := range cp.Core.Holds {
+				kinds = append(kinds, h.Kind)
+			}
+			pending, _ := r2.journal.PendingIngressWorkPage(context.Background(), 128, 0)
+			db, x := sql.Open("sqlite", filepath.Join(app.headlessRuntime.Paths.StateDir, "private-chat.db"))
+			if x == nil {
+				rows, x := db.Query(`SELECT body FROM private_effect ORDER BY revision DESC,ordinal DESC LIMIT 20`)
+				if x == nil {
+					for rows.Next() {
+						var body []byte
+						if rows.Scan(&body) == nil {
+							ev, _, d := privatechat.DecodeStoredEffect(body)
+							if d == nil && ev.Notice != nil {
+								t.Logf("recent notice %s", ev.Notice.Code)
+							}
+							if d == nil && ev.Command != nil {
+								t.Logf("recent command %s", ev.Command.Kind)
+							}
+						}
+					}
+					rows.Close()
+				}
+				db.Close()
+			}
+			t.Logf("contract refresh pending=%v", cp.Core.ContractRefreshPending)
+
+			t.Fatalf("reconnected wrapper did not accept new input: revision=%d route=%s attached=%t selected=%t active=%t queued=%d holds=%v pending=%d", cp.Revision, cp.Core.RouteMode, cp.Core.AttachedInstanceID != "", cp.Core.SelectedThreadID != "", cp.Core.ActiveQueueItemID != "", len(cp.Core.QueuedQueueItemIDs), kinds, len(pending))
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 	duplicate := raw
 	duplicate.EventID = "next"
@@ -595,7 +777,7 @@ func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway 
 		}
 	}
 	traceData, _ := os.ReadFile(trace)
-	if bytes.Count(traceData, []byte(`"method":"turn/start"`)) != 3 || bytes.Count(traceData, []byte(`"method":"turn/steer"`)) != 1 {
+	if bytes.Count(traceData, []byte(`"method":"turn/start"`)) != 4 || bytes.Count(traceData, []byte(`"method":"turn/steer"`)) != 1 {
 		t.Fatal("restart replayed a native message")
 	}
 }

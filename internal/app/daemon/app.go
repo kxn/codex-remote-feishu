@@ -95,23 +95,24 @@ type vscodeCompatibilityCacheState struct {
 }
 
 type App struct {
-	privateCatalogSnapshot  atomic.Pointer[[]string]
-	privateProfilesSnapshot atomic.Pointer[privateProfileCatalog]
-	privateCodexContracts   atomic.Pointer[privateCodexContractSnapshot]
-	profileReferenceGate    sync.RWMutex
-	privateSettingsRevision atomic.Uint64
-	privateSettingsCache    sync.Map
-	privateServiceOwned     atomic.Bool
-	teamRuntime             *teamRuntime // constructed before Run; one durable work authority
-	service                 *orchestrator.Service
-	projector               *feishu.Projector
-	gateway                 feishu.Gateway
-	finalBlockPreviewer     previewpkg.FinalBlockPreviewService
-	relay                   *relayws.Server
-	serverIdentity          agentproto.ServerIdentity
-	debugRelayFlow          bool
-	rawLogger               *debuglog.RawLogger
-	conversationTrace       conversationTracer
+	privateCatalogSnapshot      atomic.Pointer[[]string]
+	privateProfilesSnapshot     atomic.Pointer[privateProfileCatalog]
+	privateCodexContracts       atomic.Pointer[privateCodexContractSnapshot]
+	profileReferenceGate        sync.RWMutex
+	privateSettingsRevision     atomic.Uint64
+	privateSettingsCache        sync.Map
+	privateClaudeWorkspaceCache sync.Map
+	privateServiceOwned         atomic.Bool
+	teamRuntime                 *teamRuntime // constructed before Run; one durable work authority
+	service                     *orchestrator.Service
+	projector                   *feishu.Projector
+	gateway                     feishu.Gateway
+	finalBlockPreviewer         previewpkg.FinalBlockPreviewService
+	relay                       *relayws.Server
+	serverIdentity              agentproto.ServerIdentity
+	debugRelayFlow              bool
+	rawLogger                   *debuglog.RawLogger
+	conversationTrace           conversationTracer
 
 	relayServer  *http.Server
 	apiServer    *http.Server

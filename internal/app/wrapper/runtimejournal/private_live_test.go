@@ -55,3 +55,45 @@ func TestPrivateLiveSequenceReservesAcrossRestart(t *testing.T) {
 		t.Fatal("critical sequence affected")
 	}
 }
+
+func TestPrivateTokenUsageIsDurableWhileTeamClassificationStaysUnchanged(t *testing.T) {
+	for _, backend := range []agentproto.Backend{agentproto.BackendCodex, agentproto.BackendClaude, agentproto.BackendOpenCode} {
+		t.Run(string(backend), func(t *testing.T) {
+			ctx := t.Context()
+			root := t.TempDir()
+			cwd := t.TempDir()
+			path := filepath.Join(root, "runtime.db")
+			owner := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "o", Epoch: 1, CarrierIncarnation: "inc", InstanceID: "i", HostID: "h", InstanceGeneration: 1, ProcessGeneration: 1, Backend: backend, HistoryNamespace: "history"}
+			s, err := Open(ctx, path, root, cwd, "inc")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			if err = s.BindPrivateLaunchSnapshot(agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: owner, CWD: cwd, JournalPath: path}); err != nil {
+				t.Fatal(err)
+			}
+			event := agentproto.Event{Kind: agentproto.EventThreadTokenUsageUpdated, ThreadID: "session", TokenUsage: &agentproto.ThreadTokenUsage{Total: agentproto.TokenUsageBreakdown{TotalTokens: 500}}}
+			if Critical(event) {
+				t.Fatal("team token usage classification changed")
+			}
+			events, err := s.PersistEvents([]agentproto.Event{event})
+			if err != nil || len(events) != 1 || events[0].Journal == nil || events[0].Seq != 1 || events[0].Live != nil {
+				t.Fatalf("private usage not durable: %+v %v", events, err)
+			}
+		})
+	}
+}
+
+func TestPrivateDeliveryClassCoversTeamNoncriticalAndEvidence(t *testing.T) {
+	if Critical(agentproto.Event{Kind: agentproto.EventItemDelta}) || Critical(agentproto.Event{Kind: agentproto.EventThreadTokenUsageUpdated}) {
+		t.Fatal("team noncritical classification changed")
+	}
+	if agentproto.PrivateDeliveryForEvent(agentproto.EventItemDelta) != agentproto.PrivateEventLive {
+		t.Fatal("delta must use private live stream")
+	}
+	for _, kind := range []agentproto.EventKind{agentproto.EventThreadTokenUsageUpdated, agentproto.EventTurnPlanUpdated, agentproto.EventTurnDiffUpdated, agentproto.EventItemStarted, agentproto.EventItemReasoningSummaryPartAdded, agentproto.EventItemTerminalInteraction, agentproto.EventItemFileChangePatchUpdated, agentproto.EventItemCompleted, agentproto.EventTurnCompleted, agentproto.EventRequestStarted, agentproto.EventRequestResolved, agentproto.EventNativeCommandRejected, agentproto.EventNativeInputReceipt, agentproto.EventSystemError} {
+		if agentproto.PrivateDeliveryForEvent(kind) != agentproto.PrivateEventDurable {
+			t.Fatalf("%s must be durable", kind)
+		}
+	}
+}

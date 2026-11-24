@@ -19,16 +19,7 @@ func (s *Service) HandleKnownUnsent(surfaceID, commandID string, cause error) []
 	item := surface.QueueItems[surface.ActiveQueueItemID]
 	binding := s.remoteBindingForSurface(surface)
 	if item == nil || item.Status != state.QueueItemDispatching || binding == nil || strings.TrimSpace(binding.CommandID) != commandID || binding.QueueItemID != item.ID {
-		if _, steer := s.pendingSteerForCommand("", commandID); steer != nil {
-			return s.HandleCommandDispatchFailure(surfaceID, commandID, cause)
-		}
-		if _, shell := s.pendingShellForCommand("", commandID); shell != nil {
-			return s.HandleCommandDispatchFailure(surfaceID, commandID, cause)
-		}
-		if s.pendingReviewStartSurface(commandID) != nil {
-			return s.HandleCommandDispatchFailure(surfaceID, commandID, cause)
-		}
-		return nil
+		return s.HandleCommandDispatchFailure(surfaceID, commandID, cause)
 	}
 	item.Status = state.QueueItemQueued
 	surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)

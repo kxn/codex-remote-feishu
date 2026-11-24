@@ -159,7 +159,8 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 	if err != nil {
 		return nil, err
 	}
-	if !p.app.Service().PrivateRecoveryActionAllowed(action) && !isHistoricalInputReadAction(action) && !alreadyHistorical {
+	reconnectUnavailable := entry.Ingress.Lane == "input" && !alreadyHistorical && p.app.Service().PrivateReconnectInputUnavailable(o.SurfaceID)
+	if !reconnectUnavailable && !p.app.Service().PrivateRecoveryActionAllowed(action) && !isHistoricalInputReadAction(action) && !alreadyHistorical {
 		return nil, ErrRecoveryHeld
 	}
 	if (entry.Ingress.Lane == "input" && !isHistoricalInputReadAction(action) && !alreadyHistorical) || observation {
@@ -206,7 +207,9 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 		return nil, err
 	}
 	var events []eventcontract.Event
-	if wasHistoricalConfirmation && historical == nil {
+	if reconnectUnavailable {
+		events = []eventcontract.Event{{Kind: eventcontract.KindNotice, GatewayID: o.GatewayID, SurfaceSessionID: o.SurfaceID, Notice: &control.Notice{Code: "private_reconnect_input_unavailable", Title: "原会话正在恢复", Text: "这条消息尚未交给会话。请稍后重新发送；如需换会话，请先 /detach，再使用 /list 或 /new。"}}}
+	} else if wasHistoricalConfirmation && historical == nil {
 		text := "请先发送 /new 准备新会话，再查看历史输入并确认恢复。"
 		if action.Text == "/recover already" {
 			text = "这条历史输入已经确认恢复，不会重复加入。"
@@ -314,6 +317,10 @@ func (p *Processor) ensureOwner(ctx context.Context, o Owner, generation int64) 
 		return state, err
 	}
 	state.generation = generation
+	if err = p.journal.restoreClaudeWorkspaceOverlay(ctx, p.app, o, generation); err != nil {
+		p.poisoned = true
+		return state, err
+	}
 	p.owners[o] = state
 	p.app.ownerGenerations[o.SurfaceID] = generation
 	return state, nil
@@ -321,6 +328,29 @@ func (p *Processor) ensureOwner(ctx context.Context, o Owner, generation int64) 
 func (p *Processor) freezeEffects(o Owner, generation int64, key string, events []eventcontract.Event) ([]Effect, error) {
 	if !validOwner(o) || generation < 1 {
 		return nil, ErrJournalState
+	}
+	changes, err := p.app.Service().TakePrivateClaudeSnapshotChanges(o.SurfaceID)
+	if err != nil {
+		return nil, err
+	}
+	for i, change := range changes {
+		identity, err := json.Marshal(struct {
+			Owner      Owner
+			Generation int64
+			Key        string
+			Index      int
+		}{o, generation, key, len(events) + i})
+		if err != nil {
+			return nil, err
+		}
+		digest := sha256.Sum256(identity)
+		change.Token = "private-workspace:" + hex.EncodeToString(digest[:])
+		p.app.Service().SetPrivateClaudeSnapshotOverlay(change)
+		data, err := json.Marshal(change)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, eventcontract.Event{Kind: eventcontract.KindDaemonCommand, GatewayID: o.GatewayID, SurfaceSessionID: o.SurfaceID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandPrivateClaudeWorkspace, SurfaceSessionID: o.SurfaceID, Text: string(data)}})
 	}
 	effects := make([]Effect, 0, len(events))
 	for i, event := range events {
@@ -347,6 +377,9 @@ func (p *Processor) freezeEffects(o Owner, generation int64, key string, events 
 			}
 			if event.Command.CommandID == "" {
 				event.Command.CommandID = "private-command:" + hex.EncodeToString(digest[:])
+			}
+			if event.Command.Kind == agentproto.CommandThreadShellCommand && event.Command.ShellCommand.OperationID == "" {
+				event.Command.ShellCommand.OperationID = "private-shell:" + hex.EncodeToString(digest[:])
 			}
 			switch event.Command.Kind {
 			case agentproto.CommandReviewStart:

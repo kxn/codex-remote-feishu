@@ -10,7 +10,7 @@ type PrivateIDWatermarks struct {
 type PrivatePickerWatermarks struct{ Path, Target, History, Review, Compact, Plan, Launcher int }
 
 func (c PrivateCheckpoint) IDWatermarks() (PrivateIDWatermarks, error) {
-	if c.Version != 1 || c.PickerWatermarks == nil {
+	if (c.Version != 1 && c.Version != 2) || c.PickerWatermarks == nil {
 		return PrivateIDWatermarks{}, fmt.Errorf("private checkpoint lacks complete ID watermarks")
 	}
 	w := PrivateIDWatermarks{c.NextQueueID, c.NextImageID, c.NextFileID, c.NextCommandID, c.NextHeadlessID, c.NextEpisodeID, c.NextShellID, *c.PickerWatermarks}

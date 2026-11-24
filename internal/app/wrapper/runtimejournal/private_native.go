@@ -159,13 +159,21 @@ func ReadPrivateCommandReceipt(ctx context.Context, snapshot agentproto.PrivateN
 	if r.CarrierIncarnation != snapshot.Owner.CarrierIncarnation {
 		return nil, ErrConflict
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id,native_id,native_method,stage FROM frames WHERE command_id=? ORDER BY id LIMIT 256`, commandID)
+	var watermarkTable int
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name='private_frame_event_watermarks'`).Scan(&watermarkTable); err != nil {
+		return nil, err
+	}
+	query := `SELECT f.id,f.native_id,f.native_method,f.stage,NULL FROM frames f WHERE f.command_id=? ORDER BY f.id LIMIT 256`
+	if watermarkTable != 0 {
+		query = `SELECT f.id,f.native_id,f.native_method,f.stage,w.sequence FROM frames f LEFT JOIN private_frame_event_watermarks w ON w.frame_id=f.id WHERE f.command_id=? ORDER BY f.id LIMIT 256`
+	}
+	rows, err := tx.QueryContext(ctx, query, commandID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var f agentproto.RuntimeFrameReceipt
-		if err = rows.Scan(&f.FrameID, &f.NativeRequestID, &f.NativeMethod, &f.Stage); err != nil {
+		if err = rows.Scan(&f.FrameID, &f.NativeRequestID, &f.NativeMethod, &f.Stage, &f.EventWatermark); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -385,7 +393,37 @@ func (s *Store) PrivateBindingForTurn(session, turn string) (*agentproto.NativeT
 	if err != nil {
 		return nil, err
 	}
+	// Review start returns its own exact native turn and may name a separate
+	// review thread. This is independent of the originating prompt turn.
+	reviewRows, err := s.db.Query(`SELECT e.payload,c.payload FROM events e JOIN commands c ON c.id=json_extract(e.payload,'$.commandId') AND c.incarnation=e.incarnation WHERE e.incarnation=? AND json_extract(e.payload,'$.kind')='native.control.result' AND json_extract(e.payload,'$.action')='review.start' AND json_extract(e.payload,'$.status')='accepted' AND json_extract(e.payload,'$.turnId')=? AND json_extract(e.payload,'$.metadata.reviewThreadID')=?`, s.incarnation, turn, session)
+	if err != nil {
+		return nil, err
+	}
 	var found *agentproto.NativeTurnBinding
+	for reviewRows.Next() {
+		var raw, commandRaw []byte
+		if err = reviewRows.Scan(&raw, &commandRaw); err != nil {
+			reviewRows.Close()
+			return nil, err
+		}
+		var event agentproto.Event
+		var command agentproto.Command
+		if json.Unmarshal(raw, &event) != nil || json.Unmarshal(commandRaw, &command) != nil || command.Kind != agentproto.CommandReviewStart || command.CommandID != event.CommandID || command.Target.ThreadID != event.ThreadID || event.RequestID == "" || command.NativeBinding == nil || event.NativeBinding == nil || *command.NativeBinding != *event.NativeBinding || event.NativeBinding.Validate(true) != nil {
+			reviewRows.Close()
+			return nil, ErrConflict
+		}
+		if found != nil && *found != *event.NativeBinding {
+			reviewRows.Close()
+			return nil, ErrConflict
+		}
+		copy := *event.NativeBinding
+		found = &copy
+	}
+	err = reviewRows.Err()
+	reviewRows.Close()
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range ids {
 		binding, e := s.PrivateBinding(id)
 		if e != nil {

@@ -11,11 +11,15 @@ type PrivateHistoryKey struct {
 }
 type PrivateThreadPolicy struct {
 	InstanceNamespaces map[string]string
+	InstanceProfiles   map[string]string
+	LegacyProfile      string
 	CatalogNamespaces  map[agentproto.Backend]string
 	Denied             map[PrivateHistoryKey]bool
 	ManagedDenied      map[PrivateHistoryKey]bool
 	InternalDenied     map[PrivateHistoryKey]bool
 	Ambiguous          map[PrivateHistoryKey]bool // Namespace empty: historical source has no proven root.
+	LegacyReadOnly     map[PrivateHistoryKey]bool // Presentation allowed; source execution is not settled.
+	LegacyAliases      map[PrivateHistoryKey]bool // Exact migrated source evidence; never a namespace wildcard.
 	Transferred        map[PrivateHistoryKey]bool
 }
 
@@ -59,7 +63,13 @@ func (s *Service) privateThreadVisible(surface string, backend agentproto.Backen
 		return false
 	}
 	if p.Denied[key] || p.Ambiguous[PrivateHistoryKey{Backend: backend, Session: session}] {
-		return p.Transferred[key]
+		if p.Transferred[key] {
+			return true
+		}
+		if !p.LegacyAliases[key] {
+			return false
+		}
+		return instance == "" || (p.LegacyProfile != "" && state.NormalizeCodexProfileID(p.InstanceProfiles[instance]) == p.LegacyProfile)
 	}
 	return true
 }
@@ -69,4 +79,43 @@ func (s *Service) threadVisibleForSurface(surface *state.SurfaceConsoleRecord, b
 		id = surface.SurfaceSessionID
 	}
 	return s.privateThreadVisible(id, backend, instance, session)
+}
+
+// privateLegacyHistoryReadOnly applies only to a new headless restore. An
+// already-owned online private carrier follows its ordinary ownership checks.
+func (s *Service) privateLegacyHistoryReadOnly(surface *state.SurfaceConsoleRecord, view *mergedThreadView) bool {
+	if !s.config.PrivateApplication || surface == nil || view == nil {
+		return false
+	}
+	policy, ok := s.privateThreadPolicies[surface.SurfaceSessionID]
+	if !ok {
+		return false
+	}
+	backend := agentproto.NormalizeBackend(view.Backend)
+	namespace := policy.CatalogNamespaces[backend]
+	if view.Inst != nil && policy.InstanceNamespaces[view.Inst.InstanceID] != "" {
+		namespace = policy.InstanceNamespaces[view.Inst.InstanceID]
+	}
+	return policy.LegacyReadOnly[PrivateHistoryKey{Backend: backend, Namespace: namespace, Session: view.ThreadID}]
+}
+
+// privateLegacySessionReadOnly reads only the already-frozen policy and
+// in-memory route, so picker draft navigation never reopens the catalog.
+func (s *Service) privateLegacySessionReadOnly(surface *state.SurfaceConsoleRecord, session string) bool {
+	if !s.config.PrivateApplication || surface == nil {
+		return false
+	}
+	p, ok := s.privateThreadPolicies[surface.SurfaceSessionID]
+	if !ok {
+		return false
+	}
+	if surface.SelectedThreadID == session && surface.AttachedInstanceID != "" {
+		return false
+	}
+	for key, held := range p.LegacyReadOnly {
+		if held && key.Session == session && key.Backend == agentproto.BackendCodex {
+			return true
+		}
+	}
+	return false
 }

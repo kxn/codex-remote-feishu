@@ -54,7 +54,7 @@ func (j *Journal) commitCheckpointExtended(ctx context.Context, c Checkpoint, ex
 		return ErrJournalState
 	}
 	o := c.Owner
-	if !validOwner(o) || c.Generation < 1 || expected < 0 || c.Revision != expected+1 || c.Cursor < 0 || c.Core.Version != 1 || c.Core.SurfaceID != o.SurfaceID || c.Core.GatewayID != o.GatewayID || c.Core.ChatID != o.ChatID || c.Core.ActorUserID != o.UserID {
+	if !validOwner(o) || c.Generation < 1 || expected < 0 || c.Revision != expected+1 || c.Cursor < 0 || (c.Core.Version != 1 && c.Core.Version != 2) || (c.Core.Version == 1 && (len(c.Core.DetachedExecutions) != 0 || c.Core.OfflineStop != nil || c.Core.ReconnectQuery != nil || c.Core.Goal != nil || c.Core.Navigation != nil)) || c.Core.SurfaceID != o.SurfaceID || c.Core.GatewayID != o.GatewayID || c.Core.ChatID != o.ChatID || c.Core.ActorUserID != o.UserID {
 		return ErrJournalState
 	}
 	validator := orchestrator.NewService(nil, orchestrator.Config{PrivateApplication: true}, nil)
@@ -319,6 +319,19 @@ func (j *Journal) commitCheckpointExtended(ctx context.Context, c Checkpoint, ex
 		}
 		if n != 1 {
 			return ErrJournalConflict
+		}
+	}
+	// Version 2 detached evidence must fence older writers before the same
+	// transaction makes the checkpoint visible, including background senders.
+	if c.Core.Version == 2 {
+		var schemaVersion int
+		if err = tx.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&schemaVersion); err != nil {
+			return err
+		}
+		if schemaVersion < 6 {
+			if _, err = tx.ExecContext(ctx, `PRAGMA user_version=6`); err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit()

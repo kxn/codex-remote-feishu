@@ -182,7 +182,19 @@ func (a *App) launchPrivateNative(ctx context.Context, h *privateNativeHost, req
 				return 0, e
 			}
 			if restricted {
-				return 0, fmt.Errorf("native session has unresolved team ownership")
+				allowed := false
+				if a.applications != nil && a.applications.ingress != nil {
+					profile, profileErr := a.applications.ingress.effectiveLegacyHistoryProfile(ctx, rec.Surface, rec.SurfaceGeneration)
+					if profileErr == nil && state.NormalizeCodexProfileID(request.CodexProfileID) == profile {
+						allowed, e = a.applications.ingress.legacyHistoryAllowed(ctx, rec.Surface, rec.SurfaceGeneration, o.Backend, ns, request.ResumeSession, true)
+						if e != nil {
+							return 0, e
+						}
+					}
+				}
+				if !allowed {
+					return 0, fmt.Errorf("native session has unresolved team ownership")
+				}
 			}
 		}
 	}

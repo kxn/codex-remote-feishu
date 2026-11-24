@@ -30,7 +30,7 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}
-	if l == nil || l.journal != p.journal || reducer == nil || event.Live == nil || event.Live.Version != agentproto.RuntimeLiveProtocolVersion || event.Live.CarrierIncarnation != l.native.CarrierIncarnation || event.Live.Sequence == 0 || event.Live.Sequence > math.MaxInt64 || event.Journal != nil || event.Seq != 0 || event.Kind != agentproto.EventItemDelta || event.NativeBinding == nil || event.NativeBinding.Owner != l.native || event.ThreadID == "" || event.TurnID == "" || event.ItemID == "" || strings.TrimSpace(event.Delta) == "" {
+	if l == nil || l.journal != p.journal || reducer == nil || event.Live == nil || event.Live.Version != agentproto.RuntimeLiveProtocolVersion || event.Live.CarrierIncarnation != l.native.CarrierIncarnation || event.Live.Sequence == 0 || event.Live.Sequence > math.MaxInt64 || event.Journal != nil || event.Seq != 0 || agentproto.PrivateDeliveryForEvent(event.Kind) != agentproto.PrivateEventLive || event.NativeBinding == nil || event.NativeBinding.Owner != l.native || event.ThreadID == "" || event.TurnID == "" || event.ItemID == "" || strings.TrimSpace(event.Delta) == "" {
 		return nil, ErrJournalState
 	}
 	hash, e := agentproto.HashRuntimeLiveEvent(event)
@@ -62,6 +62,9 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 		state, e := p.ensureOwner(ctx, l.surface, l.generation)
 		if e != nil {
 			return e
+		}
+		if p.app.Service().PrivateDetachedInstance(l.surface.SurfaceID, l.native.InstanceID) {
+			return ErrDeferred
 		}
 		inst := p.app.Service().Instance(l.native.InstanceID)
 		if p.app.instances[l.native.InstanceID] != l.surface.SurfaceID || inst == nil || !inst.Online {

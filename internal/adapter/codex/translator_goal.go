@@ -211,6 +211,7 @@ func (t *Translator) observeThreadReadResponse(pending pendingThreadRead, messag
 	event := agentproto.Event{
 		Kind:      agentproto.EventThreadRuntimeStatusUpdated,
 		CommandID: pending.CommandID,
+		RequestID: fmt.Sprint(message["id"]),
 		ThreadID:  pending.ThreadID,
 	}
 	if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {

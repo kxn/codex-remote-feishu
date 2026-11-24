@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -75,7 +76,7 @@ type NativeEventRef struct {
 // ReceiveNativeEvent commits the raw event and its pending projection before
 // returning the acknowledgement. A nil receipt means nothing may be ACKed.
 func (l *NativeLease) ReceiveNativeEvent(ctx context.Context, event agentproto.Event) (*agentproto.EventReceipt, error) {
-	if l == nil || event.Live != nil || event.Journal == nil || event.Journal.Version != agentproto.JournalProtocolVersion || event.Journal.CarrierIncarnation != l.native.CarrierIncarnation || event.Seq != event.Journal.Sequence || event.Seq == 0 || event.Seq > uint64(^uint64(0)>>1) || event.Execution != nil {
+	if l == nil || agentproto.PrivateDeliveryForEvent(event.Kind) != agentproto.PrivateEventDurable || event.Live != nil || event.Journal == nil || event.Journal.Version != agentproto.JournalProtocolVersion || event.Journal.CarrierIncarnation != l.native.CarrierIncarnation || event.Seq != event.Journal.Sequence || event.Seq == 0 || event.Seq > uint64(^uint64(0)>>1) || event.Execution != nil {
 		return nil, ErrJournalState
 	}
 	if event.NativeBinding != nil && (event.NativeBinding.Owner != l.native || event.NativeBinding.Validate(false) != nil) {
@@ -131,6 +132,22 @@ func (l *NativeLease) ReceiveNativeEvent(ctx context.Context, event agentproto.E
 		}
 		if event.CommandID != "" {
 			if e = resolveNativeEventTx(ctx, tx, event); e != nil {
+				return e
+			}
+		}
+		if e = observePrivateCompactTx(ctx, tx, l, event); e != nil {
+			return e
+		}
+		if event.Kind == agentproto.EventRequestResolved {
+			if e = resolvePrivateRequestResponseTx(ctx, tx, l, event); e != nil {
+				return e
+			}
+		} else if event.Kind == agentproto.EventRequestStarted {
+			if e = resolvePendingWrittenForRequestTx(ctx, tx, l, event); e != nil {
+				return e
+			}
+		} else if event.Kind == agentproto.EventNativeControlResult && event.Action == "request.response.written" {
+			if e = resolveAlreadyReceivedPrivateRequestTx(ctx, tx, l, event); e != nil {
 				return e
 			}
 		}
@@ -234,6 +251,9 @@ func (l *NativeLease) ResolveNativeDispatch(ctx context.Context, ref NativeEvent
 		if e = resolveNativeEventTx(ctx, tx, event); e != nil {
 			return e
 		}
+		if e = observePrivateCompactTx(ctx, tx, l, event); e != nil {
+			return e
+		}
 		return tx.Commit()
 	})
 }
@@ -263,7 +283,7 @@ func resolveNativeEventTx(ctx context.Context, tx *sql.Tx, event agentproto.Even
 	if !definitive {
 		return nil
 	}
-	if state == outcome {
+	if state == outcome || state == "resolved" && outcome == "sent" {
 		var storedRequest string
 		var storedSequence int64
 		if err = tx.QueryRowContext(ctx, `SELECT request_id,event_sequence FROM dispatch WHERE id=?`, dispatchID).Scan(&storedRequest, &storedSequence); err != nil {
@@ -309,6 +329,24 @@ func resolveNativeEventTx(ctx context.Context, tx *sql.Tx, event agentproto.Even
 	if err = json.Unmarshal(receiptRaw, &receipt); err != nil {
 		return err
 	}
+	if method == "request-written" {
+		frameID, err := strconv.ParseInt(fmt.Sprint(event.Metadata["frameID"]), 10, 64)
+		if err != nil || frameID <= 0 {
+			return ErrJournalConflict
+		}
+		matched := false
+		for _, frame := range receipt.Frames {
+			if frame.FrameID == frameID && frame.Stage == "written" {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE dispatch SET state='sent',evidence=?,request_id=?,event_sequence=? WHERE id=?`, []byte(fmt.Sprintf(`{"incarnation":%q,"sequence":%d,"hash":%q}`, event.Journal.CarrierIncarnation, event.Journal.Sequence, event.Journal.PayloadHash)), event.RequestID, event.Journal.Sequence, dispatchID)
+		return err
+	}
 	if method == "prewrite" {
 		if receipt.Stage != "prepared" || receipt.WrittenFrames != 0 {
 			return nil
@@ -321,9 +359,38 @@ func resolveNativeEventTx(ctx context.Context, tx *sql.Tx, event agentproto.Even
 		_, err = tx.ExecContext(ctx, `UPDATE dispatch SET state=?,evidence=?,request_id=?,event_sequence=? WHERE id=?`, outcome, []byte(fmt.Sprintf(`{"incarnation":%q,"sequence":%d,"hash":%q}`, event.Journal.CarrierIncarnation, event.Journal.Sequence, event.Journal.PayloadHash)), event.RequestID, event.Journal.Sequence, dispatchID)
 		return err
 	}
+	if method == "compact-prewrite" {
+		frameID, parseErr := strconv.ParseInt(fmt.Sprint(event.Metadata["frameID"]), 10, 64)
+		if parseErr != nil || frameID <= 0 {
+			return ErrJournalConflict
+		}
+		matched := false
+		for _, frame := range receipt.Frames {
+			if frame.FrameID == frameID && frame.NativeMethod == "thread/compact/start" && frame.Stage == "prepared" {
+				matched = true
+				continue
+			}
+			if frame.NativeMethod != "thread/resume" || frame.Stage != "written" {
+				return nil
+			}
+		}
+		if !matched {
+			return nil
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE dispatch SET state='failed',evidence=?,request_id=?,event_sequence=? WHERE id=?`, []byte(fmt.Sprintf(`{"incarnation":%q,"sequence":%d,"hash":%q}`, event.Journal.CarrierIncarnation, event.Journal.Sequence, event.Journal.PayloadHash)), event.RequestID, event.Journal.Sequence, dispatchID)
+		return err
+	}
 	matched := false
 	for _, frame := range receipt.Frames {
 		if frame.NativeRequestID == event.RequestID && frame.NativeMethod == method && (frame.Stage == "written" || frame.Stage == "child_write_started" || frame.Stage == "unknown") {
+			if command.Kind == agentproto.CommandThreadCompactStart {
+				if frame.EventWatermark == nil {
+					return nil
+				}
+				if _, err = tx.ExecContext(ctx, `UPDATE private_compact_operations SET after_sequence=? WHERE command_id=? AND incarnation=? AND state='pending'`, *frame.EventWatermark, command.CommandID, event.Journal.CarrierIncarnation); err != nil {
+					return err
+				}
+			}
 			matched = true
 			break
 		}
@@ -336,132 +403,6 @@ func resolveNativeEventTx(ctx context.Context, tx *sql.Tx, event agentproto.Even
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE dispatch SET state=?,evidence=?,session=?,request_id=?,event_sequence=? WHERE id=?`, outcome, []byte(fmt.Sprintf(`{"incarnation":%q,"sequence":%d,"hash":%q}`, event.Journal.CarrierIncarnation, event.Journal.Sequence, event.Journal.PayloadHash)), d.Session.SessionID, event.RequestID, event.Journal.Sequence, dispatchID)
 	return err
-}
-func nativeEventOutcome(command agentproto.Command, event agentproto.Event) (outcome, method string, definitive bool) {
-	if event.CommandID != command.CommandID {
-		return "", "", false
-	}
-	if event.Kind == agentproto.EventNativeCommandRejected && event.Status == "failed" && event.Action == "wrapper.before_child_write" && event.Problem != nil && event.Problem.CommandID == command.CommandID {
-		return "failed", "prewrite", true
-	}
-	if command.NativeBinding.Owner.Backend == agentproto.BackendOpenCode && event.Kind == agentproto.EventNativeCommandRejected && event.Status == "failed" && event.Action == "native.rpc.rejected" && event.RequestID != "" && event.Problem != nil && event.Problem.CommandID == command.CommandID {
-		switch event.Problem.Operation {
-		case "session/new", "session/resume", "session/prompt", "session/list", "session/load", "session/new.catalog":
-			method := event.Problem.Operation
-			if method == "session/new.catalog" {
-				method = "session/new"
-			}
-			return "failed", method, true
-		}
-	}
-	if command.Kind == agentproto.CommandRuntimeInspect && command.RuntimeInspection != nil && command.NativeBinding.ExecutionID == "" && event.Kind == agentproto.EventRuntimeInspectionCompleted && event.RuntimeInspection != nil && event.RuntimeInspection.RequestCommandID == command.CommandID && event.RuntimeInspection.CarrierIncarnation == command.NativeBinding.Owner.CarrierIncarnation && event.RuntimeInspection.InstanceGeneration == command.NativeBinding.Owner.InstanceGeneration && event.RuntimeInspection.ProcessGeneration == command.NativeBinding.Owner.ProcessGeneration && event.RuntimeInspection.LocationGeneration == 0 {
-		return "accepted", "local", true
-	}
-	if command.NativeBinding.Owner.Backend == agentproto.BackendClaude && command.Kind == agentproto.CommandThreadsRefresh && event.Kind == agentproto.EventThreadsSnapshot {
-		return "accepted", "local", true
-	}
-	if command.NativeBinding.Owner.Backend == agentproto.BackendClaude && command.Kind == agentproto.CommandThreadHistoryRead && event.Kind == agentproto.EventThreadHistoryRead && event.ThreadHistory != nil && event.ThreadID != "" && event.ThreadID == command.Target.ThreadID {
-		return "accepted", "local", true
-	}
-	if event.RequestID == "" {
-		return "", "", false
-	}
-	switch command.Kind {
-	case agentproto.CommandMCPOAuthLogin:
-		if command.NativeBinding.Owner.Backend != agentproto.BackendCodex || command.MCP.OAuthLogin == nil || event.ThreadID != command.MCP.OAuthLogin.ThreadID {
-			return "", "", false
-		}
-		if event.Kind == agentproto.EventMCPOAuthLoginURLReady && event.MCPOAuthLogin != nil && event.MCPOAuthLogin.ServerName == command.MCP.OAuthLogin.ServerName && event.MCPOAuthLogin.ThreadID == command.MCP.OAuthLogin.ThreadID && event.MCPOAuthLogin.AuthorizationURL != "" {
-			return "accepted", "mcpServer/oauth/login", true
-		}
-		if event.Kind == agentproto.EventSystemError && event.Problem != nil && event.Problem.CommandID == command.CommandID && event.Problem.Operation == string(agentproto.CommandMCPOAuthLogin) && event.Problem.Stage == "command_response" {
-			return "failed", "mcpServer/oauth/login", true
-		}
-	case agentproto.CommandThreadsRefresh:
-		if command.NativeBinding.Owner.Backend == agentproto.BackendOpenCode && event.Kind == agentproto.EventThreadsSnapshot {
-			return "accepted", "session/list", true
-		}
-		if command.NativeBinding.Owner.Backend == agentproto.BackendCodex && event.Kind == agentproto.EventNativeQueryCompleted && event.Action == "thread.list" {
-			if event.Status == "completed" {
-				return "accepted", "shared", true
-			}
-			if event.Status == "failed" {
-				return "failed", "shared", true
-			}
-		}
-	case agentproto.CommandThreadHistoryRead:
-		if command.NativeBinding.Owner.Backend == agentproto.BackendOpenCode && event.Kind == agentproto.EventThreadHistoryRead && event.ThreadHistory != nil && event.ThreadID == command.Target.ThreadID && event.ThreadID != "" {
-			return "accepted", "session/load", true
-		}
-		if command.NativeBinding.Owner.Backend == agentproto.BackendCodex && event.Kind == agentproto.EventThreadHistoryRead && event.ThreadHistory != nil && event.ThreadID != "" && event.ThreadID == command.Target.ThreadID {
-			return "accepted", "thread/read", true
-		}
-	case agentproto.CommandModelList:
-		if command.NativeBinding.Owner.Backend == agentproto.BackendOpenCode && event.Kind == agentproto.EventModelCatalogUpdated && event.ModelCatalog != nil {
-			return "accepted", "session/new", true
-		}
-		if command.NativeBinding.Owner.Backend == agentproto.BackendCodex && event.Kind == agentproto.EventModelCatalogUpdated && event.ModelCatalog != nil {
-			return "accepted", "model/list", true
-		}
-	case agentproto.CommandPromptSend:
-		if command.NativeBinding.Owner.Backend == agentproto.BackendCodex && event.Kind == agentproto.EventTurnCompleted && event.Status == "failed" && event.TurnID == "" {
-			switch event.TurnCompletionOrigin {
-			case agentproto.TurnCompletionOriginThreadStartRejected:
-				if command.Target.ExecutionMode == agentproto.PromptExecutionModeStartNew {
-					return "failed", "thread/start", true
-				}
-			case agentproto.TurnCompletionOriginThreadResumeRejected:
-				if command.Target.ExecutionMode == agentproto.PromptExecutionModeResumeExisting && event.ThreadID == command.Target.ThreadID {
-					return "failed", "thread/resume", true
-				}
-			case agentproto.TurnCompletionOriginTurnStartRejected:
-				if command.Target.ThreadID == "" || event.ThreadID == command.Target.ThreadID {
-					return "failed", "turn/start", true
-				}
-			}
-		}
-		if event.ThreadID == "" || event.TurnID == "" || command.Target.ThreadID != "" && event.ThreadID != command.Target.ThreadID {
-			return "", "", false
-		}
-		if command.NativeBinding.Owner.Backend == agentproto.BackendCodex && event.Kind == agentproto.EventNativeTurnBindingObserved && event.Status == "accepted" {
-			return "accepted", "turn/start", true
-		}
-		if command.NativeBinding.Owner.Backend == agentproto.BackendOpenCode && event.Kind == agentproto.EventNativeTurnBindingObserved && event.Status == "accepted" {
-			return "accepted", "session/prompt", true
-		}
-		if command.NativeBinding.Owner.Backend == agentproto.BackendClaude && event.Kind == agentproto.EventTurnStarted && event.Metadata["turnIdSource"] == "synthetic_from_observed_user_uuid" && event.Metadata["nativeUserUUID"] == event.RequestID && event.TurnID == "relay-claude-turn-"+event.RequestID {
-			return "accepted", "user", true
-		}
-	case agentproto.CommandTurnInterrupt:
-		if event.Kind != agentproto.EventNativeControlResult || event.Action != "turn.interrupt" || event.ThreadID != command.Target.ThreadID || event.TurnID != command.Target.TurnID {
-			return "", "", false
-		}
-		method := "turn/interrupt"
-		if command.NativeBinding.Owner.Backend == agentproto.BackendClaude {
-			method = "interrupt"
-		}
-		if event.Status == "accepted" {
-			return "accepted", method, true
-		}
-		if event.Status == "failed" {
-			return "failed", method, true
-		}
-	case agentproto.CommandTurnSteer:
-		if event.ThreadID != command.Target.ThreadID || event.TurnID != command.Target.TurnID {
-			return "", "", false
-		}
-		method = "turn/steer"
-		if command.NativeBinding.Owner.Backend == agentproto.BackendClaude {
-			method = "user"
-		}
-		if event.Kind == agentproto.EventNativeTurnInputAccepted && event.Status == "accepted" {
-			return "accepted", method, true
-		}
-		if event.Kind == agentproto.EventNativeTurnInputRejected && event.Status == "failed" {
-			return "failed", method, true
-		}
-	}
-	return "", "", false
 }
 
 // PendingNativeEvents enumerates committed events awaiting application to the
@@ -678,6 +619,11 @@ func (l *NativeLease) markDispatchState(ctx context.Context, id, old, next strin
 		}
 		if command.NativeBinding == nil || command.NativeBinding.Owner != l.native {
 			return ErrJournalConflict
+		}
+		if old == "prepared" && next == "sending" && command.Kind != agentproto.CommandTurnInterrupt && command.Kind != agentproto.CommandRuntimeInspect && command.Kind != agentproto.CommandProcessExit {
+			if e = assertCarrierNotDetached(ctx, tx, l.surface, l.generation, l.native.InstanceID); e != nil {
+				return e
+			}
 		}
 		if state == next && next == "unknown" && string(previousEvidence) == string(evidence) {
 			return nil

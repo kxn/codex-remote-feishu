@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
@@ -70,8 +71,28 @@ func (r privateKnownUnsentReducer) ReduceHostReceipt(app *privatechat.App, e pri
 		return nil, privatechat.ErrJournalConflict
 	}
 	problem := agentproto.ErrorInfo{Code: "native_command_not_sent", Layer: "daemon", Stage: "dispatch_prepare", Operation: string(event.Command.Kind), Message: "命令未发送，输入已恢复，请重试。", SurfaceSessionID: event.SurfaceSessionID, CommandID: receipt.CommandID}
-	if events, handled := app.Service().HandlePrivateQueryFailure(event.SurfaceSessionID, receipt.InstanceID, receipt.CommandID, problem); handled {
-		return events, nil
+	if receipt.Reason == "legacy_private_delivery" {
+		problem.Code = "private_runtime_upgrade_required"
+		problem.Message = "当前运行环境版本较旧，无法安全执行此操作。请先发送 /detach，等待运行环境退出完成后再重新选择工作目录。"
 	}
-	return app.Service().HandleKnownUnsent(event.SurfaceSessionID, receipt.CommandID, problem), nil
+	if event.Command.Kind == agentproto.CommandThreadCompactStart || event.Command.Kind == agentproto.CommandReviewStart {
+		if err = app.Service().RestorePrivateControlProjection(event.SurfaceSessionID, receipt.InstanceID, receipt.CommandID, event.Command.Kind, event.Command.Target.ThreadID, "", ""); err != nil {
+			return nil, err
+		}
+	}
+	if event.Command.Kind == agentproto.CommandRequestRespond {
+		if err = app.Service().RestorePrivateRequestProjection(event.SurfaceSessionID, receipt.InstanceID, event.Command.Request.RequestID, receipt.CommandID, event.Command.Target.ThreadID, event.Command.Target.TurnID); err != nil {
+			return nil, err
+		}
+	}
+	var events []eventcontract.Event
+	if result, handled := app.Service().HandlePrivateQueryFailure(event.SurfaceSessionID, receipt.InstanceID, receipt.CommandID, problem); handled {
+		events = result
+	} else {
+		events = app.Service().HandleKnownUnsent(event.SurfaceSessionID, receipt.CommandID, problem)
+	}
+	if receipt.Reason == "legacy_private_delivery" {
+		events = append(events, eventcontract.Event{Kind: eventcontract.KindNotice, SurfaceSessionID: event.SurfaceSessionID, Notice: &control.Notice{Code: problem.Code, Text: problem.Message}})
+	}
+	return events, nil
 }

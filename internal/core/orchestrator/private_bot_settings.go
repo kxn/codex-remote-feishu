@@ -13,7 +13,7 @@ import (
 
 func (s *Service) capturePrivateSettingsProposal(surface *state.SurfaceConsoleRecord, mutate func(*state.BotCapabilitySettingsRecord)) {
 	record, status := state.LookupSurfaceBotCapabilitySettings(s.root, surface)
-	if status == state.BotCapabilitySettingsLookupAbsent {
+	if status == state.BotCapabilitySettingsLookupAbsent || status == state.BotCapabilitySettingsLookupNotApplicable {
 		record = botCapabilitySettingsFromSurface(surface)
 	}
 	mutate(&record)
@@ -34,7 +34,7 @@ func (s *Service) PreviewPrivateSettingsTransition(action control.Action) (*stat
 		if len(parts) > 1 && parts[1] == "vscode" || strings.EqualFold(action.OptionID, "vscode") {
 			return nil, nil, fmt.Errorf("vscode mode is unavailable")
 		}
-	case control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand:
+	case control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand, control.ActionModelCommand, control.ActionReasoningCommand:
 	default:
 		return nil, nil, fmt.Errorf("unsupported private settings preview")
 	}

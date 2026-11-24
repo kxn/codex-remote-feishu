@@ -256,79 +256,15 @@ func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err 
 		return nil
 	}
 	item := surface.QueueItems[surface.ActiveQueueItemID]
-	if item == nil || item.Status != state.QueueItemDispatching {
+	binding := s.remoteBindingForSurface(surface)
+	if item == nil || item.Status != state.QueueItemDispatching || binding == nil || binding.CommandID != commandID || binding.QueueItemID != item.ID {
 		return nil
 	}
 	return s.failSurfaceActiveQueueItem(surface, item, &notice, true)
 }
 
 func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.CommandAck) []eventcontract.Event {
-	if ack.CommandID == "" {
-		return nil
-	}
-	if s.acknowledgePendingReviewStart(ack.CommandID) {
-		return nil
-	}
-	if surface, request := s.findPendingRequestByCommandID(ack.CommandID); surface != nil && request != nil {
-		markRequestAwaitingBackendConsume(request)
-		if requestPromptRenderable(request.RequestType) && strings.TrimSpace(request.VisibleMessageID) != "" {
-			return []eventcontract.Event{s.requestPromptDeliveryEvent(surface, request, "")}
-		}
-		return nil
-	}
-	if key, binding := s.pendingShellForCommand(instanceID, ack.CommandID); binding != nil {
-		surface := s.root.Surfaces[binding.SurfaceSessionID]
-		if surface == nil {
-			s.clearPendingShell(key)
-			return nil
-		}
-		s.clearPendingShell(key)
-		item := surface.QueueItems[binding.QueueItemID]
-		if item == nil || item.Status != state.QueueItemShellCommanding {
-			return nil
-		}
-		item.Status = state.QueueItemShellCommanded
-		item.ShellCommandThreadID = binding.ThreadID
-		item.ShellCommandTurnID = binding.TurnID
-		events := s.pendingInputEvents(surface, control.PendingInputState{
-			QueueItemID: item.ID,
-			Status:      string(item.Status),
-			QueueOff:    true,
-			Applause:    true,
-		}, []string{binding.SourceMessageID})
-		return s.insertExecCommandProgressBoundary(binding.InstanceID, binding.ThreadID, binding.TurnID, events)
-	}
-	key, binding := s.pendingSteerForCommand(instanceID, ack.CommandID)
-	if binding == nil {
-		return nil
-	}
-	surface := s.root.Surfaces[binding.SurfaceSessionID]
-	if surface == nil {
-		s.clearPendingSteer(key)
-		return nil
-	}
-	s.clearPendingSteer(key)
-	events := []eventcontract.Event{}
-	if strings.TrimSpace(binding.OwnerCardMessageID) != "" {
-		events = append(events, steerAllCompletedOwnerCardEvent(surface.SurfaceSessionID, binding.OwnerCardMessageID, len(pendingSteerQueueItemIDs(binding))))
-	}
-	if supplement := s.steerUserSupplementEvent(surface, binding); supplement != nil {
-		events = append(events, *supplement)
-	}
-	for _, queueItemID := range pendingSteerQueueItemIDs(binding) {
-		item := surface.QueueItems[queueItemID]
-		if item == nil || item.Status != state.QueueItemSteering {
-			continue
-		}
-		item.Status = state.QueueItemSteered
-		events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
-			QueueItemID: item.ID,
-			Status:      string(item.Status),
-			QueueOff:    true,
-			ThumbsUp:    true,
-		}, queueItemSourceMessageIDs(item))...)
-	}
-	return s.insertExecCommandProgressBoundary(binding.InstanceID, binding.ThreadID, binding.TurnID, events)
+	return s.handleCommandAccepted(instanceID, ack.CommandID)
 }
 
 func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.CommandAck) []eventcontract.Event {

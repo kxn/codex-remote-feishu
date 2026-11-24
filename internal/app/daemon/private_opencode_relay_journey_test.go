@@ -42,7 +42,9 @@ func TestPrivateOpenCodeRelayFixtureProcess(t *testing.T) {
 			case "initialize":
 				fmt.Printf(`{"id":%q,"result":{"protocolVersion":1,"agentInfo":{"name":"OpenCode","version":"2.1.4"}}}`+"\n", f.ID)
 			case "session/new":
-				fmt.Printf(`{"id":%q,"result":{"sessionId":"session"}}`+"\n", f.ID)
+				fmt.Printf(`{"id":%q,"result":{"sessionId":"session","configOptions":[{"id":"model","type":"select","category":"model","currentValue":"fixture/model","options":[{"value":"fixture/model","name":"Fixture Model"}]},{"id":"effort","type":"select","currentValue":"low","options":[{"value":"low","name":"Low"},{"value":"high","name":"High"}]}]}}`+"\n", f.ID)
+			case "session/set_config_option":
+				fmt.Printf(`{"id":%q,"result":{}}`+"\n", f.ID)
 			case "session/prompt":
 				activeID = f.ID
 				fmt.Println(`{"method":"session/update","params":{"sessionId":"session","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"working"}}}}`)
@@ -66,7 +68,7 @@ func TestPrivateOpenCodeRelayFixtureProcess(t *testing.T) {
 			if json.Unmarshal(line, &f) != nil {
 				continue
 			}
-			if f.Method == "turn/steer" || f.Method == "turn/start" || f.Method == "turn/interrupt" {
+			if f.Method == "turn/steer" || f.Method == "turn/start" || f.Method == "turn/interrupt" || f.Method == "thread/shellCommand" || f.Method == "thread/read" {
 				if path := os.Getenv("FIXTURE_TRACE"); path != "" {
 					file, _ := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 					if file != nil {
@@ -79,16 +81,29 @@ func TestPrivateOpenCodeRelayFixtureProcess(t *testing.T) {
 			case "initialize":
 				fmt.Printf(`{"id":%q,"result":{}}`+"\n", f.ID)
 			case "thread/start", "thread/resume":
-				fmt.Printf(`{"id":%q,"result":{"thread":{"id":"session"}}}`+"\n", f.ID)
+				cwd, _ := os.Getwd()
+				fmt.Printf(`{"id":%q,"result":{"thread":{"id":"session","cwd":%q}}}`+"\n", f.ID, cwd)
 			case "turn/start":
 				turns++
 				turn := fmt.Sprintf("turn-%d", turns)
 				fmt.Printf(`{"id":%q,"result":{"turn":{"id":%q}}}`+"\n", f.ID, turn)
 				fmt.Printf(`{"method":"turn/started","params":{"threadId":"session","turn":{"id":%q}}}`+"\n", turn)
+				fmt.Printf(`{"method":"thread/tokenUsage/updated","params":{"threadId":"session","turnId":%q,"tokenUsage":{"last":{"totalTokens":200},"total":{"totalTokens":500},"modelContextWindow":1000}}}`+"\n", turn)
 				if turns == 1 || turns > 2 {
 					fmt.Printf(`{"method":"item/completed","params":{"threadId":"session","turnId":%q,"item":{"id":"answer","type":"agentMessage","text":"done"}}}`+"\n", turn)
 					fmt.Printf(`{"method":"turn/completed","params":{"threadId":"session","turn":{"id":%q,"status":"completed"}}}`+"\n", turn)
 				}
+			case "thread/shellCommand":
+				var command struct {
+					Params struct {
+						Command string `json:"command"`
+					} `json:"params"`
+				}
+				_ = json.Unmarshal(line, &command)
+				fmt.Printf(`{"id":%q,"result":{}}`+"\n", f.ID)
+				item := map[string]any{"id": "shell-item", "type": "commandExecution", "source": "userShell", "command": command.Params.Command, "status": "completed", "exitCode": 0, "aggregatedOutput": "shell done"}
+				raw, _ := json.Marshal(map[string]any{"method": "item/completed", "params": map[string]any{"threadId": "session", "turnId": "shell-turn", "item": item}})
+				fmt.Println(string(raw))
 			case "turn/steer":
 				fmt.Printf(`{"id":%q,"result":{"turnId":"turn-2"}}`+"\n", f.ID)
 			case "turn/interrupt":
@@ -97,7 +112,8 @@ func TestPrivateOpenCodeRelayFixtureProcess(t *testing.T) {
 			case "thread/list":
 				fmt.Printf(`{"id":%q,"result":{"data":[]}}`+"\n", f.ID)
 			case "thread/read":
-				fmt.Printf(`{"id":%q,"result":{"thread":{"id":"session","status":{"type":"idle"}}}}`+"\n", f.ID)
+				cwd, _ := os.Getwd()
+				fmt.Printf(`{"id":%q,"result":{"thread":{"id":"session","cwd":%q,"status":{"type":"idle"}}}}`+"\n", f.ID, cwd)
 			case "thread/goal/get":
 				fmt.Printf(`{"id":%q,"result":{"goal":null}}`+"\n", f.ID)
 			case "model/list":

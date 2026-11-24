@@ -43,10 +43,38 @@ type PrivateCheckpoint struct {
 	RecentFinalCards                                                                                []*state.FinalCardRecord               `json:",omitempty"`
 	HistoricalInstance                                                                              *PrivateHistoricalInstance
 	Holds                                                                                           []PrivateRecoveryHold
+	Goal                                                                                            *PrivateGoalCheckpoint     `json:",omitempty"`
+	DetachedExecutions                                                                              []PrivateDetachedExecution `json:",omitempty"`
+	OfflineStop                                                                                     *PrivateOfflineStop        `json:",omitempty"`
+	Navigation                                                                                      *PrivateNavigationSnapshot `json:",omitempty"`
+	ReconnectQuery                                                                                  *PrivateReconnectQuery     `json:",omitempty"`
 	PickerWatermarks                                                                                *PrivatePickerWatermarks
 	MigrationRecoveryReleased                                                                       bool                 `json:",omitempty"`
 	UI                                                                                              *privateCheckpointUI `json:",omitempty"`
 	NextQueueID, NextImageID, NextFileID, NextCommandID, NextHeadlessID, NextEpisodeID, NextShellID int
+}
+
+type PrivateReconnectQuery struct {
+	InstanceID, ThreadID, CommandID string
+	Deadline                        time.Time
+}
+
+type PrivateOfflineStop struct{ InstanceID, ThreadID, TurnID, SourceMessageID, CommandID, QueueItemID string }
+
+// PrivateDetachedExecution keeps immutable references to old execution evidence.
+// Its queue IDs refer to QueueItems; it is never a dispatch queue.
+type PrivateDetachedExecution struct {
+	InstanceID         string
+	ActiveQueueItemID  string
+	QueuedQueueItemIDs []string
+	Holds              []PrivateRecoveryHold
+	Events             []PrivateDetachedEventRef `json:",omitempty"`
+	OfflineStop        *PrivateOfflineStop       `json:",omitempty"`
+}
+type PrivateDetachedEventRef struct {
+	Incarnation string
+	Sequence    uint64
+	PayloadHash string
 }
 type PrivateHistoricalInstance struct {
 	InstanceID, WorkspaceRoot, WorkspaceKey string
@@ -74,6 +102,23 @@ func (s *Service) ExportPrivateCheckpoint(surfaceID string) (PrivateCheckpoint, 
 	out.SurfaceMessages, out.SurfaceMessageSeq, out.RecentFinalCards = v.SurfaceMessages, v.SurfaceMessageSeq, v.RecentFinalCards
 	out.UI = s.exportPrivateCheckpointUI(v)
 	out.MigrationRecoveryReleased = s.privateMigrationReleased[v.SurfaceSessionID]
+	out.Goal = s.exportPrivateGoalCheckpoint(v.SurfaceSessionID)
+	out.Navigation = s.exportPrivateNavigation(v)
+	out.DetachedExecutions = append([]PrivateDetachedExecution(nil), s.privateDetachedExecutions[v.SurfaceSessionID]...)
+	if stop, ok := s.privateOfflineStops[v.SurfaceSessionID]; ok {
+		out.OfflineStop = &stop
+	}
+	if query, ok := s.privateReconnectQueries[v.SurfaceSessionID]; ok {
+		if v.RouteMode == state.RouteModePinned && v.AttachedInstanceID == query.InstanceID && v.SelectedThreadID == query.ThreadID {
+			out.ReconnectQuery = &query
+		} else {
+			delete(s.privateReconnectQueries, v.SurfaceSessionID)
+		}
+	}
+	if len(out.DetachedExecutions) > 0 || out.OfflineStop != nil || out.ReconnectQuery != nil || out.Goal != nil || out.Navigation != nil {
+		out.Version = 2
+	}
+
 	if inst := s.root.Instances[v.AttachedInstanceID]; inst != nil {
 		out.HistoricalInstance = &PrivateHistoricalInstance{inst.InstanceID, inst.WorkspaceRoot, inst.WorkspaceKey, inst.Backend}
 	}

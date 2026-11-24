@@ -41,6 +41,7 @@ type RuntimeFrameReceipt struct {
 	NativeRequestID string `json:"nativeRequestId,omitempty"`
 	NativeMethod    string `json:"nativeMethod,omitempty"`
 	Stage           string `json:"stage"`
+	EventWatermark  *int64 `json:"eventWatermark,omitempty"`
 }
 
 func RuntimeEventPayloadHash(event Event) (string, error) {

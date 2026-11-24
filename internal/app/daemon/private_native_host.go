@@ -16,6 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/runtimejournal"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/nativeinspection"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
@@ -38,7 +39,26 @@ type privateNativeHost struct {
 	mu                    sync.Mutex
 	drainMu               sync.Mutex
 	connections           map[string]uint64
+	deliveryCapabilities  map[string]privateDeliveryCapability
 	sealedReady           map[string]bool
+}
+
+type privateDeliveryCapability struct {
+	connection uint64
+	version    int
+}
+
+var errLegacyPrivateDelivery = errors.New("private wrapper does not support required delivery facts")
+
+func (h *privateNativeHost) privateDeliverySupported(instance string, connection uint64, kind agentproto.CommandKind) bool {
+	required := agentproto.PrivateDeliveryRequirement(kind)
+	if required == 0 {
+		return true
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	capability := h.deliveryCapabilities[instance]
+	return connection != 0 && capability.connection == connection && capability.version >= required
 }
 
 func privateRegistration(o agentproto.NativeOwner) executionowner.Registration {
@@ -99,13 +119,17 @@ func (h *privateNativeHost) acceptHello(ctx context.Context, meta relayws.Connec
 			}
 			h.connectionEpoch = hex.EncodeToString(nonce[:])
 		}
-		if _, err := h.processor.ApplyAuthenticatedNativeHello(ctx, lease, hello, fmt.Sprintf("%s:%d", h.connectionEpoch, meta.ConnectionID)); err != nil {
+		if _, err := h.processor.ApplyAuthenticatedNativeHello(ctx, lease, hello, fmt.Sprintf("%s:%d", h.connectionEpoch, meta.ConnectionID), orchestrator.PrivateNativeProfiles{Codex: rec.CodexProfileID, Claude: rec.ClaudeProfileID, OpenCode: rec.OpenCodeProfileID}); err != nil {
 			return err
 		}
 		if h.connections == nil {
 			h.connections = make(map[string]uint64)
 		}
 		h.connections[hello.Instance.InstanceID] = meta.ConnectionID
+		if h.deliveryCapabilities == nil {
+			h.deliveryCapabilities = make(map[string]privateDeliveryCapability)
+		}
+		h.deliveryCapabilities[hello.Instance.InstanceID] = privateDeliveryCapability{meta.ConnectionID, hello.PrivateDeliveryVersion}
 		return nil
 	})
 }
@@ -135,6 +159,7 @@ func (h *privateNativeHost) disconnect(ctx context.Context, meta relayws.Connect
 		return err
 	}
 	delete(h.connections, instance)
+	delete(h.deliveryCapabilities, instance)
 	return nil
 }
 
@@ -234,6 +259,7 @@ func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.Connect
 	if binding.Owner != rec.Snapshot.Owner {
 		return executionowner.ErrConflict
 	}
+	missingCapability := !h.privateDeliverySupported(instance, meta.ConnectionID, expectedKind)
 	var command agentproto.Command
 	var dispatch privatechat.Dispatch
 	err = h.outbound.SendLeased(ctx, privateRegistration(binding.Owner), func(token *executionowner.Lease) error {
@@ -267,7 +293,13 @@ func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.Connect
 		if privateEffectTargetsSession(command.Kind) && command.Target.ThreadID != targetSession || !privateEffectTargetsSession(command.Kind) && targetSession != "" {
 			return executionowner.ErrConflict
 		}
-		return lease.MarkSending(ctx, dispatch.ID)
+		if e = lease.MarkSending(ctx, dispatch.ID); e != nil {
+			return e
+		}
+		if missingCapability {
+			return errLegacyPrivateDelivery
+		}
+		return nil
 	}, func() error { return h.relay.SendCommandToConnection(instance, meta.ConnectionID, command) })
 	if err != nil && dispatch.ID != "" {
 		var before *executionowner.BeforeSendError
@@ -278,7 +310,11 @@ func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.Connect
 				if e != nil {
 					return e
 				}
-				return lease.RecordKnownUnsent(saveCtx, effect, dispatch.ID, "transport_not_invoked")
+				reason := "transport_not_invoked"
+				if errors.Is(err, errLegacyPrivateDelivery) {
+					reason = "legacy_private_delivery"
+				}
+				return lease.RecordKnownUnsent(saveCtx, effect, dispatch.ID, reason)
 			}); e == nil {
 				return err
 			}
@@ -520,7 +556,7 @@ func (h *privateNativeHost) retire(ctx context.Context, instance string) error {
 }
 
 func (h *privateNativeHost) receiveLive(ctx context.Context, meta relayws.ConnectionMeta, instance string, event agentproto.Event) error {
-	if !h.validConnection(instance, meta) || event.Kind != agentproto.EventItemDelta || event.Journal != nil || event.Live == nil {
+	if !h.validConnection(instance, meta) || agentproto.PrivateDeliveryForEvent(event.Kind) != agentproto.PrivateEventLive || event.Journal != nil || event.Live == nil {
 		return executionowner.ErrConflict
 	}
 	rec, err := h.store.lookup(ctx, instance)

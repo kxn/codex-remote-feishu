@@ -3,6 +3,7 @@ package wrapper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -216,6 +217,9 @@ func writeJournaledChildFrame(childStdin io.Writer, line []byte, runtime backend
 	})
 	if tracked {
 		if err := hooks.BeforeChildWrite(line); err != nil {
+			if errors.Is(err, runtimejournal.ErrPrivateCompactNotIdle) {
+				return nil
+			}
 			return err
 		}
 	}

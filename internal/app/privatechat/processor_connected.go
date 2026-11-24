@@ -9,11 +9,16 @@ import (
 	"errors"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 )
 
-const nativeConnectionSchema = `CREATE TABLE IF NOT EXISTS private_native_connections (incarnation TEXT NOT NULL, connection_id TEXT NOT NULL, revision INTEGER NOT NULL, PRIMARY KEY(incarnation,connection_id)); CREATE TABLE IF NOT EXISTS private_native_connection_hellos (incarnation TEXT NOT NULL, connection_id TEXT NOT NULL, hello_hash TEXT NOT NULL, PRIMARY KEY(incarnation,connection_id));`
+const nativeConnectionSchema = `CREATE TABLE IF NOT EXISTS private_native_connections (incarnation TEXT NOT NULL, connection_id TEXT NOT NULL, revision INTEGER NOT NULL, PRIMARY KEY(incarnation,connection_id)); CREATE TABLE IF NOT EXISTS private_native_connection_hellos (incarnation TEXT NOT NULL, connection_id TEXT NOT NULL, hello_hash TEXT NOT NULL, PRIMARY KEY(incarnation,connection_id)); CREATE TABLE IF NOT EXISTS private_native_connection_delivery (incarnation TEXT NOT NULL, connection_id TEXT NOT NULL, delivery_version INTEGER NOT NULL, PRIMARY KEY(incarnation,connection_id), FOREIGN KEY(incarnation,connection_id) REFERENCES private_native_connections(incarnation,connection_id));`
 
-type nativeConnectionRef struct{ Incarnation, ConnectionID, HelloHash string }
+type nativeConnectionRef struct {
+	Incarnation, ConnectionID, HelloHash string
+	DeliveryVersion                      int
+}
 
 func (j *Journal) commitNativeConnection(ctx context.Context, tx *sql.Tx, cp Checkpoint, ref nativeConnectionRef) error {
 	if ref.Incarnation == "" || ref.ConnectionID == "" {
@@ -24,6 +29,10 @@ func (j *Journal) commitNativeConnection(ctx context.Context, tx *sql.Tx, cp Che
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO private_native_connection_hellos(incarnation,connection_id,hello_hash) VALUES(?,?,?)`, ref.Incarnation, ref.ConnectionID, ref.HelloHash)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO private_native_connection_delivery(incarnation,connection_id,delivery_version) VALUES(?,?,?)`, ref.Incarnation, ref.ConnectionID, ref.DeliveryVersion)
 	return err
 }
 
@@ -44,7 +53,7 @@ func (p *Processor) ApplyNativeConnected(ctx context.Context, l *NativeLease, co
 	var out []EffectRecord
 	err := l.with(ctx, func() error {
 		var err error
-		out, err = p.applyNativeConnectedLocked(ctx, l, connectionID, "")
+		out, err = p.applyNativeConnectedLocked(ctx, l, connectionID, "", 0)
 		return err
 	})
 	return out, err
@@ -53,7 +62,7 @@ func (p *Processor) ApplyNativeConnected(ctx context.Context, l *NativeLease, co
 // ApplyAuthenticatedNativeHello registers and projects a trusted connection
 // under one owner lease and processor lock; no partially updated online state
 // can leak if the checkpoint commit fails.
-func (p *Processor) ApplyAuthenticatedNativeHello(ctx context.Context, l *NativeLease, hello agentproto.Hello, connectionID string) ([]EffectRecord, error) {
+func (p *Processor) ApplyAuthenticatedNativeHello(ctx context.Context, l *NativeLease, hello agentproto.Hello, connectionID string, profiles ...orchestrator.PrivateNativeProfiles) ([]EffectRecord, error) {
 	if l == nil || l.journal != p.journal || connectionID == "" || hello.Probe || hello.PrivateNativeProtocolVersion != agentproto.PrivateNativeProtocolVersion || hello.CarrierIncarnation != l.native.CarrierIncarnation || hello.Instance.InstanceID != l.native.InstanceID || agentproto.EffectiveHelloBackend(hello) != l.native.Backend {
 		return nil, ErrJournalConflict
 	}
@@ -72,11 +81,14 @@ func (p *Processor) ApplyAuthenticatedNativeHello(ctx context.Context, l *Native
 	helloHash := hex.EncodeToString(digest[:])
 	var out []EffectRecord
 	err = l.with(ctx, func() error {
+		if len(profiles) == 1 {
+			p.app.Service().SetPrivateNativeProfiles(l.surface.SurfaceID, profiles[0])
+		}
 		if err := p.registerNativeHelloLocked(ctx, l, hello); err != nil {
 			return err
 		}
 		var err error
-		out, err = p.applyNativeConnectedLocked(ctx, l, connectionID, helloHash)
+		out, err = p.applyNativeConnectedLocked(ctx, l, connectionID, helloHash, hello.PrivateDeliveryVersion)
 		if err != nil {
 			p.poisoned = true
 		}
@@ -85,7 +97,7 @@ func (p *Processor) ApplyAuthenticatedNativeHello(ctx context.Context, l *Native
 	return out, err
 }
 
-func (p *Processor) applyNativeConnectedLocked(ctx context.Context, l *NativeLease, connectionID, helloHash string) ([]EffectRecord, error) {
+func (p *Processor) applyNativeConnectedLocked(ctx context.Context, l *NativeLease, connectionID, helloHash string, deliveryVersion int) ([]EffectRecord, error) {
 	var revision int64
 	var storedHash string
 	err := p.journal.db.QueryRowContext(ctx, `SELECT c.revision,h.hello_hash FROM private_native_connections c JOIN private_native_connection_hellos h ON h.incarnation=c.incarnation AND h.connection_id=c.connection_id WHERE c.incarnation=? AND c.connection_id=?`, l.native.CarrierIncarnation, connectionID).Scan(&revision, &storedHash)
@@ -102,14 +114,33 @@ func (p *Processor) applyNativeConnectedLocked(ctx context.Context, l *NativeLea
 	if err != nil {
 		return nil, err
 	}
-	if p.app.instances[l.native.InstanceID] != l.surface.SurfaceID {
-		return nil, ErrJournalConflict
+	detached := p.app.Service().PrivateDetachedInstance(l.surface.SurfaceID, l.native.InstanceID)
+	if !detached {
+		if p.app.instances[l.native.InstanceID] != l.surface.SurfaceID {
+			return nil, ErrJournalConflict
+		}
+		instance := p.app.Service().Instance(l.native.InstanceID)
+		if instance == nil || !instance.Online {
+			return nil, ErrJournalConflict
+		}
 	}
-	instance := p.app.Service().Instance(l.native.InstanceID)
-	if instance == nil || !instance.Online {
-		return nil, ErrJournalConflict
+	var events []eventcontract.Event
+	if !detached {
+		events = p.app.Service().AuthenticatePrivateNavigation(l.surface.SurfaceID, l.native)
+		restored, restoreErr := p.restoreReconnectNativeEvidence(ctx, l)
+		if restoreErr != nil {
+			return nil, restoreErr
+		}
+		events = append(events, restored...)
+		events = append(events, p.app.Service().ApplyInstanceConnected(l.native.InstanceID)...)
+		events = append(events, p.app.Service().BeginPrivateReconnectQuery(l.surface.SurfaceID, l.native.InstanceID)...)
+		events = append(events, p.app.Service().ResumePrivateOfflineStop(l.surface.SurfaceID, l.native.InstanceID)...)
+		resumed, resumeErr := p.reconcileRecoveryGate(ctx, l.surface, l.generation)
+		if resumeErr != nil {
+			return nil, resumeErr
+		}
+		events = append(events, resumed...)
 	}
-	events := p.app.Service().ApplyInstanceConnected(l.native.InstanceID)
 	effects, err := p.freezeEffects(l.surface, l.generation, "native-connect:"+l.native.CarrierIncarnation+":"+connectionID, events)
 	if err != nil {
 		p.poisoned = true
@@ -121,7 +152,7 @@ func (p *Processor) applyNativeConnectedLocked(ctx context.Context, l *NativeLea
 		return nil, err
 	}
 	cp := Checkpoint{Owner: l.surface, Generation: l.generation, Revision: owner.revision + 1, Cursor: owner.cursor, Core: core}
-	ref := migrationResumeRef{Connection: &nativeConnectionRef{Incarnation: l.native.CarrierIncarnation, ConnectionID: connectionID, HelloHash: helloHash}}
+	ref := migrationResumeRef{Connection: &nativeConnectionRef{Incarnation: l.native.CarrierIncarnation, ConnectionID: connectionID, HelloHash: helloHash, DeliveryVersion: deliveryVersion}}
 	if err = p.journal.commitCheckpointExtended(ctx, cp, owner.revision, effects, 0, nil, nil, nil, nil, nil, nil, nil, &ref); err != nil {
 		p.poisoned = true
 		return nil, err

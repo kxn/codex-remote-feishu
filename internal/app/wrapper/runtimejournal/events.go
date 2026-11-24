@@ -42,7 +42,7 @@ func (s *Store) PersistEvents(events []agentproto.Event) ([]agentproto.Event, er
 	}
 	if s.privateLive {
 		for i := range output {
-			if output[i].Kind != agentproto.EventItemDelta {
+			if agentproto.PrivateDeliveryForEvent(output[i].Kind) != agentproto.PrivateEventLive {
 				continue
 			}
 			if output[i].Live != nil || output[i].Journal != nil {
@@ -64,9 +64,15 @@ func (s *Store) PersistEvents(events []agentproto.Event) ([]agentproto.Event, er
 			s.liveNext++
 		}
 	}
+	isCritical := func(event agentproto.Event) bool {
+		if s.privateLive {
+			return agentproto.PrivateDeliveryForEvent(event.Kind) == agentproto.PrivateEventDurable
+		}
+		return Critical(event)
+	}
 	critical := false
 	for _, event := range output {
-		if Critical(event) {
+		if isCritical(event) {
 			critical = true
 			break
 		}
@@ -80,7 +86,7 @@ func (s *Store) PersistEvents(events []agentproto.Event) ([]agentproto.Event, er
 	}
 	defer tx.Rollback()
 	for i, event := range output {
-		if !Critical(event) {
+		if !isCritical(event) {
 			continue
 		}
 		if event.Journal != nil {

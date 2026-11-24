@@ -87,7 +87,7 @@ func OpenJournal(path string) (*Journal, error) {
 	db.SetMaxOpenConns(1)
 	j := &Journal{db: db, lock: lock}
 	var version int
-	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version < 0 || version > 5 {
+	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version < 0 || version > 7 {
 		j.Close()
 		if err != nil {
 			return nil, err
@@ -109,9 +109,20 @@ func OpenJournal(path string) (*Journal, error) {
 		j.Close()
 		return nil, errors.New("private journal requires WAL")
 	}
+	if _, err = db.Exec(`PRAGMA synchronous=FULL`); err != nil {
+		j.Close()
+		return nil, err
+	}
+	if version > 0 && version < 7 {
+		if err = migrateDispatchSchema7(db); err != nil {
+			j.Close()
+			return nil, err
+		}
+		version = 7
+	}
 	if _, err = db.Exec(`PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE;
  CREATE TABLE IF NOT EXISTS ingress (seq INTEGER PRIMARY KEY AUTOINCREMENT, gateway TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, event_id TEXT NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('input','control','inspect')), payload BLOB NOT NULL, sources BLOB NOT NULL, UNIQUE(tenant,app_id,event_id));
- CREATE TABLE IF NOT EXISTS dispatch (id TEXT PRIMARY KEY, gateway TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('input','control','inspect')), mode TEXT NOT NULL, backend TEXT NOT NULL, namespace TEXT NOT NULL, session TEXT NOT NULL, carrier TEXT NOT NULL, carrier_generation INTEGER NOT NULL, command_id TEXT NOT NULL UNIQUE, state TEXT NOT NULL CHECK(state IN ('prepared','sending','accepted','unknown','failed')), evidence BLOB, request_id TEXT NOT NULL DEFAULT '', event_sequence INTEGER NOT NULL DEFAULT 0);
+ CREATE TABLE IF NOT EXISTS dispatch (id TEXT PRIMARY KEY, gateway TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('input','control','inspect')), mode TEXT NOT NULL, backend TEXT NOT NULL, namespace TEXT NOT NULL, session TEXT NOT NULL, carrier TEXT NOT NULL, carrier_generation INTEGER NOT NULL, command_id TEXT NOT NULL UNIQUE, state TEXT NOT NULL CHECK(state IN ('prepared','sending','sent','resolved','accepted','unknown','failed')), evidence BLOB, request_id TEXT NOT NULL DEFAULT '', event_sequence INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS dispatch_input (dispatch_id TEXT NOT NULL REFERENCES dispatch(id), seq INTEGER NOT NULL REFERENCES ingress(seq), PRIMARY KEY(dispatch_id,seq));
  CREATE TABLE IF NOT EXISTS private_checkpoint (tenant TEXT NOT NULL, app_id TEXT NOT NULL, gateway TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, revision INTEGER NOT NULL, cursor INTEGER NOT NULL, data BLOB NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(tenant,app_id,gateway,surface,chat,user_id,generation));
  CREATE TABLE IF NOT EXISTS private_effect (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, app_id TEXT NOT NULL, gateway TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, revision INTEGER NOT NULL, ordinal INTEGER NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('interactive','background')), body BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','sending','confirmed','unknown')), receipt BLOB, UNIQUE(tenant,app_id,gateway,surface,chat,user_id,generation,revision,ordinal));
@@ -126,13 +137,13 @@ func OpenJournal(path string) (*Journal, error) {
  CREATE TABLE IF NOT EXISTS private_local_receipts (effect_id TEXT PRIMARY KEY REFERENCES private_effect(id), receipt BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS private_local_intents (effect_id TEXT PRIMARY KEY REFERENCES private_effect(id), body BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS private_settings_reconcile (version TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, gateway TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'pending', applied_revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(version,tenant,app_id,gateway,surface,chat,user_id,generation));
-` + publicationSchema + migrationImportSchema + stagingCleanupSchema + upgradeCancellationSchema + upgradeRecoverySchema + nativeConnectionSchema + privateMemorySchema + privateProjectSchema + `
+` + publicationSchema + migrationImportSchema + stagingCleanupSchema + upgradeCancellationSchema + upgradeRecoverySchema + nativeConnectionSchema + nativeCompactSchema + privateMemorySchema + privateProjectSchema + `
  CREATE TABLE IF NOT EXISTS native_carriers (incarnation TEXT PRIMARY KEY, owner_json BLOB NOT NULL, surface_json BLOB NOT NULL, generation INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS native_commands (dispatch_id TEXT PRIMARY KEY REFERENCES dispatch(id), command_id TEXT NOT NULL UNIQUE, payload BLOB NOT NULL, payload_hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS native_command_receipts (command_id TEXT PRIMARY KEY REFERENCES native_commands(command_id), incarnation TEXT NOT NULL, payload BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS native_query_proofs (waiter_id TEXT PRIMARY KEY REFERENCES native_commands(command_id), source_id TEXT NOT NULL, source_hash TEXT NOT NULL, request_id TEXT NOT NULL, payload BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS native_events (incarnation TEXT NOT NULL, sequence INTEGER NOT NULL, payload_hash TEXT NOT NULL, command_id TEXT NOT NULL, payload BLOB NOT NULL, applied INTEGER NOT NULL DEFAULT 0, applied_revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(incarnation,sequence));
- UPDATE dispatch SET state='unknown' WHERE state='sending'; UPDATE private_effect SET state='unknown' WHERE state='sending'; PRAGMA user_version=5; COMMIT;`); err != nil {
+ UPDATE dispatch SET state='unknown' WHERE state='sending'; UPDATE private_effect SET state='unknown' WHERE state='sending'; ` + "PRAGMA user_version=7; COMMIT;"); err != nil {
 		_, _ = db.Exec(`ROLLBACK`)
 		j.Close()
 		return nil, err

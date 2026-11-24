@@ -44,6 +44,16 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 				return Result{Suppress: true, Events: []agentproto.Event{event}}, nil
 			}
+			if pending.Action == "thread/compact/start" && pending.PrivateNative {
+				event := agentproto.Event{Kind: agentproto.EventNativeControlResult, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, Action: "thread.compact.start", Status: "accepted"}
+				if problem := jsonrpcutil.ExtractErrorMessage(message); problem != "" {
+					event.Status = "failed"
+					event.ErrorMessage = problem
+				} else if result, ok := message["result"]; !ok || result == nil {
+					event.Status = "unknown"
+				}
+				return Result{Suppress: true, Events: []agentproto.Event{event}}, nil
+			}
 			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 				delete(t.pendingRemoteTurnByThread, pending.ThreadID)
 				t.Debugf("observe server suppressed response error: request=%s action=%s thread=%s error=%s", requestID, pending.Action, pending.ThreadID, errMsg)
@@ -133,6 +143,18 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, exists := t.pendingReviewStart[requestID]; exists {
 			delete(t.pendingReviewStart, requestID)
+			if pending.PrivateNative {
+				event := agentproto.Event{Kind: agentproto.EventNativeControlResult, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, Action: "review.start", Status: "accepted"}
+				if problem := jsonrpcutil.ExtractErrorMessage(message); problem != "" {
+					event.Status = "failed"
+					event.ErrorMessage = problem
+				} else if result, ok := message["result"].(map[string]any); !ok || result == nil {
+					event.Status = "unknown"
+				}
+				if event.Status != "accepted" {
+					return Result{Suppress: true, Events: []agentproto.Event{event}}, nil
+				}
+			}
 			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 				t.Debugf("observe server review/start error: request=%s thread=%s error=%s", requestID, pending.ThreadID, errMsg)
 				return Result{
@@ -167,6 +189,13 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			}
 			t.Debugf("observe server review/start result: request=%s parentThread=%s reviewThread=%s turn=%s initiator=%s", requestID, pending.ThreadID, reviewThreadID, turnID, pending.Initiator.Kind)
 			events := []agentproto.Event(nil)
+			if pending.PrivateNative {
+				status := "accepted"
+				if turnID == "" || reviewThreadID == "" {
+					status = "unknown"
+				}
+				events = append(events, agentproto.Event{Kind: agentproto.EventNativeControlResult, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, TurnID: turnID, Action: "review.start", Status: status, Metadata: map[string]any{"reviewThreadID": reviewThreadID}})
+			}
 			if explicitReviewThreadID != "" {
 				if event, ok := pendingReviewThreadDiscoveredEvent(explicitReviewThreadID, turnID, pending); ok {
 					events = append(events, event)

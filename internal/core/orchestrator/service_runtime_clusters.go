@@ -400,6 +400,14 @@ func (r *serviceTurnRuntime) forEachActiveRemote(fn func(*remoteTurnBinding)) {
 	}
 }
 
+func (r *serviceTurnRuntime) restorePrivateCompact(instanceID string, binding *compactTurnBinding) bool {
+	if old := r.compactTurns[instanceID]; old != nil && old.CommandID != binding.CommandID {
+		return false
+	}
+	r.compactTurns[instanceID] = binding
+	return true
+}
+
 func (r *serviceTurnRuntime) instanceHasCompact(instanceID string) bool {
 	if r == nil || strings.TrimSpace(instanceID) == "" {
 		return false

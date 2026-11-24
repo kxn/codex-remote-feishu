@@ -269,6 +269,23 @@ func TestPersonalSourceSealRevalidatesNeutralAndSource(t *testing.T) {
 	if err != nil || progress.Stage != "activated" {
 		t.Fatalf("migration restart: %+v %v", progress, err)
 	}
+	// The history alias must resolve the committed owner and actual target
+	// receipt, including the hash of seal evidence (not the drain digest).
+	app.applications = &applicationRuntime{migrations: coordinator, journal: journal}
+	aliasIngress := &applicationIngress{host: app, router: router}
+	aliasSource, aliasSeal, aliasErr := aliasIngress.legacyHistorySource(ctx, owner, 2)
+	if aliasErr != nil || aliasSource.Source.ScopeID != bound.ScopeID || aliasSeal.SourceHash != seal.SourceHash {
+		t.Fatalf("history source through committed migration: %v", aliasErr)
+	}
+	if _, _, aliasErr = aliasIngress.legacyHistorySource(ctx, owner, 3); aliasErr == nil {
+		t.Fatal("history source accepted a different owner epoch")
+	}
+	wrongReceipt := receipt
+	wrongReceipt.ProofHash = seal.ProofHash
+	if legacyHistoryReceiptMatches(wrongReceipt, seal, bound.ScopeID) {
+		t.Fatal("drain digest accepted as evidence hash")
+	}
+
 	if err = importer.ResolveMigrationHold(ctx, request, holdHash); err != nil {
 		t.Fatalf("replayed resolution: %v", err)
 	}

@@ -56,6 +56,9 @@ func (l *NativeLease) RecordKnownUnsent(ctx context.Context, effectID, dispatchI
 		if _, err = tx.ExecContext(ctx, `UPDATE dispatch SET state='failed',evidence=? WHERE id=?`, receipt, dispatchID); err != nil {
 			return err
 		}
+		if _, err = tx.ExecContext(ctx, `UPDATE private_compact_operations SET state='failed' WHERE command_id=? AND state='pending'`, d.CommandID); err != nil {
+			return err
+		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO private_local_receipts(effect_id,receipt) VALUES(?,?)`, effectID, receipt); err != nil {
 			return err
 		}

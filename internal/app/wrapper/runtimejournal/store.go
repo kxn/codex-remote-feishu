@@ -108,6 +108,7 @@ func (s *Store) initialize(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS private_live_streams (incarnation TEXT PRIMARY KEY, reserved_through INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, hash TEXT NOT NULL, incarnation TEXT NOT NULL, binding BLOB NOT NULL, payload BLOB NOT NULL, stage TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS frames (id INTEGER PRIMARY KEY AUTOINCREMENT, command_id TEXT NOT NULL REFERENCES commands(id), hash TEXT NOT NULL, native_id TEXT NOT NULL, native_method TEXT NOT NULL, stage TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS private_frame_event_watermarks (frame_id INTEGER PRIMARY KEY REFERENCES frames(id), sequence INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, incarnation TEXT NOT NULL, sequence INTEGER NOT NULL, hash TEXT NOT NULL, payload BLOB NOT NULL, acked INTEGER NOT NULL DEFAULT 0, UNIQUE(incarnation,sequence))`,
 		`CREATE INDEX IF NOT EXISTS pending_events ON events(acked,id)`,
 		`CREATE TABLE IF NOT EXISTS inventory_state (incarnation TEXT PRIMARY KEY,payload BLOB NOT NULL)`,

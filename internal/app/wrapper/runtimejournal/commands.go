@@ -50,14 +50,14 @@ func (s *Store) CommandReceipt(commandID string) (*agentproto.RuntimeCommandRece
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(`SELECT id,native_id,native_method,stage FROM frames WHERE command_id=? ORDER BY id LIMIT 256`, commandID)
+	rows, err := s.db.Query(`SELECT f.id,f.native_id,f.native_method,f.stage,w.sequence FROM frames f LEFT JOIN private_frame_event_watermarks w ON w.frame_id=f.id WHERE f.command_id=? ORDER BY f.id LIMIT 256`, commandID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var frame agentproto.RuntimeFrameReceipt
-		if err := rows.Scan(&frame.FrameID, &frame.NativeRequestID, &frame.NativeMethod, &frame.Stage); err != nil {
+		if err := rows.Scan(&frame.FrameID, &frame.NativeRequestID, &frame.NativeMethod, &frame.Stage, &frame.EventWatermark); err != nil {
 			return nil, err
 		}
 		receipt.Frames = append(receipt.Frames, frame)
@@ -153,6 +153,25 @@ func (s *Store) startFrame(frameID int64, frame []byte, watermark int64, allowed
 	if (allowedCommand != "" && commandID != allowedCommand) || expected != hash(frame) || stage != StagePrepared {
 		return ErrConflict
 	}
+	if s.privateLive {
+		var commandRaw []byte
+		if err := tx.QueryRow(`SELECT payload FROM commands WHERE id=? AND incarnation=?`, commandID, s.incarnation).Scan(&commandRaw); err != nil {
+			return err
+		}
+		var command agentproto.Command
+		if err := json.Unmarshal(commandRaw, &command); err != nil {
+			return err
+		}
+		_, nativeMethod := nativeFrameMetadata(frame)
+		if command.Kind == agentproto.CommandThreadCompactStart && nativeMethod == "thread/compact/start" {
+			if err := privateCompactIdleEvidence(tx, s.incarnation, command.Target.ThreadID); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`INSERT INTO private_frame_event_watermarks(frame_id,sequence) SELECT ?,sequence FROM streams WHERE incarnation=?`, frameID, s.incarnation); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.Exec(`UPDATE frames SET stage=? WHERE id=?`, StageWriteStarted, frameID); err != nil {
 		return err
 	}
@@ -163,28 +182,82 @@ func (s *Store) startFrame(frameID int64, frame []byte, watermark int64, allowed
 }
 
 func (s *Store) FinishFrame(frameID int64, writeErr error) error {
+	_, err := s.finishFrame(frameID, writeErr, false)
+	return err
+}
+
+// FinishPrivateFrame commits a response-written fact in the same transaction
+// as the exact successful child write. It is replayable even if the process
+// exits before the live notification reaches the relay.
+func (s *Store) FinishPrivateFrame(frameID int64, writeErr error) (*agentproto.Event, error) {
+	return s.finishFrame(frameID, writeErr, true)
+}
+
+func (s *Store) finishFrame(frameID int64, writeErr error, private bool) (*agentproto.Event, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 	var stage, commandID string
 	if err := tx.QueryRow(`SELECT stage,command_id FROM frames WHERE id=?`, frameID).Scan(&stage, &commandID); err != nil {
-		return err
+		return nil, err
 	}
 	if stage != StageWriteStarted {
-		return ErrConflict
+		return nil, ErrConflict
 	}
 	stage = StageWritten
 	if writeErr != nil {
 		stage = StageUnknown
 	}
 	if _, err := tx.Exec(`UPDATE frames SET stage=? WHERE id=?`, stage, frameID); err != nil {
-		return err
+		return nil, err
 	}
 	// A known successful frame never resolves an earlier uncertain frame.
 	if _, err := tx.Exec(`UPDATE commands SET stage=CASE WHEN stage='unknown' OR EXISTS(SELECT 1 FROM frames WHERE command_id=? AND stage IN ('unknown','child_write_started')) THEN 'unknown' WHEN EXISTS(SELECT 1 FROM frames WHERE command_id=? AND stage='prepared') THEN 'partially_written' ELSE ? END WHERE id=?`, commandID, commandID, stage, commandID); err != nil {
-		return err
+		return nil, err
 	}
-	return tx.Commit()
+	var event *agentproto.Event
+	if private && writeErr == nil {
+		var raw []byte
+		if err := tx.QueryRow(`SELECT payload FROM commands WHERE id=? AND incarnation=?`, commandID, s.incarnation).Scan(&raw); err != nil {
+			return nil, err
+		}
+		var command agentproto.Command
+		if err := json.Unmarshal(raw, &command); err != nil {
+			return nil, err
+		}
+		if command.Kind == agentproto.CommandRequestRespond {
+			if command.NativeBinding == nil || command.Request.RequestID == "" {
+				return nil, ErrConflict
+			}
+			var count int
+			if err := tx.QueryRow(`SELECT count(*) FROM frames WHERE command_id=? AND stage<>'written'`, commandID).Scan(&count); err != nil {
+				return nil, err
+			}
+			if count == 0 {
+				e := agentproto.Event{Kind: agentproto.EventNativeControlResult, CommandID: commandID, RequestID: command.Request.RequestID, ThreadID: command.Target.ThreadID, TurnID: command.Target.TurnID, Action: "request.response.written", Status: "sent", NativeBinding: command.NativeBinding, Metadata: map[string]any{"frameID": frameID}}
+				if err := tx.QueryRow(`UPDATE streams SET sequence=sequence+1 WHERE incarnation=? RETURNING sequence`, s.incarnation).Scan(&e.Seq); err != nil {
+					return nil, err
+				}
+				digest, err := agentproto.RuntimeEventPayloadHash(e)
+				if err != nil {
+					return nil, err
+				}
+				e.Journal = &agentproto.RuntimeEventIdentity{Version: agentproto.JournalProtocolVersion, CarrierIncarnation: s.incarnation, Sequence: e.Seq, PayloadHash: digest}
+				raw, err := json.Marshal(e)
+				if err != nil {
+					return nil, err
+				}
+				if _, err = tx.Exec(`INSERT INTO events(incarnation,sequence,hash,payload) VALUES(?,?,?,?)`, s.incarnation, e.Seq, digest, raw); err != nil {
+					return nil, err
+				}
+				event = &e
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return event, nil
 }

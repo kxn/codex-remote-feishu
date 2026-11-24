@@ -15,7 +15,7 @@ import (
 // turn bindings or register the historical instance as online. The host must
 // reconcile the holds with journal and native evidence before enabling work.
 func (s *Service) RestorePrivateCheckpoint(c PrivateCheckpoint) error {
-	if !s.config.PrivateApplication || c.Version != 1 || strings.TrimSpace(c.SurfaceID) == "" || strings.TrimSpace(c.GatewayID) == "" || strings.TrimSpace(c.ChatID) == "" || strings.TrimSpace(c.ActorUserID) == "" || c.RouteMode == state.RouteModeFollowLocal {
+	if !s.config.PrivateApplication || (c.Version != 1 && c.Version != 2) || (c.Version == 1 && (len(c.DetachedExecutions) != 0 || c.OfflineStop != nil || c.ReconnectQuery != nil || c.Goal != nil || c.Navigation != nil)) || strings.TrimSpace(c.SurfaceID) == "" || strings.TrimSpace(c.GatewayID) == "" || strings.TrimSpace(c.ChatID) == "" || strings.TrimSpace(c.ActorUserID) == "" || c.RouteMode == state.RouteModeFollowLocal {
 		return fmt.Errorf("invalid private checkpoint")
 	}
 	if _, err := c.IDWatermarks(); err != nil {
@@ -30,10 +30,16 @@ func (s *Service) RestorePrivateCheckpoint(c PrivateCheckpoint) error {
 	if old := s.root.Surfaces[c.SurfaceID]; old != nil && (old.GatewayID != c.GatewayID || old.ChatID != c.ChatID || old.ActorUserID != c.ActorUserID) {
 		return fmt.Errorf("surface owner mismatch")
 	}
+	if c.ReconnectQuery != nil && (c.ReconnectQuery.InstanceID == "" || c.ReconnectQuery.InstanceID != c.AttachedInstanceID || c.ReconnectQuery.ThreadID == "" || c.ReconnectQuery.ThreadID != c.SelectedThreadID || c.ReconnectQuery.CommandID == "" || c.ReconnectQuery.Deadline.IsZero() || c.RouteMode != state.RouteModePinned) {
+		return fmt.Errorf("invalid private reconnect query")
+	}
 	if c.HistoricalInstance != nil && (c.HistoricalInstance.InstanceID == "" || c.HistoricalInstance.InstanceID != c.AttachedInstanceID) {
 		return fmt.Errorf("historical instance mismatch")
 	}
 	if err := validatePrivateCheckpointUI(c.UI, c.ActorUserID); err != nil {
+		return err
+	}
+	if err := s.validatePrivateGoalCheckpoint(c.SurfaceID, c.Goal); err != nil {
 		return err
 	}
 	for _, h := range c.Holds {
@@ -41,6 +47,62 @@ func (s *Service) RestorePrivateCheckpoint(c PrivateCheckpoint) error {
 			return fmt.Errorf("invalid recovery hold")
 		}
 	}
+	if c.OfflineStop != nil && (c.OfflineStop.InstanceID == "" || (c.AttachedInstanceID != "" && c.OfflineStop.InstanceID != c.AttachedInstanceID) || (c.OfflineStop.TurnID != "" && c.OfflineStop.ThreadID == "")) {
+		return fmt.Errorf("invalid offline stop")
+	}
+	detachedInstances := map[string]bool{}
+	detachedInputs := map[string]bool{}
+	for _, detached := range c.DetachedExecutions {
+		if detached.InstanceID == "" || detachedInstances[detached.InstanceID] || detached.InstanceID == c.AttachedInstanceID {
+			return fmt.Errorf("invalid detached execution instance")
+		}
+		detachedInstances[detached.InstanceID] = true
+		if c.OfflineStop != nil && c.OfflineStop.InstanceID == detached.InstanceID {
+			return fmt.Errorf("offline stop targets detached execution")
+		}
+		if detached.OfflineStop != nil && detached.OfflineStop.InstanceID != detached.InstanceID {
+			return fmt.Errorf("invalid detached offline stop")
+		}
+
+		ids := append([]string(nil), detached.QueuedQueueItemIDs...)
+		if detached.ActiveQueueItemID != "" {
+			ids = append(ids, detached.ActiveQueueItemID)
+		}
+		for _, id := range ids {
+			if id == "" || c.QueueItems[id] == nil || detachedInputs[id] || id == c.ActiveQueueItemID {
+				return fmt.Errorf("invalid detached execution input")
+			}
+			detachedInputs[id] = true
+		}
+		eventRefs := map[string]bool{}
+		for _, event := range detached.Events {
+			if event.Incarnation == "" || event.Sequence == 0 || event.PayloadHash == "" {
+				return fmt.Errorf("invalid detached event reference")
+			}
+			key := fmt.Sprintf("%s:%d", event.Incarnation, event.Sequence)
+			if eventRefs[key] {
+				return fmt.Errorf("duplicate detached event reference")
+			}
+			eventRefs[key] = true
+		}
+		for _, h := range detached.Holds {
+			if h.Kind == "" || !json.Valid(h.Frozen) || (h.InstanceID != "" && h.InstanceID != detached.InstanceID) {
+				return fmt.Errorf("invalid detached execution evidence")
+			}
+			if h.Kind == "headless_launch" {
+				var launch state.HeadlessLaunchRecord
+				if json.Unmarshal(h.Frozen, &launch) != nil || launch.InstanceID != detached.InstanceID {
+					return fmt.Errorf("invalid detached launch evidence")
+				}
+			}
+		}
+	}
+	for _, id := range c.QueuedQueueItemIDs {
+		if detachedInputs[id] {
+			return fmt.Errorf("detached input is queued")
+		}
+	}
+
 	ids := map[string]bool{}
 	for _, id := range c.QueuedQueueItemIDs {
 		item := c.QueueItems[id]
@@ -114,7 +176,22 @@ func (s *Service) RestorePrivateCheckpoint(c PrivateCheckpoint) error {
 	v.StagedFiles = copy.StagedFiles
 	v.SurfaceMessages, v.SurfaceMessageSeq, v.RecentFinalCards = copy.SurfaceMessages, copy.SurfaceMessageSeq, copy.RecentFinalCards
 	s.restorePrivateCheckpointUI(v, copy.UI)
+	if err := s.restorePrivateGoalCheckpoint(copy.SurfaceID, copy.Goal); err != nil {
+		return err
+	}
 	s.privateMigrationReleased[copy.SurfaceID] = copy.MigrationRecoveryReleased
+	s.privateDetachedExecutions[copy.SurfaceID] = append([]PrivateDetachedExecution(nil), copy.DetachedExecutions...)
+	if err := s.restorePrivateNavigation(copy); err != nil {
+		return err
+	}
+	delete(s.privateReconnectQueries, copy.SurfaceID)
+	if copy.ReconnectQuery != nil {
+		s.privateReconnectQueries[copy.SurfaceID] = *copy.ReconnectQuery
+	}
+	delete(s.privateOfflineStops, copy.SurfaceID)
+	if copy.OfflineStop != nil {
+		s.privateOfflineStops[copy.SurfaceID] = *copy.OfflineStop
+	}
 	if v.QueueItems == nil {
 		v.QueueItems = map[string]*state.QueueItemRecord{}
 	}
@@ -146,7 +223,7 @@ func privateRecoveryReadOnlyAction(action control.Action) bool {
 	switch action.Kind {
 	// These mutate only fields in the private surface checkpoint and do not
 	// dispatch or change the already frozen queued input plans.
-	case control.ActionVerboseCommand, control.ActionPlanCommand:
+	case control.ActionVerboseCommand, control.ActionPlanCommand, control.ActionDetach, control.ActionWorkspaceDetach, control.ActionStop:
 		return true
 	case control.ActionPathPickerEnter, control.ActionPathPickerUp, control.ActionPathPickerSelect, control.ActionPathPickerPage, control.ActionPathPickerCancel,
 		control.ActionTargetPickerSelectWorkspace, control.ActionTargetPickerSelectSession, control.ActionTargetPickerPage, control.ActionTargetPickerOpenPathPicker, control.ActionTargetPickerCancel, control.ActionTargetPickerBack:

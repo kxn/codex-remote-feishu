@@ -44,6 +44,9 @@ func (p *Processor) ApplyPrivateTick(ctx context.Context, l *NativeLease, tickID
 		if e != nil {
 			return e
 		}
+		if p.app.Service().PrivateDetachedInstance(o.SurfaceID, l.native.InstanceID) {
+			return ErrDeferred
+		}
 		if p.app.instances[l.native.InstanceID] != o.SurfaceID {
 			return ErrJournalConflict
 		}
@@ -96,6 +99,9 @@ func (p *Processor) PrivateTickDue(ctx context.Context, l *NativeLease, now time
 	err = l.with(ctx, func() error {
 		if _, e := p.ensureOwner(ctx, l.surface, l.generation); e != nil {
 			return e
+		}
+		if p.app.Service().PrivateDetachedInstance(l.surface.SurfaceID, l.native.InstanceID) {
+			return nil
 		}
 		if p.app.instances[l.native.InstanceID] != l.surface.SurfaceID {
 			return ErrJournalConflict

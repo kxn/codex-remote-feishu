@@ -22,6 +22,9 @@ func (s *Service) useThreadPreservingTargetPicker(surface *state.SurfaceConsoleR
 func (s *Service) useThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	threadID = strings.TrimSpace(threadID)
 	target := s.resolveThreadTargetWithScope(surface, threadID, allowCrossWorkspace)
+	if target.Mode == threadAttachCreateHeadless && s.privateLegacyHistoryReadOnly(surface, target.View) {
+		return notice(surface, "legacy_history_read_only", "这条旧会话的记录已保留；原执行尚未确认，暂不可续接。请选择其他会话或新建会话。")
+	}
 	return s.executeResolvedThreadTargetWithOverlayCleanup(surface, threadID, target, cleanup)
 }
 

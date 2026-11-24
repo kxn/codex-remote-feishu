@@ -46,9 +46,17 @@ type Service struct {
 	privateThreadPolicies             map[string]PrivateThreadPolicy
 	privateSettingsPreview            bool
 	privateSettingsProposal           *state.BotCapabilitySettingsRecord
+	privateClaudeSnapshotChanges      []PrivateClaudeSnapshotChange
+	privateClaudeSnapshotOverlay      map[string]map[string]PrivateClaudeSnapshotChange
 	privateWorktreeObservation        *PrivateWorktreeObservation
 	privateWorktreeObservationMissing bool
 	privateRecoveryHolds              map[string]PrivateCheckpoint
+	privateDetachedExecutions         map[string][]PrivateDetachedExecution
+	privateOfflineStops               map[string]PrivateOfflineStop
+	privateReconnectQueries           map[string]PrivateReconnectQuery
+	privateNavigation                 map[string]PrivateNavigationSnapshot
+	privateNativeOwners               map[string]agentproto.NativeOwner
+	privateNativeProfiles             map[string]PrivateNativeProfiles
 	privateMigrationReleased          map[string]bool
 	now                               func() time.Time
 	config                            Config
@@ -255,22 +263,28 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		planner = renderer.NewPlanner()
 	}
 	svc := &Service{
-		privateRecoveryHolds:     map[string]PrivateCheckpoint{},
-		privateMigrationReleased: map[string]bool{},
-		now:                      now,
-		config:                   cfg,
-		root:                     state.NewRoot(),
-		renderer:                 planner,
-		handoffUntil:             map[string]time.Time{},
-		pausedUntil:              map[string]time.Time{},
-		abandoningUntil:          map[string]time.Time{},
-		itemBuffers:              map[string]*itemBuffer{},
-		threadRefreshes:          map[string]bool{},
-		instanceClaims:           map[string]*instanceClaimRecord{},
-		workspaceClaims:          map[string]*workspaceClaimRecord{},
-		threadClaims:             map[string]*threadClaimRecord{},
-		surfaceUIRuntime:         map[string]*surfaceUIRuntimeRecord{},
-		activeNoticeCooldowns:    map[string]time.Time{},
+		privateRecoveryHolds:      map[string]PrivateCheckpoint{},
+		privateDetachedExecutions: map[string][]PrivateDetachedExecution{},
+		privateOfflineStops:       map[string]PrivateOfflineStop{},
+		privateReconnectQueries:   map[string]PrivateReconnectQuery{},
+		privateNavigation:         map[string]PrivateNavigationSnapshot{},
+		privateNativeOwners:       map[string]agentproto.NativeOwner{},
+		privateNativeProfiles:     map[string]PrivateNativeProfiles{},
+		privateMigrationReleased:  map[string]bool{},
+		now:                       now,
+		config:                    cfg,
+		root:                      state.NewRoot(),
+		renderer:                  planner,
+		handoffUntil:              map[string]time.Time{},
+		pausedUntil:               map[string]time.Time{},
+		abandoningUntil:           map[string]time.Time{},
+		itemBuffers:               map[string]*itemBuffer{},
+		threadRefreshes:           map[string]bool{},
+		instanceClaims:            map[string]*instanceClaimRecord{},
+		workspaceClaims:           map[string]*workspaceClaimRecord{},
+		threadClaims:              map[string]*threadClaimRecord{},
+		surfaceUIRuntime:          map[string]*surfaceUIRuntimeRecord{},
+		activeNoticeCooldowns:     map[string]time.Time{},
 	}
 	svc.turns = newServiceTurnRuntime(svc)
 	svc.pickers = newServicePickerRuntime(svc)
@@ -325,6 +339,16 @@ func (s *Service) SetPrimaryBotPermissionChecker(checker PrimaryBotPermissionChe
 }
 
 func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Event {
+	if s.config.PrivateApplication && action.Kind == control.ActionStop {
+		if _, held := s.privateRecoveryHolds[action.SurfaceSessionID]; held {
+			return s.recordPrivateOfflineStop(action)
+		}
+	}
+	if s.config.PrivateApplication && (action.Kind == control.ActionDetach || action.Kind == control.ActionWorkspaceDetach) {
+		if _, held := s.privateRecoveryHolds[action.SurfaceSessionID]; held {
+			return s.detachPrivateUnknown(action.SurfaceSessionID)
+		}
+	}
 	if _, held := s.privateRecoveryHolds[action.SurfaceSessionID]; held && !s.privateRecoveryLocalAction(action) {
 		return []eventcontract.Event{{Kind: eventcontract.KindNotice, SurfaceSessionID: action.SurfaceSessionID, GatewayID: action.GatewayID, Notice: &control.Notice{Code: "private_recovery_hold", Title: "会话等待恢复", Text: "正在核对之前的会话和未确认操作，请稍后再试。"}}}
 	}

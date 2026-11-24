@@ -20,14 +20,16 @@ import (
 // target ports. Gateway coverage and the target binding must be registered by
 // the host before Advance; it never starts a gateway or enables the target.
 type personalMigrationCoordinator struct {
-	app       *App
-	router    *ingressowner.Router
-	journal   *privatechat.Journal
-	processor *privatechat.Processor
-	assetRoot string
-	limits    workstore.PersonalExportLimits
-	mu        sync.Mutex
-	verified  map[ingressowner.Owner]personalMigrationTarget
+	app            *App
+	router         *ingressowner.Router
+	journal        *privatechat.Journal
+	processor      *privatechat.Processor
+	assetRoot      string
+	limits         workstore.PersonalExportLimits
+	mu             sync.Mutex
+	verified       map[ingressowner.Owner]personalMigrationTarget
+	historyAliases sync.Map // presentation-only; exact owner/epoch, recomputed on history navigation
+	historyScans   sync.Map // owner/epoch-scoped scan watermark and mutex
 }
 type personalMigrationTarget struct {
 	binding ingressowner.OwnerScopeBinding

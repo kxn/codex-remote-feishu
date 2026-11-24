@@ -15,6 +15,13 @@ func (s *Service) applySurfaceCapabilitySettingsMutation(
 	mutateBot func(*state.BotCapabilitySettingsRecord),
 	mutateLocal func(*state.SurfaceConsoleRecord),
 ) bool {
+	if s.config.PrivateApplication && s.privateSettingsPreview && surface != nil && mutateBot != nil {
+		if state.SurfaceUsesBotCapabilitySettings(surface) && !s.surfaceCanWriteBotCapabilitySettings(surface) {
+			return false
+		}
+		s.capturePrivateSettingsProposal(surface, mutateBot)
+		return true
+	}
 	if state.SurfaceUsesBotCapabilitySettings(surface) {
 		if !s.surfaceCanWriteBotCapabilitySettings(surface) || mutateBot == nil {
 			return false

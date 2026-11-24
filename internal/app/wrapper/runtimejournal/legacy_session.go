@@ -66,6 +66,14 @@ func VerifyLegacySessionProvenance(ctx context.Context, snapshot agentproto.Runt
 	if json.Unmarshal(payload, &event) != nil || event.Execution == nil || event.Journal == nil {
 		return "", "", ErrConflict
 	}
+	// A turn event may add an attempt and run, but every owner dimension must
+	// still match the frozen launch; worker and session generation alone are
+	// insufficient to prove the original personal context.
+	owner := *event.Execution
+	owner.AttemptID, owner.RunRef = "", ""
+	if owner != snapshot.Owner {
+		return "", "", ErrConflict
+	}
 	actual, err := agentproto.RuntimeEventPayloadHash(event)
 	if err != nil {
 		return "", "", err

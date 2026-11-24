@@ -123,7 +123,7 @@ func (i *MigrationImporter) commitMigrationResolution(ctx context.Context, req M
 		return ErrJournalConflict
 	}
 	var unsettled int
-	err = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM dispatch WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('prepared','sending','unknown'))+(SELECT count(*) FROM private_effect WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('sending','unknown'))`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, req.Generation).Scan(&unsettled)
+	err = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM dispatch WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('prepared','sending','unknown','sent'))+(SELECT count(*) FROM private_effect WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('sending','unknown'))`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, req.Generation).Scan(&unsettled)
 	if err != nil {
 		return err
 	}

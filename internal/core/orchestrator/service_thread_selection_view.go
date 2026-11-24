@@ -127,6 +127,9 @@ func (s *Service) threadSelectionStatus(surface *state.SurfaceConsoleRecord, vie
 	if view.BusyOwner != nil {
 		return "已被其他飞书会话接管", true
 	}
+	if !s.mergedThreadViewHasCompatibleVisibleInstance(surface, view) && s.privateLegacyHistoryReadOnly(surface, view) {
+		return "旧记录已保留；原执行尚未确认，暂不可续接", true
+	}
 	if !s.mergedThreadViewHasCompatibleVisibleInstance(surface, view) {
 		if strings.TrimSpace(threadCWD(view)) == "" {
 			return "当前仅可见，暂不可直接接管", true

@@ -61,7 +61,12 @@ type InstanceHello struct {
 	PID                       int     `json:"pid,omitempty"`
 }
 
+// PrivateDeliveryVersion identifies additional replayable private delivery facts.
+// Zero denotes the original private-v1 wrapper.
+const PrivateDeliveryVersion = 1
+
 type Hello struct {
+	PrivateDeliveryVersion                 int                     `json:"privateDeliveryVersion,omitempty"`
 	PrivateNativeInspectionProtocolVersion int                     `json:"privateNativeInspectionProtocolVersion,omitempty"`
 	PrivateNativeProtocolVersion           int                     `json:"privateNativeProtocolVersion,omitempty"`
 	CarrierProcess                         *RuntimeProcessIdentity `json:"carrierProcess,omitempty"`

@@ -89,7 +89,11 @@ func (a privateApplicationAdmitter) Admit(ctx context.Context, record ingressown
 	}
 	if a.native != nil {
 		g := applicationIngress{host: a.host, router: a.router}
-		if err = g.refreshPrivateThreadPolicy(ctx, a.native, a.processor, o, owner.Epoch); err != nil {
+		scanSeq := int64(0)
+		if historyAliasNeedsRefresh(in.Payload) {
+			scanSeq = seq
+		}
+		if err = g.refreshPrivateThreadPolicy(ctx, a.native, a.processor, o, owner.Epoch, scanSeq); err != nil {
 			return receipt, err
 		}
 	}

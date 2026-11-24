@@ -94,7 +94,7 @@ func (j *Journal) MigrationReadyReceipt(ctx context.Context, req MigrationImport
 		return out, err
 	}
 	var unresolved int
-	err = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM dispatch WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('prepared','sending','unknown'))+(SELECT count(*) FROM private_effect WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('sending','unknown'))`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, req.Generation).Scan(&unresolved)
+	err = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM dispatch WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('prepared','sending','unknown','sent'))+(SELECT count(*) FROM private_effect WHERE tenant=?1 AND app_id=?2 AND gateway=?3 AND surface=?4 AND chat=?5 AND user_id=?6 AND generation=?7 AND state IN ('sending','unknown'))`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, req.Generation).Scan(&unresolved)
 	if err != nil {
 		return out, err
 	}

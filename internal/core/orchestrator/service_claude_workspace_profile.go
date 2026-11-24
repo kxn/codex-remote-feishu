@@ -140,6 +140,9 @@ func (s *Service) persistCurrentClaudeWorkspaceProfileSnapshot(surface *state.Su
 	if surface == nil || s.root == nil {
 		return
 	}
+	if s.config.PrivateApplication && s.privateSettingsPreview {
+		return
+	}
 	if s.botCapabilitySettingsInvalid(surface) {
 		return
 	}
@@ -151,6 +154,20 @@ func (s *Service) persistCurrentClaudeWorkspaceProfileSnapshot(surface *state.Su
 		s.root.ClaudeWorkspaceProfileSnapshots = map[string]state.ClaudeWorkspaceProfileSnapshotRecord{}
 	}
 	record := s.currentClaudeWorkspaceProfileSnapshotRecord(surface)
+	if s.config.PrivateApplication {
+		previous := s.root.ClaudeWorkspaceProfileSnapshots[key]
+		if overlay, ok := s.privateClaudeSnapshotOverlay[surface.SurfaceSessionID]; ok {
+			if value, ok := overlay[key]; ok {
+				previous = value.After
+			}
+		}
+		if previous != record {
+			change := PrivateClaudeSnapshotChange{SurfaceID: surface.SurfaceSessionID, Key: key, Before: previous, After: record}
+			s.privateClaudeSnapshotChanges = append(s.privateClaudeSnapshotChanges, change)
+			s.SetPrivateClaudeSnapshotOverlay(change)
+		}
+		return
+	}
 	if state.ClaudeWorkspaceProfileSnapshotRecordEmpty(record) {
 		delete(s.root.ClaudeWorkspaceProfileSnapshots, key)
 		return
@@ -175,6 +192,14 @@ func (s *Service) restoreCurrentClaudeWorkspaceProfileSnapshot(surface *state.Su
 			record = state.NormalizeClaudeWorkspaceProfileSnapshotRecord(record)
 			override.ReasoningEffort = record.ReasoningEffort
 			override.AccessMode = record.AccessMode
+		}
+	}
+	if s.config.PrivateApplication {
+		if overlay, ok := s.privateClaudeSnapshotOverlay[surface.SurfaceSessionID]; ok {
+			if record, ok := overlay[key]; ok {
+				override.ReasoningEffort = record.After.ReasoningEffort
+				override.AccessMode = record.After.AccessMode
+			}
 		}
 	}
 	override = compactPromptOverride(override)

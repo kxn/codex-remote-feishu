@@ -95,3 +95,40 @@ func TestNativeConnectedReplayAndReconnectDoNotRedispatch(t *testing.T) {
 		t.Fatal("changed hello left uncommitted in-memory state usable")
 	}
 }
+
+func TestAuthenticatedHelloPersistsDeliveryCapabilityPerConnection(t *testing.T) {
+	ctx := context.Background()
+	o := Owner{"g", "s", "c", "u", "tenant", "app"}
+	n := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "owner", Epoch: 1, CarrierIncarnation: "inc", InstanceID: "instance", HostID: "host", InstanceGeneration: 1, ProcessGeneration: 1, Backend: agentproto.BackendCodex, HistoryNamespace: "history"}
+	j, err := OpenJournal(filepath.Join(t.TempDir(), "private.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	l, err := j.OpenNativeLease(ctx, testNativeAuthority{}, n, o, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := NewProcessor(New(nil, orchestrator.Config{}), j, actionDecoder{}, CoreReducer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := nativeHello(n)
+	if _, err = p.ApplyAuthenticatedNativeHello(ctx, l, old, "old-connection"); err != nil {
+		t.Fatal(err)
+	}
+	newer := old
+	newer.PrivateDeliveryVersion = agentproto.PrivateDeliveryVersion
+	if _, err = p.ApplyAuthenticatedNativeHello(ctx, l, newer, "new-connection"); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		id   string
+		want int
+	}{{"old-connection", 0}, {"new-connection", agentproto.PrivateDeliveryVersion}} {
+		var got int
+		if err = j.db.QueryRow(`SELECT delivery_version FROM private_native_connection_delivery WHERE incarnation=? AND connection_id=?`, n.CarrierIncarnation, test.id).Scan(&got); err != nil || got != test.want {
+			t.Fatalf("%s capability=%d err=%v", test.id, got, err)
+		}
+	}
+}

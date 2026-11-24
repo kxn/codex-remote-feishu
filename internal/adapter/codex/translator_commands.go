@@ -130,7 +130,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 				"command":  shellCommand,
 			},
 		}
-		if command.ShellCommand.OperationID != "" {
+		if command.ShellCommand.OperationID != "" || command.NativeBinding != nil {
 			requestID := fmt.Sprint(payload["id"])
 			t.pendingSuppressedResponse[requestID] = suppressedResponseContext{ShellOperationID: command.ShellCommand.OperationID, CommandID: command.CommandID, Action: "thread/shellCommand", ThreadID: threadID, Initiator: commandFailureInitiator(command)}
 		}
@@ -577,6 +577,7 @@ func (t *Translator) directCompactStart(command agentproto.Command) ([]byte, str
 		Initiator:          commandFailureInitiator(command),
 		Action:             "thread/compact/start",
 		ManagedMaintenance: command.Maintenance != nil,
+		PrivateNative:      command.NativeBinding != nil,
 		ThreadID:           threadID,
 		SurfaceSessionID:   surfaceID,
 	}

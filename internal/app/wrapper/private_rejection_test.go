@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
@@ -44,5 +45,40 @@ func TestPrivatePrewriteRejectionIsDurableAndNeverClaimsStartedFrame(t *testing.
 				t.Fatalf("missing durable rejection: %+v", events)
 			}
 		})
+	}
+}
+
+func TestPrivateCompactIdleRejectionKeepsWriterAlive(t *testing.T) {
+	a := privateTestApp(t, agentproto.BackendCodex)
+	binding := agentproto.NativeTurnBinding{Version: 1, Owner: a.privateNative.snapshot.Owner, ExecutionID: "compact"}
+	command := agentproto.Command{CommandID: "compact", Kind: agentproto.CommandThreadCompactStart, NativeBinding: &binding, Target: agentproto.Target{ThreadID: "thread"}}
+	if _, err := a.prepareJournalCommand(command); err != nil {
+		t.Fatal(err)
+	}
+	resume := []byte(`{"id":"resume","method":"thread/resume"}`)
+	runtime := a.runtime.(*privateNativeRuntime)
+	if err := runtime.registerFrames(command.CommandID, [][]byte{resume}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJournaledChildFrame(&bytes.Buffer{}, resume, runtime); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.privateNative.journal.PersistEvents([]agentproto.Event{{Kind: agentproto.EventTurnStarted, ThreadID: "thread", TurnID: "active"}}); err != nil {
+		t.Fatal(err)
+	}
+	frame := []byte(`{"id":"rpc","method":"thread/compact/start"}`)
+	if err := runtime.registerFrames(command.CommandID, [][]byte{frame}); err != nil {
+		t.Fatal(err)
+	}
+	var child bytes.Buffer
+	if err := writeJournaledChildFrame(&child, frame, runtime); err != nil {
+		t.Fatal(err)
+	}
+	if child.Len() != 0 {
+		t.Fatal("rejected frame reached child")
+	}
+	events, _, err := a.privateNative.journal.Replay(0, 10)
+	if err != nil || len(events) != 2 || events[1].Kind != agentproto.EventNativeCommandRejected || events[1].CommandID != command.CommandID {
+		t.Fatalf("events=%+v err=%v", events, err)
 	}
 }

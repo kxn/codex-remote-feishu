@@ -546,6 +546,9 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	} else if a.privateNative != nil {
 		client.SetPrivateCredential(os.Getenv(agentproto.PrivateNativeCredentialEnv))
 		client.SetEventJournal(a.privateNative.journal)
+		a.privateNative.mu.Lock()
+		a.privateNative.publishWritten = client.SendEvents
+		a.privateNative.mu.Unlock()
 	}
 	client.SetRawLogger(rawLogger)
 
@@ -646,7 +649,12 @@ func (a *App) relayHello() agentproto.Hello {
 	default:
 		instance.CodexProfileID = strings.TrimSpace(a.config.CodexProfileID)
 	}
+	deliveryVersion := 0
+	if a.privateNative != nil && a.workErr == nil {
+		deliveryVersion = agentproto.PrivateDeliveryVersion
+	}
 	return agentproto.Hello{
+		PrivateDeliveryVersion:                 deliveryVersion,
 		Protocol:                               agentproto.WireProtocol,
 		CarrierProcess:                         a.carrierProcessIdentity(),
 		WorkerProtocolVersion:                  a.workProtocolVersion(),

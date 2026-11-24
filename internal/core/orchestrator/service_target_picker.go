@@ -680,6 +680,9 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	switch page {
 	case control.FeishuTargetPickerPageTarget:
 		canConfirm = selectedWorkspace != "" && selectedSession != ""
+		if kind, id := parseTargetPickerSessionValue(selectedSession); kind == control.FeishuTargetPickerSessionThread && s.privateLegacySessionReadOnly(surface, id) {
+			canConfirm = false
+		}
 		if selectedSession == targetPickerWorktreeCreateValue {
 			confirmLabel = "继续创建"
 		} else if selectedSession == targetPickerNewThreadValue {

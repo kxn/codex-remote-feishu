@@ -53,14 +53,9 @@ func (r privateHostReducer) Reduce(app *privatechat.App, action control.Action) 
 		switch action.Kind {
 		case control.ActionAccessCommand:
 			return app.Action(action)
-		case control.ActionModeCommand, control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand:
+		case control.ActionModeCommand, control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand, control.ActionModelCommand, control.ActionReasoningCommand:
 			return r.reduceSettingsTransitionIntent(app, action)
 		}
-		surface := app.Service().Surface(action.SurfaceSessionID)
-		if surface == nil || surface.Backend != agentproto.BackendCodex {
-			return nil, privatechat.ErrDeferred
-		}
-		return r.reduceSettingsIntent(app, action)
 	}
 	// File staging is a separate durable effect handled by the private runner.
 	if action.Kind == control.ActionFileMessage || (action.Kind == control.ActionTextMessage && len(action.Files) != 0) {

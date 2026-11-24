@@ -52,3 +52,44 @@ func TestManagedShellOperationRequiresActualCorrelatedNativeResponse(t *testing.
 		})
 	}
 }
+
+func TestPrivateReviewAndCompactProduceExactNativeRPCOutcome(t *testing.T) {
+	for _, kind := range []agentproto.CommandKind{agentproto.CommandReviewStart, agentproto.CommandThreadCompactStart} {
+		for _, fail := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/fail=%v", kind, fail), func(t *testing.T) {
+				tr := NewTranslator("instance")
+				tr.currentThreadID = "thread"
+				command := agentproto.Command{CommandID: "command", Kind: kind, Target: agentproto.Target{ThreadID: "thread"}, NativeBinding: &agentproto.NativeTurnBinding{}}
+				if kind == agentproto.CommandReviewStart {
+					command.Review.Target = agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges}
+				}
+				frames, err := tr.TranslateCommand(command)
+				if err != nil || len(frames) != 1 {
+					t.Fatalf("translate frames=%d err=%v", len(frames), err)
+				}
+				var frame struct {
+					ID string `json:"id"`
+				}
+				if err = json.Unmarshal(frames[0], &frame); err != nil {
+					t.Fatal(err)
+				}
+				body := `"result":{"turn":{"id":"review-turn"},"reviewThreadId":"review-thread"}`
+				if fail {
+					body = `"error":{"code":-1,"message":"rejected"}`
+				}
+				result, err := tr.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,%s}`, frame.ID, body)))
+				if err != nil || len(result.Events) == 0 {
+					t.Fatalf("outcome=%+v err=%v", result, err)
+				}
+				e := result.Events[0]
+				expected := "accepted"
+				if fail {
+					expected = "failed"
+				}
+				if e.Kind != agentproto.EventNativeControlResult || e.CommandID != "command" || e.RequestID != frame.ID || e.ThreadID != "thread" || e.Status != expected {
+					t.Fatalf("bad outcome: %+v", e)
+				}
+			})
+		}
+	}
+}
