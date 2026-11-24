@@ -107,7 +107,8 @@ func TestPersonalSourceSealRevalidatesNeutralAndSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	coordinator := &personalMigrationCoordinator{app: app}
-	router, err := ingressowner.Open(filepath.Join(t.TempDir(), "neutral.db"), nil, coordinator)
+	routerPath := filepath.Join(t.TempDir(), "neutral.db")
+	router, err := ingressowner.Open(routerPath, nil, coordinator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +132,31 @@ func TestPersonalSourceSealRevalidatesNeutralAndSource(t *testing.T) {
 		t.Fatalf("unresolved source not fenced: %v", err)
 	}
 	bound := bindings[0]
+	// A failed startup can leave the owner committed while rollback lets the
+	// old source advance its ingress revision. The next startup must reuse the
+	// frozen owner after revalidating both the original and current evidence.
+	if err = store.Within(ctx, func(tx *workstore.Tx) error {
+		record, _, e := tx.PersonalMigrationIngressObservation("personal", "app", "event", 1)
+		if e != nil {
+			return e
+		}
+		previous := record.Revision
+		record.Revision++
+		return tx.PutIngress(record, previous)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err = router.Close(); err != nil {
+		t.Fatal(err)
+	}
+	router, err = ingressowner.Open(routerPath, nil, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer router.Close()
+	coordinator.router = router
+	router.SetOwnerScopeBindingVerifier(verifier)
+	router.SetGatewayCoverageVerifier(migrationCoverageFixture{})
 	migrationID, importID, err := coordinator.MigrationIDs(ctx, bound)
 	if err != nil {
 		t.Fatal(err)

@@ -196,8 +196,14 @@ func (r *Router) ImportOwnerScopeBinding(ctx context.Context, b OwnerScopeBindin
 			return OwnerScopeBinding{}, err
 		}
 		expected, _ := json.Marshal(b)
-		if string(stored) != string(expected) || string(oldProof) != string(proof) {
+		if string(stored) != string(expected) {
 			return OwnerScopeBinding{}, ErrConflict
+		}
+		// The original immutable owner and proof remain authoritative. Source
+		// ingress revisions may advance after a partial startup or rollback, so
+		// reverify both observations rather than requiring identical proof bytes.
+		if err = r.validateOwnerScope(ctx, b, oldProof); err != nil {
+			return OwnerScopeBinding{}, err
 		}
 		if err = r.validateOwnerScope(ctx, b, proof); err != nil {
 			return OwnerScopeBinding{}, err

@@ -1,11 +1,13 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workpublish"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workui"
@@ -13,12 +15,22 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
+type teamPatchReceiptSender struct{ recoveryUISender }
+
+func (s teamPatchReceiptSender) Resolve(context.Context, work.RoleBotBinding) (workpublish.Sender, error) {
+	return s, nil
+}
+func (s teamPatchReceiptSender) PatchCard(_ context.Context, req feishu.ProjectCardPatchRequest) (feishu.ProjectPublishReceipt, error) {
+	return feishu.ProjectPublishReceipt{ChatID: req.ChatID, MessageID: req.MessageID}, nil
+}
+
 func TestTeamConfirmedPublicationBindsRealReceiptAndRecovers(t *testing.T) {
 	ctx := t.Context()
 	f := newResourceRecoveryFixture(t)
 	store := f.a.teamRuntime.store
 	binder := &teamPublicationBinding{store: store}
-	router, err := ingressowner.Open(filepath.Join(t.TempDir(), "router.db"), binder, nil)
+	routerPath := filepath.Join(t.TempDir(), "router.db")
+	router, err := ingressowner.Open(routerPath, binder, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +71,7 @@ func TestTeamConfirmedPublicationBindsRealReceiptAndRecovers(t *testing.T) {
 	if _, err = router.ImportHistoricalGroupOwner(ctx, forgedWitness, forgedProof); err == nil {
 		t.Fatal("forged group witness accepted")
 	}
-	pub, err := workpublish.New(store, recoveryUISender{}, nil)
+	pub, err := workpublish.New(store, teamPatchReceiptSender{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,5 +103,39 @@ func TestTeamConfirmedPublicationBindsRealReceiptAndRecovers(t *testing.T) {
 	actual.MessageID = "forged"
 	if err = binder.VerifyPlatformReceipt(ctx, actual, proof); err == nil {
 		t.Fatal("forged platform receipt accepted")
+	}
+	// A real project UI replacement updates the same platform message; after
+	// startup reconciliation only the new view owns the callback target.
+	if err = store.Within(ctx, func(tx *workstore.Tx) error {
+		second := binding
+		second.ID = "group-view-new"
+		second.ReplacesViewID = binding.ID
+		card, e := workui.Card(second.ID, workui.Panel{Title: "updated"})
+		if e != nil {
+			return e
+		}
+		_, e = workui.Queue(tx, second, card)
+		return e
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pub.RunOnce(ctx, 32); err != nil {
+		t.Fatal(err)
+	}
+	if err = router.Close(); err != nil {
+		t.Fatal(err)
+	}
+	router, err = ingressowner.Open(routerPath, binder, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer router.Close()
+	binder.router = router
+	if err = binder.ReconcileConfirmed(ctx); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := router.PublishedMessage(ctx, "tenant", binding.Binding.AppID, "chat", view.ExternalMessageID)
+	if err != nil || updated.CardRef != "group-view-new" || updated.Owner.Application != ingressowner.Team {
+		t.Fatalf("group patch owner: %+v %v", updated, err)
 	}
 }

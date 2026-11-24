@@ -2,9 +2,11 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
@@ -24,6 +26,13 @@ type teamPublicationProof struct {
 	ID   string `json:"id"`
 }
 
+func missingPublicationReference(err error) error {
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, workstore.ErrNotFound) {
+		return fmt.Errorf("confirmed publication references missing source: %w", ingressowner.ErrConflict)
+	}
+	return err
+}
+
 func (p *teamPublicationBinding) confirmed(ctx context.Context, proof teamPublicationProof) (ingressowner.PlatformMessage, error) {
 	var m ingressowner.PlatformMessage
 	if p == nil || p.router == nil || p.store == nil || proof.ID == "" {
@@ -35,6 +44,13 @@ func (p *teamPublicationBinding) confirmed(ctx context.Context, proof teamPublic
 			outbox, e := tx.GetOutbox(proof.ID)
 			if e != nil {
 				return e
+			}
+			scope, e := tx.GetScope(outbox.ScopeID)
+			if e != nil {
+				return e
+			}
+			if scope.Kind != work.ScopeProject && scope.Kind != work.ScopeBootstrap {
+				return ingressowner.ErrUnresolved
 			}
 			op, e := tx.GetOperation(outbox.OperationID)
 			if e != nil {
@@ -49,18 +65,67 @@ func (p *teamPublicationBinding) confirmed(ctx context.Context, proof teamPublic
 			if outbox.State != work.OutboxSent || op.State != work.OperationConfirmed || outbox.ScopeID != op.ScopeID || json.Unmarshal(body.Data, &projection) != nil || projection.Tenant == "" || projection.ChatID != outbox.Target || outbox.ExternalMessageID == "" || json.Unmarshal([]byte(op.ExternalReceipt), &receipt) != nil || receipt.MessageID != outbox.ExternalMessageID || receipt.ChatID != projection.ChatID {
 				return ingressowner.ErrConflict
 			}
+			original := projection
+			for _, step := range op.Steps {
+				if step.ID != "send_projection" {
+					continue
+				}
+				frozen, e := tx.GetContent(op.ScopeID, step.Receipt)
+				if e != nil {
+					return e
+				}
+				if step.State != work.OperationConfirmed || json.Unmarshal(frozen.Data, &projection) != nil || projection.RoleID != original.RoleID || projection.BotGeneration != original.BotGeneration || projection.AppID != original.AppID || projection.GatewayRef != original.GatewayRef || projection.Tenant != original.Tenant || projection.ChatID != original.ChatID || projection.ChannelGeneration != original.ChannelGeneration || projection.TaskID != original.TaskID || projection.Body != original.Body {
+					return ingressowner.ErrConflict
+				}
+				break
+			}
 			if projection.UIViewID != "" {
 				return ingressowner.ErrUnresolved
 			}
-			mapping, e := tx.GetPlatformMessageMapping(projection.Tenant, projection.ChatID, receipt.MessageID)
-			if e != nil || mapping.OutboxID != outbox.ID || mapping.OperationID != op.ID || mapping.ScopeID != op.ScopeID || mapping.RoleID != projection.RoleID || mapping.BotGeneration != projection.BotGeneration {
+			if op.Actor != (work.Actor{Kind: work.ActorRole, ID: projection.RoleID}) || op.TargetGeneration != projection.BotGeneration {
 				return ingressowner.ErrConflict
+			}
+			mapping, e := tx.GetPlatformMessageMapping(projection.Tenant, projection.ChatID, receipt.MessageID)
+			if e != nil || mapping.ScopeID != op.ScopeID || mapping.RoleID != projection.RoleID || mapping.BotGeneration != projection.BotGeneration {
+				return ingressowner.ErrConflict
+			}
+			if mapping.OutboxID != outbox.ID || mapping.OperationID != op.ID {
+				// A confirmed PATCH retains the immutable original message mapping.
+				// Validate that original receipt and identity instead of treating a
+				// different operation as automatically superseded.
+				if projection.ReplaceMessageID != receipt.MessageID || mapping.OutboxID == "" || mapping.OperationID == "" {
+					return ingressowner.ErrConflict
+				}
+				originalOut, e := tx.GetOutbox(mapping.OutboxID)
+				if e != nil {
+					return missingPublicationReference(e)
+				}
+				originalOp, e := tx.GetOperation(mapping.OperationID)
+				if e != nil {
+					return missingPublicationReference(e)
+				}
+				origin, e := tx.GetContent(originalOp.ScopeID, originalOp.RequestRef)
+				if e != nil {
+					return missingPublicationReference(e)
+				}
+				var originProjection workservice.MessageProjection
+				var originReceipt feishu.ProjectPublishReceipt
+				if originalOut.State != work.OutboxSent || originalOut.OperationID != originalOp.ID || originalOut.ScopeID != op.ScopeID || originalOut.Target != projection.ChatID || originalOut.ExternalMessageID != receipt.MessageID || originalOp.State != work.OperationConfirmed || originalOp.ScopeID != op.ScopeID || originalOp.Actor != (work.Actor{Kind: work.ActorRole, ID: projection.RoleID}) || originalOp.TargetGeneration != projection.BotGeneration || json.Unmarshal([]byte(originalOp.ExternalReceipt), &originReceipt) != nil || originReceipt.MessageID != receipt.MessageID || originReceipt.ChatID != receipt.ChatID || json.Unmarshal(origin.Data, &originProjection) != nil || originProjection.Tenant != projection.Tenant || originProjection.ChatID != projection.ChatID || originProjection.RoleID != projection.RoleID || originProjection.GatewayRef != projection.GatewayRef || originProjection.AppID != projection.AppID || originProjection.BotGeneration != projection.BotGeneration || originProjection.ChannelGeneration != projection.ChannelGeneration {
+					return ingressowner.ErrConflict
+				}
 			}
 			m = ingressowner.PlatformMessage{Tenant: projection.Tenant, AppID: projection.AppID, GatewayID: projection.GatewayRef, BindingGeneration: projection.BotGeneration, ChatID: projection.ChatID, MessageID: receipt.MessageID, Version: 1, Lifecycle: "active"}
 		case "team_view":
 			view, e := tx.GetUIView(proof.ID)
 			if e != nil {
 				return e
+			}
+			scope, e := tx.GetScope(view.ScopeID)
+			if e != nil {
+				return e
+			}
+			if scope.Kind != work.ScopeProject && scope.Kind != work.ScopeBootstrap {
+				return ingressowner.ErrUnresolved
 			}
 			op, e := tx.GetOperation(view.OperationID)
 			if e != nil {
@@ -75,6 +140,13 @@ func (p *teamPublicationBinding) confirmed(ctx context.Context, proof teamPublic
 			notice, e := tx.GetSelectionNotice(proof.ID)
 			if e != nil {
 				return e
+			}
+			source, e := tx.GetIngress(notice.IngressID)
+			if e != nil {
+				return missingPublicationReference(e)
+			}
+			if source.Envelope.ChatType != "group" || source.Envelope.Tenant != notice.Tenant || source.Envelope.ChatID != notice.ChatID || source.Gateway != notice.Gateway {
+				return ingressowner.ErrConflict
 			}
 			if notice.State != work.OperationConfirmed || notice.ExternalMessageID == "" {
 				return ingressowner.ErrConflict
@@ -154,7 +226,8 @@ func (p *teamPublicationBinding) ReconcileConfirmed(ctx context.Context) error {
 					return err
 				}
 				if err := p.confirm(ctx, teamPublicationProof{Kind: kind, ID: id}); err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, ingressowner.ErrUnresolved) && first == nil {
-					first = err
+					objectHash := sha256.Sum256([]byte(id))
+					first = fmt.Errorf("%s object %x: %w", kind, objectHash[:6], err)
 				}
 				after = id
 			}

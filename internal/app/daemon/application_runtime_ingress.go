@@ -96,10 +96,13 @@ func (a *App) configureApplicationIngress(ctx context.Context, controller *feish
 	}
 	r.historical, err = r.migrations.PrepareHistoricalBindings(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare historical private owner bindings: %w", err)
 	}
 	if err = PrepareHistoricalTeamOwners(ctx, router, a.teamRuntime.store); err != nil {
-		return err
+		return fmt.Errorf("prepare historical team owners: %w", err)
 	}
-	return r.teamPublications.ReconcileConfirmed(ctx)
+	if err = r.teamPublications.ReconcileConfirmed(ctx); err != nil {
+		return fmt.Errorf("reconcile confirmed team publications: %w", err)
+	}
+	return nil
 }

@@ -72,6 +72,14 @@ func TestHistoricalScopeImportCreatesOpaqueOwnerAndBoundDrain(t *testing.T) {
 	if err != nil || again != bound {
 		t.Fatalf("witness replay: %v", err)
 	}
+	if _, err = r.ImportOwnerScopeBinding(ctx, b, []byte("forged")); err == nil {
+		t.Fatal("replayed owner accepted unverified new evidence")
+	}
+	changed := b
+	changed.SourceFactHash = "changed"
+	if _, err = r.ImportOwnerScopeBinding(ctx, changed, []byte("durable-source")); err == nil {
+		t.Fatal("replayed owner accepted changed event facts")
+	}
 	resolved, err := r.LookupImportedOwner(ctx, "tenant", "app", "gateway", 1, "chat", "user")
 	if err != nil || resolved != bound.Owner {
 		t.Fatal("imported identity unavailable")
