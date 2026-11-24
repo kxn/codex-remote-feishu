@@ -51,7 +51,7 @@ func catalogAppFixtureWithWorker(t *testing.T, withWorker bool) (*privateMCPRead
 	a.teamRuntime.coordinator = f.coordinator
 	ctx, cancel := context.WithCancel(t.Context())
 	a.teamRuntime.runContext = ctx
-	t.Cleanup(func() { cancel(); a.teamRuntime.workers.Wait() })
+	t.Cleanup(func() { cancel(); _ = a.stopProfileCatalogWorkers(context.Background()) })
 	_, _, err := a.codexOAuthProfileState.store.ApplyProbe(catalogOAuthObservation("fixture@example.com", "plus"), time.Now(), "fixture", false)
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestModelCatalogIndependentProbeAndResultUpdateOriginalSDKCard(t *testing.T
 		t.Fatal("empty model page did not launch independent probe")
 	}
 	close(release)
-	a.teamRuntime.workers.Wait()
+	a.profileCatalogWorkers.Wait()
 	// Thirty-two older views have no publication receipt yet. They must not
 	// permanently starve this ready result at position 33.
 	pickerTx(t, a, func(tx *workstore.Tx) error {

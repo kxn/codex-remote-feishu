@@ -19,6 +19,18 @@ func (r *privateWorkRunner) runOwnerDeadlines(ctx context.Context) error {
 			if _, err = r.ingress.privatePublicationBindingFor(ctx, owner.Owner, owner.Generation); err != nil {
 				continue
 			}
+			// Queued inputs may already be applied ingress, so no pending SDK
+			// event remains to trigger replacement after a clean restart.
+			// Only exact proven-unsent input can initiate this recovery.
+			checkpoint, checkpointErr := r.journal.LoadCheckpoint(ctx, owner.Owner, owner.Generation)
+			if checkpointErr == nil && len(checkpoint.Core.QueuedQueueItemIDs) > 0 && checkpoint.Core.ActiveQueueItemID == "" && retiredCheckpointHasTarget(checkpoint.Core) && r.native != nil {
+				if e := r.ingress.refreshPrivateThreadPolicy(ctx, r.native, r.processor, owner.Owner, owner.Generation); e == nil {
+					proven, proofErr := r.processor.QueuedRecoveryProven(ctx, owner.Owner, owner.Generation)
+					if proofErr == nil && proven {
+						_, _ = r.prepareRetiredRuntime(ctx, owner.Owner, owner.Generation)
+					}
+				}
+			}
 			now := time.Now().UTC().Truncate(time.Second)
 			if _, err = r.processor.ApplyOwnerDeadline(ctx, owner.Owner, owner.Generation, fmt.Sprintf("tick:%d", now.Unix()), now); err != nil {
 				log.Printf("private owner deadline gateway=%s generation=%d: %v", owner.Owner.GatewayID, owner.Generation, err)

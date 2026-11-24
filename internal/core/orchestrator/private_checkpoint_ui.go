@@ -12,6 +12,7 @@ import (
 // Only the surface-owned local UI records are persisted. These records contain
 // no live process or network state; expiry remains the original expiry.
 type privateCheckpointUI struct {
+	ModelWait              *PrivateModelWait
 	UpgradeFlow            *PrivateUpgradeFlow
 	CodexContractVersion   string
 	MCPOAuth               map[string]privateMCPOAuthRequest
@@ -44,7 +45,7 @@ func (s *Service) exportPrivateCheckpointUI(v *state.SurfaceConsoleRecord) *priv
 	if r == nil {
 		return nil
 	}
-	u := &privateCheckpointUI{UpgradeFlow: r.PrivateUpgradeFlow, CodexContractVersion: r.PrivateCodexContractVersion, MCPOAuth: r.PrivateMCPOAuth, AsyncUserInputs: r.AsyncUserInputs, AsyncUserInputSequence: r.AsyncUserInputSequence, OwnerFlow: r.ActiveOwnerCardFlow, PathPicker: r.ActivePathPicker, ThreadHistory: r.ActiveThreadHistory, WorkspacePage: r.ActiveWorkspacePage}
+	u := &privateCheckpointUI{ModelWait: r.PrivateModelWait, UpgradeFlow: r.PrivateUpgradeFlow, CodexContractVersion: r.PrivateCodexContractVersion, MCPOAuth: r.PrivateMCPOAuth, AsyncUserInputs: r.AsyncUserInputs, AsyncUserInputSequence: r.AsyncUserInputSequence, OwnerFlow: r.ActiveOwnerCardFlow, PathPicker: r.ActivePathPicker, ThreadHistory: r.ActiveThreadHistory, WorkspacePage: r.ActiveWorkspacePage}
 	if r.ActiveTargetPicker != nil {
 		copy := *r.ActiveTargetPicker
 		if options := copy.OptionSnapshot; options != nil {
@@ -103,6 +104,7 @@ func (s *Service) restorePrivateCheckpointUI(v *state.SurfaceConsoleRecord, u *p
 		return
 	}
 	r := s.ensureSurfaceUIRuntime(v)
+	r.PrivateModelWait = u.ModelWait
 	r.PrivateMCPOAuth = u.MCPOAuth
 	r.AsyncUserInputs, r.AsyncUserInputSequence = u.AsyncUserInputs, u.AsyncUserInputSequence
 	r.PrivateUpgradeFlow = u.UpgradeFlow

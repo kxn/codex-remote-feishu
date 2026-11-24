@@ -206,9 +206,14 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 	if err != nil {
 		return nil, err
 	}
+	discardBefore := p.app.Service().PrivateInputDiscardVersion(o.SurfaceID)
 	var events []eventcontract.Event
 	if reconnectUnavailable {
-		events = []eventcontract.Event{{Kind: eventcontract.KindNotice, GatewayID: o.GatewayID, SurfaceSessionID: o.SurfaceID, Notice: &control.Notice{Code: "private_reconnect_input_unavailable", Title: "原会话正在恢复", Text: "这条消息尚未交给会话。请稍后重新发送；如需换会话，请先 /detach，再使用 /list 或 /new。"}}}
+		notice := &control.Notice{Code: "private_reconnect_input_unavailable", Title: "原会话正在恢复", Text: "这条消息尚未交给会话。请稍后重新发送；如需换会话，请先 /detach，再使用 /list 或 /new。"}
+		if p.app.Service().PrivateReconnectProfileChanged(o.SurfaceID) {
+			notice = &control.Notice{Code: "private_reconnect_profile_changed", Title: "原会话配置已变化", Text: "这条消息尚未交给会话。当前配置与原会话不一致；请切回原配置，或 /detach 后选择其他会话并重新发送。"}
+		}
+		events = []eventcontract.Event{{Kind: eventcontract.KindNotice, GatewayID: o.GatewayID, SurfaceSessionID: o.SurfaceID, Notice: notice}}
 	} else if wasHistoricalConfirmation && historical == nil {
 		text := "请先发送 /new 准备新会话，再查看历史输入并确认恢复。"
 		if action.Text == "/recover already" {
@@ -247,6 +252,9 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 			return nil, fmt.Errorf("%w: card plan: %v", ErrProcessorPoisoned, err)
 		}
 	}
+	if card != nil {
+		p.app.Service().RecordPrivateModelCardResponse(o.SurfaceID, seq, card.TargetMessageID, card.ViewToken)
+	}
 	effects, err := p.freezeEffects(o, generation, fmt.Sprintf("ingress:%d", seq), events)
 	if err != nil {
 		p.poisoned = true
@@ -282,6 +290,10 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 		cursor = seq
 	}
 	checkpoint := Checkpoint{Owner: o, Generation: generation, Revision: state.revision + 1, Cursor: cursor, Core: core}
+	discarded := p.app.Service().PrivateInputDiscardVersion(o.SurfaceID) != discardBefore
+	if entry.Ingress.Lane == "control" && discarded {
+		checkpoint.cancelEarlierInputBefore = seq
+	}
 	var migration []*migrationResumeRef
 	if historical != nil {
 		migration = append(migration, &migrationResumeRef{Historical: historical})
@@ -370,6 +382,9 @@ func (p *Processor) freezeEffects(o Owner, generation int64, key string, events 
 		}
 		digest := sha256.Sum256(identity)
 		effectID := "private-effect:" + hex.EncodeToString(digest[:])
+		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandPrivateModelCatalogQuery {
+			p.app.Service().BindPrivateModelQuery(o.SurfaceID, effectID)
+		}
 		if event.Command != nil {
 			if event.SurfaceSessionID != o.SurfaceID {
 				p.poisoned = true
@@ -382,6 +397,8 @@ func (p *Processor) freezeEffects(o Owner, generation int64, key string, events 
 				event.Command.ShellCommand.OperationID = "private-shell:" + hex.EncodeToString(digest[:])
 			}
 			switch event.Command.Kind {
+			case agentproto.CommandModelList:
+				p.app.Service().BindPrivateModelQuery(o.SurfaceID, event.Command.CommandID)
 			case agentproto.CommandReviewStart:
 				p.app.Service().BindPendingReviewStartCommand(o.SurfaceID, event.Command.CommandID)
 			case agentproto.CommandThreadShellCommand:

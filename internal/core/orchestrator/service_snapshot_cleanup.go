@@ -111,6 +111,7 @@ func (s *Service) updateInstanceCWDDefaults(inst *state.InstanceRecord, cwd stri
 }
 
 func (s *Service) discardDrafts(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	s.recordPrivateInputDiscard(surface)
 	var events []eventcontract.Event
 	for _, image := range surface.StagedImages {
 		if image.State != state.ImageStaged {
@@ -166,6 +167,7 @@ func (s *Service) discardStagedInputsForRouteChange(surface *state.SurfaceConsol
 	if prevThreadID == nextThreadID && prevRouteMode == nextRouteMode {
 		return nil
 	}
+	s.recordPrivateInputDiscard(surface)
 	discarded := 0
 	var events []eventcontract.Event
 	for imageID, image := range surface.StagedImages {

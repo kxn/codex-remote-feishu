@@ -39,7 +39,7 @@ func TestModelCatalogNativeCredentialChangeDuringQueryPreservesLastGood(t *testi
 	if _, err = f.a.readOrRefreshProfileCatalog(t.Context(), target, true); err != nil {
 		t.Fatal(err)
 	}
-	f.a.teamRuntime.workers.Wait()
+	f.a.profileCatalogWorkers.Wait()
 	pickerTx(t, f.a, func(tx *workstore.Tx) error {
 		result, e := tx.GetProfileModelCatalog(key)
 		if e != nil {

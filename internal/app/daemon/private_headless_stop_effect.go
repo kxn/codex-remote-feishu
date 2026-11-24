@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"time"
+	"fmt"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
@@ -91,7 +91,7 @@ func (h *privateNativeHost) advanceCarrierStop(ctx context.Context, rec privateC
 	instance := rec.Snapshot.Owner.InstanceID
 	var err error
 	if rec.State == "running" {
-		if err = h.beginDrain(ctx, instance); err != nil {
+		if err = h.beginDrainForStop(ctx, instance); err != nil {
 			return err
 		}
 		rec.State = "draining"
@@ -185,11 +185,9 @@ func (h *privateNativeHost) advanceCarrierStop(ctx context.Context, rec privateC
 			return e
 		}
 	}
-	retireCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-	err = h.retire(retireCtx, instance)
-	cancel()
+	err = h.retire(ctx, instance)
 	if err != nil {
-		return privatechat.ErrDeferred
+		return fmt.Errorf("retire private carrier: %w", err)
 	}
 	return nil
 }
@@ -206,4 +204,28 @@ func (r *privateWorkRunner) confirmHeadlessStop(ctx context.Context, work privat
 	}
 	_, err := r.processor.ApplyLocalHostReceipt(ctx, work.Owner, work.Generation, effect.Effect.ID, privateStopReducer{r.host})
 	return err
+}
+
+func (h *privateNativeHost) projectStoppedCarrierEvents(ctx context.Context, rec privateCarrierRecord) error {
+	lease, err := h.lease(ctx, rec, nil)
+	if err != nil {
+		return err
+	}
+	for {
+		pending, e := lease.PendingBusinessNativeEvents(ctx, 0, 128)
+		if e != nil {
+			return e
+		}
+		if len(pending) > 0 && h.processor == nil {
+			return fmt.Errorf("private stop projection processor unavailable")
+		}
+		for _, item := range pending {
+			if _, e = h.processor.ApplyNativeForStop(ctx, lease, item.Ref, privatechat.CoreNativeReducer{}); e != nil {
+				return fmt.Errorf("project stopped event kind=%s sequence=%d: %w", item.Event.Kind, item.Ref.Sequence, e)
+			}
+		}
+		if len(pending) < 128 {
+			return nil
+		}
+	}
 }

@@ -21,6 +21,63 @@ type callbackViewReader interface {
 func (r *Router) privateCardReferenceCurrent(ctx context.Context, e Event, target *PlatformMessage) (bool, error) {
 	return privateCardReferenceCurrent(ctx, r.db, e, target)
 }
+
+// CurrentPrivateView checks the same authority used for callbacks. known is
+// false while an offered callback response has not yet been committed.
+func (r *Router) CurrentPrivateView(ctx context.Context, owner Owner, tenant, app, chat, message, token, sourceEventID string) (known, current bool, err error) {
+	if !owner.valid() || owner.Application != Private || token == "" {
+		return false, false, ErrInvalid
+	}
+	target, err := r.PublishedMessage(ctx, tenant, app, chat, message)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	if target.Owner != owner {
+		return true, false, ErrConflict
+	}
+	if target.CardRef == token {
+		known = true
+	} else {
+		var n int
+		if err = r.db.QueryRowContext(ctx, `SELECT count(*) FROM private_callback_views WHERE tenant=? AND app_id=? AND chat_id=? AND message_id=? AND token=?`, tenant, app, chat, message, token).Scan(&n); err != nil {
+			return false, false, err
+		}
+		known = n != 0
+		if !known {
+			ownerJSON, e := json.Marshal(owner)
+			if e != nil {
+				return false, false, e
+			}
+			if e = r.db.QueryRowContext(ctx, `SELECT count(*) FROM private_views WHERE owner=? AND token=?`, ownerJSON, token).Scan(&n); e != nil {
+				return false, false, e
+			}
+			known = n != 0
+		}
+	}
+	if !known {
+		if sourceEventID != "" {
+			record, e := r.Get(ctx, Key{Tenant: tenant, AppID: app, EventID: sourceEventID})
+			if errors.Is(e, sql.ErrNoRows) {
+				return false, false, nil
+			}
+			if e != nil {
+				return false, false, e
+			}
+			if record.Owner == nil || *record.Owner != owner {
+				return true, false, ErrConflict
+			}
+			if record.State == Accepted || record.State == Expired {
+				return true, false, nil
+			}
+		}
+		return false, false, nil
+	}
+	current, err = r.privateCardReferenceCurrent(ctx, Event{CardKind: "private_view", CardRef: token}, &target)
+	return known, current, err
+}
 func privateCardReferenceCurrent(ctx context.Context, reader callbackViewReader, e Event, target *PlatformMessage) (bool, error) {
 	if target == nil || target.Lifecycle != "active" || target.CardKind != e.CardKind {
 		return false, nil

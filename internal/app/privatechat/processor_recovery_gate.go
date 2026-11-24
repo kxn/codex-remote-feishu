@@ -10,9 +10,32 @@ import (
 // Each queued input is checked against the exact applied SDK source and all of
 // its dispatches; a historical migration hold never becomes a fresh input.
 func (p *Processor) reconcileRecoveryGate(ctx context.Context, o Owner, generation int64) ([]eventcontract.Event, error) {
-	cp, err := p.app.Service().ExportPrivateCheckpoint(o.SurfaceID)
+	proven, err := p.queuedRecoveryProvenLocked(ctx, o, generation)
 	if err != nil {
 		return nil, err
+	}
+	return p.app.Service().ReconcilePrivateRecoveryGate(o.SurfaceID, proven)
+}
+
+// QueuedRecoveryProven checks frozen queue sources without dispatching them.
+func (p *Processor) QueuedRecoveryProven(ctx context.Context, o Owner, generation int64) (bool, error) {
+	unlock := p.journal.LockReferenceMutation()
+	defer unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.poisoned {
+		return false, ErrProcessorPoisoned
+	}
+	if _, err := p.ensureOwner(ctx, o, generation); err != nil {
+		return false, err
+	}
+	return p.queuedRecoveryProvenLocked(ctx, o, generation)
+}
+
+func (p *Processor) queuedRecoveryProvenLocked(ctx context.Context, o Owner, generation int64) (bool, error) {
+	cp, err := p.app.Service().ExportPrivateCheckpoint(o.SurfaceID)
+	if err != nil {
+		return false, err
 	}
 	proven := true
 	for _, id := range cp.QueuedQueueItemIDs {
@@ -31,9 +54,9 @@ func (p *Processor) reconcileRecoveryGate(ctx context.Context, o Owner, generati
 			seen[message] = true
 			foundPrimary = foundPrimary || message == item.SourceMessageID
 			var n int
-			err = p.journal.db.QueryRowContext(ctx, `SELECT count(*) FROM ingress i JOIN private_applied a ON a.seq=i.seq JOIN json_each(i.sources) src WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND i.lane='input' AND src.value=? AND NOT EXISTS(SELECT 1 FROM dispatch_input di JOIN dispatch d ON d.id=di.dispatch_id WHERE di.seq=i.seq AND d.state<>'failed') AND NOT EXISTS(SELECT 1 FROM private_migration_input_holds h JOIN private_migration_imports m ON m.import_id=h.import_id WHERE m.tenant=i.tenant AND m.app_id=i.app_id AND m.gateway=i.gateway AND m.surface=i.surface AND m.chat=i.chat AND m.user_id=i.user_id AND m.generation=i.generation AND h.message_id=src.value)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, message).Scan(&n)
+			err = p.journal.db.QueryRowContext(ctx, `SELECT count(*) FROM ingress i JOIN private_applied a ON a.seq=i.seq AND a.canceled_by IS NULL JOIN json_each(i.sources) src WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND i.lane='input' AND src.value=? AND NOT EXISTS(SELECT 1 FROM dispatch_input di JOIN dispatch d ON d.id=di.dispatch_id WHERE di.seq=i.seq AND d.state<>'failed') AND NOT EXISTS(SELECT 1 FROM private_migration_input_holds h JOIN private_migration_imports m ON m.import_id=h.import_id WHERE m.tenant=i.tenant AND m.app_id=i.app_id AND m.gateway=i.gateway AND m.surface=i.surface AND m.chat=i.chat AND m.user_id=i.user_id AND m.generation=i.generation AND h.message_id=src.value)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, message).Scan(&n)
 			if err != nil {
-				return nil, err
+				return false, err
 			}
 			if n != 1 {
 				proven = false
@@ -47,5 +70,5 @@ func (p *Processor) reconcileRecoveryGate(ctx context.Context, o Owner, generati
 			break
 		}
 	}
-	return p.app.Service().ReconcilePrivateRecoveryGate(o.SurfaceID, proven)
+	return proven, nil
 }

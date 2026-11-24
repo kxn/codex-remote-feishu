@@ -20,6 +20,9 @@ func (s *Service) detachPrivateUnknown(surfaceID string) []eventcontract.Event {
 	if err != nil {
 		return notice(surface, "private_recovery_hold", "无法保存旧会话的未确认操作，请稍后重试。")
 	}
+	if events, handled := s.detachPendingPrivateReplacement(surface, snapshot); handled {
+		return events
+	}
 	instance := surface.AttachedInstanceID
 	for _, h := range snapshot.Holds {
 		candidate := h.InstanceID
@@ -133,4 +136,36 @@ func (s *Service) RecordPrivateDetachedEvent(surfaceID, instanceID, incarnation 
 	list[match].Events = append(list[match].Events, PrivateDetachedEventRef{Incarnation: incarnation, Sequence: sequence, PayloadHash: hash})
 	s.privateDetachedExecutions[surfaceID] = list
 	return true
+}
+
+// A replacement has two distinct identities: the already retired source and
+// the new launch which may still be in flight. Detach only isolates the latter.
+func (s *Service) detachPendingPrivateReplacement(surface *state.SurfaceConsoleRecord, snapshot PrivateCheckpoint) ([]eventcontract.Event, bool) {
+	if surface == nil || surface.AttachedInstanceID == "" || snapshot.ActiveQueueItemID != "" {
+		return nil, false
+	}
+	var pending state.HeadlessLaunchRecord
+	var hold PrivateRecoveryHold
+	found := false
+	for _, h := range snapshot.Holds {
+		if h.Kind != "headless_launch" {
+			return nil, false
+		}
+		if found || json.Unmarshal(h.Frozen, &pending) != nil || pending.InstanceID == "" || pending.SourceInstanceID != surface.AttachedInstanceID || pending.Purpose != state.HeadlessLaunchPurposePrivateUpgrade || !pending.AutoRestore {
+			return nil, false
+		}
+		hold = h
+		hold.InstanceID = pending.InstanceID
+		found = true
+	}
+	if !found {
+		return nil, false
+	}
+	s.privateDetachedExecutions[surface.SurfaceSessionID] = append(s.privateDetachedExecutions[surface.SurfaceSessionID], PrivateDetachedExecution{InstanceID: pending.InstanceID, Holds: []PrivateRecoveryHold{hold}})
+	delete(s.privateRecoveryHolds, surface.SurfaceSessionID)
+	delete(s.privateOfflineStops, surface.SurfaceSessionID)
+	events := s.discardDrafts(surface)
+	events = append(events, s.finalizeDetachedSurface(surface)...)
+	events = append(events, eventcontract.Event{Kind: eventcontract.KindDaemonCommand, SurfaceSessionID: surface.SurfaceSessionID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandKillHeadless, SurfaceSessionID: surface.SurfaceSessionID, InstanceID: pending.InstanceID}})
+	return append(events, notice(surface, "private_runtime_replacement_cancelled", "已退出当前会话；正在取消原会话的恢复。可以选择或新建其他会话。")...), true
 }

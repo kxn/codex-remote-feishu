@@ -61,3 +61,40 @@ func TestHostLifecyclePersistsOnlyLoadedOwnersAndReplaysWithoutReduction(t *test
 		t.Fatalf("invalid reducer state reused: %v", err)
 	}
 }
+
+func TestHostLifecycleLoadsVerifiedDurableOwner(t *testing.T) {
+	j, o, _ := memoryJournalFixture(t)
+	defer j.Close()
+	seed := New(nil, orchestrator.Config{})
+	if err := seed.RegisterOwner(o); err != nil {
+		t.Fatal(err)
+	}
+	core, err := seed.Service().ExportPrivateCheckpoint(o.SurfaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = j.CommitCheckpoint(t.Context(), Checkpoint{Owner: o, Generation: 1, Revision: 1, Core: core}, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	p, err := NewProcessor(New(nil, orchestrator.Config{}), j, actionDecoder{}, CoreReducer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UTC()
+	calls := 0
+	reduce := func(_ *App, owner Owner) []eventcontract.Event {
+		calls++
+		return []eventcontract.Event{{Kind: eventcontract.KindNotice, SurfaceSessionID: owner.SurfaceID, GatewayID: owner.GatewayID, Notice: &control.Notice{Text: "离线"}}}
+	}
+	first, err := p.ApplyOwnerHostLifecycle(t.Context(), o, 1, "shutdown", at, reduce)
+	if err != nil || len(first) != 1 || calls != 1 {
+		t.Fatalf("first=%d calls=%d err=%v", len(first), calls, err)
+	}
+	again, err := p.ApplyOwnerHostLifecycle(t.Context(), o, 1, "shutdown", at, reduce)
+	if err != nil || len(again) != 1 || again[0].Effect.Effect.ID != first[0].Effect.Effect.ID || calls != 1 {
+		t.Fatalf("replay err=%v calls=%d", err, calls)
+	}
+	if _, err = p.ApplyOwnerHostLifecycle(t.Context(), o, 2, "shutdown", at, reduce); err == nil {
+		t.Fatal("other owner epoch accepted")
+	}
+}

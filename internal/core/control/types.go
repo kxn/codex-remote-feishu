@@ -665,6 +665,7 @@ const (
 	DaemonCommandPrivateProjectShare        DaemonCommandKind = "private.project.share"
 	DaemonCommandPrivateMkdir               DaemonCommandKind = "private.workspace.mkdir"
 	DaemonCommandPrivateBotSettings         DaemonCommandKind = "private.bot.settings"
+	DaemonCommandPrivateModelCatalogQuery   DaemonCommandKind = "private.model_catalog.query"
 	DaemonCommandPrivateClaudeWorkspace     DaemonCommandKind = "private.claude.workspace"
 	DaemonCommandPrivateStageInput          DaemonCommandKind = "private.input.stage"
 	DaemonCommandPrivateWorktreeObserve     DaemonCommandKind = "private.worktree.observe"
@@ -673,6 +674,7 @@ const (
 )
 
 type DaemonCommand struct {
+	StageObjectID             string `json:",omitempty"`
 	Kind                      DaemonCommandKind
 	GatewayID                 string
 	SurfaceSessionID          string

@@ -43,6 +43,9 @@ type PrimaryBotPermissionDecision struct {
 }
 
 type Service struct {
+	privateDiscardVersion             uint64
+	privateDiscardSurface             string
+	privateStageAdmission             bool
 	privateThreadPolicies             map[string]PrivateThreadPolicy
 	privateSettingsPreview            bool
 	privateSettingsProposal           *state.BotCapabilitySettingsRecord
@@ -339,6 +342,9 @@ func (s *Service) SetPrimaryBotPermissionChecker(checker PrimaryBotPermissionChe
 }
 
 func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Event {
+	if events, handled := s.handlePrivateReplacementRouteAction(action); handled {
+		return events
+	}
 	if s.config.PrivateApplication && action.Kind == control.ActionStop {
 		if _, held := s.privateRecoveryHolds[action.SurfaceSessionID]; held {
 			return s.recordPrivateOfflineStop(action)
@@ -349,7 +355,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 			return s.detachPrivateUnknown(action.SurfaceSessionID)
 		}
 	}
-	if _, held := s.privateRecoveryHolds[action.SurfaceSessionID]; held && !s.privateRecoveryLocalAction(action) {
+	if _, held := s.privateRecoveryHolds[action.SurfaceSessionID]; held && !s.privateRecoveryLocalAction(action) && !s.privateReplacementInputAction(action) {
 		return []eventcontract.Event{{Kind: eventcontract.KindNotice, SurfaceSessionID: action.SurfaceSessionID, GatewayID: action.GatewayID, Notice: &control.Notice{Code: "private_recovery_hold", Title: "会话等待恢复", Text: "正在核对之前的会话和未确认操作，请稍后再试。"}}}
 	}
 	surface := s.ensureSurface(action)
@@ -377,6 +383,11 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	}
 	if blocked := s.pendingHeadlessActionBlocked(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
+	}
+	if s.config.PrivateApplication {
+		if r := s.surfaceUIRuntimeState(surface); r != nil {
+			r.PrivateModelWait = nil
+		}
 	}
 	// Auto-close active pickers when the user sends a text message.
 	// The picker card becomes stale if the user bypasses it by typing directly.
@@ -609,7 +620,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventModelCatalogUpdated:
 		s.applyModelCatalogUpdated(inst, event)
-		return s.filterEventsForSurfaceVisibility(preface)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.privateModelCatalogResult(instanceID, event)...))
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)

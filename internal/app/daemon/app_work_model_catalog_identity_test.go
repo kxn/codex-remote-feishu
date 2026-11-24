@@ -65,7 +65,7 @@ func TestModelCatalogRestartKeepsThirtyDayChoicesFailurePreservesAndExplicitRefr
 		t.Fatal("stale page not refreshed in background")
 	}
 	close(release)
-	f.a.teamRuntime.workers.Wait()
+	f.a.profileCatalogWorkers.Wait()
 	got, e = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, catalogOwner(f))
 	if e != nil || got.Snapshot == nil || got.Unavailable == "" {
 		t.Fatalf("failure lost lastgood: %+v %v", got, e)
@@ -105,7 +105,7 @@ func TestModelCatalogRestartKeepsThirtyDayChoicesFailurePreservesAndExplicitRefr
 		t.Fatal("pending explicit refresh hid choices")
 	}
 	close(release)
-	f.a.teamRuntime.workers.Wait()
+	f.a.profileCatalogWorkers.Wait()
 	got, e = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, catalogOwner(f))
 	if e != nil || got.Snapshot == nil || got.Snapshot.Entries[0].Model != "fresh-model" {
 		t.Fatalf("new result not selected: %+v %v", got, e)
@@ -198,7 +198,7 @@ func TestModelCatalogIndependentProbePaginationPreservesNativeCursor(t *testing.
 		if _, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner); e != nil {
 			t.Fatal(e)
 		}
-		f.a.teamRuntime.workers.Wait()
+		f.a.profileCatalogWorkers.Wait()
 		got, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
 		if e != nil || got.Snapshot == nil {
 			t.Fatalf("page unavailable: %+v %v", got, e)
@@ -290,7 +290,7 @@ func TestModelCatalogCapacityQueuesExplicitFreshCacheRefreshAndDoesNotLoseReques
 	default:
 	}
 	close(release)
-	f.a.teamRuntime.workers.Wait()
+	f.a.profileCatalogWorkers.Wait()
 	owner := catalogOwner(f)
 	owner.Cursor = "queued-third"
 	got, e := (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
@@ -305,7 +305,7 @@ func TestModelCatalogCapacityQueuesExplicitFreshCacheRefreshAndDoesNotLoseReques
 	case <-time.After(time.Second):
 		t.Fatal("freed capacity did not run persisted explicit refresh")
 	}
-	f.a.teamRuntime.workers.Wait()
+	f.a.profileCatalogWorkers.Wait()
 	got, e = (teamBotSettingsPort{f.a}).ReadCatalog(t.Context(), binding, owner)
 	if e != nil || got.Snapshot == nil || got.Snapshot.Entries[0].Model != "last-good-model" || got.Unavailable == "" {
 		t.Fatalf("queued failure lost last good choices: %+v %v", got, e)

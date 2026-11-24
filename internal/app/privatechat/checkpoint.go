@@ -19,6 +19,7 @@ type Effect struct {
 	DisplayKey string `json:",omitempty"`
 }
 type Checkpoint struct {
+	cancelEarlierInputBefore     int64
 	Owner                        Owner
 	Generation, Revision, Cursor int64
 	Core                         orchestrator.PrivateCheckpoint
@@ -155,6 +156,45 @@ func (j *Journal) commitCheckpointExtended(ctx context.Context, c Checkpoint, ex
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO private_applied(seq,revision) VALUES(?,?)`, appliedSeq, c.Revision); err != nil {
 			return err
+		}
+		if c.cancelEarlierInputBefore != 0 {
+			if c.cancelEarlierInputBefore != appliedSeq {
+				return ErrJournalState
+			}
+			if _, err = tx.ExecContext(ctx, `UPDATE private_applied SET route_discard=1 WHERE seq=?`, appliedSeq); err != nil {
+				return err
+			}
+			_, err = tx.ExecContext(ctx, `INSERT INTO private_applied(seq,revision,canceled_by)
+ SELECT i.seq,0,? FROM ingress i LEFT JOIN private_applied a ON a.seq=i.seq
+ JOIN ingress c ON c.seq=?
+ WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND i.lane='input' AND ((i.origin_router<>'' AND i.origin_router=c.origin_router AND i.origin_seq<c.origin_seq) OR ((i.origin_router='' OR c.origin_router='') AND i.seq<c.seq)) AND a.seq IS NULL
+ AND NOT EXISTS(SELECT 1 FROM dispatch_input d WHERE d.seq=i.seq)`, appliedSeq, appliedSeq, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, c.Generation)
+			if err != nil {
+				return err
+			}
+			rows, e := tx.QueryContext(ctx, `SELECT seq FROM private_applied WHERE canceled_by=?`, appliedSeq)
+			if e != nil {
+				return e
+			}
+			var canceled []int64
+			for rows.Next() {
+				var seq int64
+				if e = rows.Scan(&seq); e != nil {
+					rows.Close()
+					return e
+				}
+				canceled = append(canceled, seq)
+			}
+			if e = rows.Err(); e != nil {
+				rows.Close()
+				return e
+			}
+			rows.Close()
+			for _, seq := range canceled {
+				if e = insertCanceledStagingCleanup(ctx, tx, seq); e != nil {
+					return e
+				}
+			}
 		}
 		if card != nil {
 			if err := validateCardResponse(*card); err != nil {

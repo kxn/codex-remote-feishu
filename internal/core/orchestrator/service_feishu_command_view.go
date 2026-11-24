@@ -31,6 +31,15 @@ func (s *Service) buildConfigCommandViewState(
 	flow control.FeishuConfigFlowDefinition,
 	cardState control.FeishuCatalogConfigView,
 ) control.FeishuCatalogView {
+	return s.buildConfigCommandViewStateWithCatalog(surface, flow, cardState, nil)
+}
+
+func (s *Service) buildConfigCommandViewStateWithCatalog(
+	surface *state.SurfaceConsoleRecord,
+	flow control.FeishuConfigFlowDefinition,
+	cardState control.FeishuCatalogConfigView,
+	catalog *agentproto.ModelCatalogSnapshot,
+) control.FeishuCatalogView {
 	base := flow.BaseCatalogView()
 	view := control.FeishuCatalogView{
 		Config: s.applyCommandConfigCardState(&base, cardState),
@@ -45,6 +54,14 @@ func (s *Service) buildConfigCommandViewState(
 		view.Config.CatalogVariantID = control.FeishuCommandVariantIDForContext(view.Config.CatalogFamilyID, ctx)
 	}
 	inst := s.root.Instances[ctx.InstanceID]
+	if catalog != nil {
+		copy := state.InstanceRecord{Backend: agentproto.BackendCodex, CodexProfileID: surface.CodexProfileID}
+		if inst != nil && s.privateModelInstanceMatches(surface, inst) {
+			copy = *inst
+		}
+		copy.ModelCatalog = catalog
+		inst = &copy
+	}
 	if inst == nil && s.promptSettingRequiresAttachment(surface, flow.ActionKind) {
 		view.Config.RequiresAttachment = true
 		return view

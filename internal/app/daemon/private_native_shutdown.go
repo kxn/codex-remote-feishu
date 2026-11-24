@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/executionowner"
+	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 )
 
 // Shutdown stops private carriers through the durable native stop protocol.
@@ -16,6 +17,12 @@ func (h *privateNativeHost) Shutdown(ctx context.Context) error {
 	if h == nil || h.store == nil || h.registry == nil || h.outbound == nil || h.journal == nil {
 		return fmt.Errorf("private native host unavailable")
 	}
+	var firstFailure error
+	recordFailure := func(instance, phase string, err error) {
+		if firstFailure == nil && err != nil && !errors.Is(err, privatechat.ErrDeferred) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			firstFailure = fmt.Errorf("private carrier %s %s: %w", instance, phase, err)
+		}
+	}
 	timer := time.NewTicker(100 * time.Millisecond)
 	defer timer.Stop()
 	for {
@@ -23,21 +30,41 @@ func (h *privateNativeHost) Shutdown(ctx context.Context) error {
 		for _, state := range []string{"prepared", "aborted", "sending", "running", "draining", "sealed"} {
 			records, err := h.store.byState(ctx, state)
 			if err != nil {
-				return err
+				return errors.Join(err, firstFailure)
 			}
 			for _, rec := range records {
+				instance := rec.Snapshot.Owner.InstanceID
 				if err = ctx.Err(); err != nil {
-					return err
+					return errors.Join(err, firstFailure)
 				}
 				pending++
 				if state == "prepared" || state == "aborted" {
 					if err = h.abortPrepared(ctx, rec); err == nil {
 						pending--
+					} else {
+						recordFailure(rec.Snapshot.Owner.InstanceID, "abort prepared", err)
 					}
 					continue
 				}
 				if state == "sending" {
 					continue
+				}
+				if state == "running" {
+					if err = h.beginDrainForStop(ctx, rec.Snapshot.Owner.InstanceID); err != nil {
+						recordFailure(rec.Snapshot.Owner.InstanceID, "begin drain", err)
+						continue
+					}
+					rec, err = h.store.lookup(ctx, instance)
+					if err != nil {
+						recordFailure(instance, "read drain state", err)
+						continue
+					}
+				}
+				if rec.State == "draining" {
+					if err = h.settleStoppedPreparedPrompts(ctx, rec); err != nil {
+						recordFailure(rec.Snapshot.Owner.InstanceID, "settle unstarted prompts", err)
+						continue
+					}
 				}
 				id := rec.StopEffectID
 				if id == "" {
@@ -45,6 +72,8 @@ func (h *privateNativeHost) Shutdown(ctx context.Context) error {
 				}
 				if err = h.advanceCarrierStop(ctx, rec, id); err == nil {
 					pending--
+				} else {
+					recordFailure(rec.Snapshot.Owner.InstanceID, "advance stop", err)
 				}
 			}
 		}
@@ -53,7 +82,7 @@ func (h *privateNativeHost) Shutdown(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Join(ctx.Err(), firstFailure)
 		case <-timer.C:
 		}
 	}

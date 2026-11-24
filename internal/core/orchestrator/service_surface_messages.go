@@ -16,6 +16,9 @@ func (s *Service) RecordPageTrackingMessage(surfaceID, trackingKey, messageID st
 	if messageID == "" || trackingKey == "" {
 		return
 	}
+	if r := s.surfaceUIRuntimeState(surface); r != nil && r.PrivateModelWait != nil && r.PrivateModelWait.TrackingKey == trackingKey {
+		r.PrivateModelWait.MessageID = messageID
+	}
 	if s.config.PrivateApplication {
 		if runtime := s.surfaceUIRuntimeState(surface); runtime != nil && runtime.PrivateUpgradeFlow != nil && runtime.PrivateUpgradeFlow.ID == trackingKey {
 			runtime.PrivateUpgradeFlow.MessageID = messageID

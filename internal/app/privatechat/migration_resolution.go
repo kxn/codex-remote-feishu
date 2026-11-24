@@ -212,7 +212,7 @@ func verifyAppliedMigrationSources(ctx context.Context, tx *sql.Tx, cp Checkpoin
 		return nil
 	}
 	o := cp.Owner
-	rows, err := tx.QueryContext(ctx, `SELECT i.sources FROM ingress i JOIN private_applied a ON a.seq=i.seq WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND i.seq<=?`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, cp.Generation, cp.Cursor)
+	rows, err := tx.QueryContext(ctx, `SELECT i.sources FROM ingress i JOIN private_applied a ON a.seq=i.seq AND a.canceled_by IS NULL WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND i.seq<=?`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, cp.Generation, cp.Cursor)
 	if err != nil {
 		return err
 	}

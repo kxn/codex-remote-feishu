@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -61,39 +62,96 @@ func runPrivateStageInput(ctx context.Context, host *App, p *privatechat.Process
 			}
 		}
 	}
-	if record.State == "confirmed" {
-		if err = preparePrivateStageCleanup(ctx, j, o, generation, id, action.MessageID); err != nil {
+	if cmd.StageObjectID == "" && !action.RecoveryNewThread && action.RecoverySessionID == "" && record.State != "confirmed" {
+		if record.State == "prepared" {
+			if err = j.MarkEffectSending(ctx, o, generation, id); err != nil {
+				return nil, err
+			}
+		}
+		receipt, e := json.Marshal(privateStageReceipt{Version: 1, EffectID: id, SurfaceID: o.SurfaceID, LegacyTargetUnknown: true})
+		if e != nil {
+			return nil, e
+		}
+		if e = j.ConfirmLocalEffect(ctx, o, generation, id, receipt, privateLocalVerifier{o, generation, record.Effect, receipt}); e != nil {
+			return nil, e
+		}
+		return p.ApplyLocalHostReceipt(ctx, o, generation, id, privateStageReducer{host: host, journal: j})
+	}
+	if cmd.StageObjectID != "" && record.State != "confirmed" {
+		cancelled := false
+		err = p.InspectPendingHostIntent(ctx, o, generation, id, func(app *privatechat.App, current privatechat.EffectRecord) error {
+			pending, e := app.Service().PrivateStagePending(o.SurfaceID, cmd.StageObjectID, action.MessageID, action.ActorUserID)
+			if e != nil || pending {
+				return e
+			}
+			if current.State == "prepared" {
+				if e = j.MarkEffectSending(ctx, o, generation, id); e != nil {
+					return e
+				}
+			}
+			receipt, e := json.Marshal(privateStageReceipt{Version: 1, EffectID: id, SurfaceID: o.SurfaceID, Cancelled: true})
+			if e != nil {
+				return e
+			}
+			if e = j.ConfirmLocalEffect(ctx, o, generation, id, receipt, privateLocalVerifier{o, generation, current.Effect, receipt}); e != nil {
+				return e
+			}
+			cancelled = true
+			return nil
+		})
+		if err != nil {
 			return nil, err
 		}
-		return p.ApplyLocalHostReceipt(ctx, o, generation, id, privateStageReducer{host})
+		if cancelled {
+			if err = preparePrivateStageCleanupIfPresent(ctx, j, o, generation, id, action); err != nil {
+				return nil, err
+			}
+			return p.ApplyLocalHostReceipt(ctx, o, generation, id, privateStageReducer{host: host, journal: j})
+		}
+	}
+	if record.State == "confirmed" {
+		var saved privateStageReceipt
+		if err = json.Unmarshal(record.Receipt, &saved); err != nil {
+			return nil, err
+		}
+		if cmd.StageObjectID == "" {
+			// Legacy source files remain available when their original route is unproven.
+		} else if saved.Cancelled || saved.Failed {
+			if err = preparePrivateStageCleanupIfPresent(ctx, j, o, generation, id, action); err != nil {
+				return nil, err
+			}
+		} else if err = preparePrivateStageCleanup(ctx, j, o, generation, id, action.MessageID); err != nil {
+			return nil, err
+		}
+		return p.ApplyLocalHostReceipt(ctx, o, generation, id, privateStageReducer{host: host, journal: j})
 	}
 	if record.State != "prepared" && record.State != "unknown" {
 		return nil, fmt.Errorf("attachment stage requires reconciliation")
 	}
 	canonical, err := filepath.EvalSymlinks(cmd.ThreadCWD)
 	if err != nil || canonical != cmd.ThreadCWD {
-		return nil, fmt.Errorf("attachment workspace changed")
+		return settlePrivateStageFailure(ctx, host, p, j, o, generation, record, cmd, fmt.Errorf("附件工作目录已变化"))
 	}
 	root, err := os.OpenRoot(cmd.ThreadCWD)
 	if err != nil {
-		return nil, err
+		return settlePrivateStageFailure(ctx, host, p, j, o, generation, record, cmd, err)
 	}
 	defer root.Close()
 	workspace, err := root.Open(".")
 	if err != nil {
-		return nil, err
+		return settlePrivateStageFailure(ctx, host, p, j, o, generation, record, cmd, err)
 	}
 	defer workspace.Close()
 	identity, err := privateDirectoryIdentity(workspace)
 	if err != nil {
-		return nil, err
+		return settlePrivateStageFailure(ctx, host, p, j, o, generation, record, cmd, err)
 	}
 	stored, err := j.LoadLocalIntent(ctx, o, generation, id)
 	var intent privateStageIntent
 	if errors.Is(err, sql.ErrNoRows) && record.State == "prepared" {
 		intent, err = privateBuildStageIntent(cmd.ThreadCWD, identity, action)
 		if err != nil {
-			return nil, err
+			return settlePrivateStageFailure(ctx, host, p, j, o, generation, record, cmd, err)
 		}
 		stored, err = json.Marshal(intent)
 		if err != nil {
@@ -116,11 +174,10 @@ func runPrivateStageInput(ctx context.Context, host *App, p *privatechat.Process
 		}
 	}
 	fail := func(cause error) ([]privatechat.EffectRecord, error) {
-		if record.State == "prepared" {
-			raw, _ := json.Marshal(map[string]string{"error": cause.Error()})
-			_ = j.ResolveEffect(context.WithoutCancel(ctx), o, generation, id, "unknown", raw, nil)
+		if cmd.StageObjectID == "" {
+			return nil, cause
 		}
-		return nil, cause
+		return settlePrivateStageFailure(ctx, host, p, j, o, generation, record, cmd, cause)
 	}
 	for _, file := range intent.Files {
 		if err = privateStageOne(root, cmd.ThreadCWD, file); err != nil {
@@ -147,10 +204,39 @@ func runPrivateStageInput(ctx context.Context, host *App, p *privatechat.Process
 	if err = j.ConfirmLocalEffect(context.WithoutCancel(ctx), o, generation, id, receipt, verifier); err != nil {
 		return nil, err
 	}
-	if err = preparePrivateStageCleanup(ctx, j, o, generation, id, action.MessageID); err != nil {
-		return nil, err
+	if cmd.StageObjectID != "" {
+		if err = preparePrivateStageCleanup(ctx, j, o, generation, id, action.MessageID); err != nil {
+			return nil, err
+		}
 	}
-	return p.ApplyLocalHostReceipt(ctx, o, generation, id, privateStageReducer{host})
+	return p.ApplyLocalHostReceipt(ctx, o, generation, id, privateStageReducer{host: host, journal: j})
+}
+
+func preparePrivateStageCleanupIfPresent(ctx context.Context, j *privatechat.Journal, o privatechat.Owner, generation int64, id string, action control.Action) error {
+	if _, err := j.LoadLocalIntent(ctx, o, generation, id); err == nil {
+		return preparePrivateStageCleanup(ctx, j, o, generation, id, action.MessageID)
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	files := action.Files
+	if action.Kind == control.ActionFileMessage {
+		files = []control.ActionFileAttachment{{SourceMessageID: action.MessageID, LocalPath: action.LocalPath}}
+	}
+	for _, file := range files {
+		if file.LocalPath == "" {
+			continue
+		}
+		message := file.SourceMessageID
+		if message == "" {
+			message = action.MessageID
+		}
+		// Empty hash asks the existing cleanup worker to verify the trusted SDK
+		// staging manifest; no source filesystem I/O precedes cancellation.
+		if err := j.PrepareStagingCleanup(ctx, o, generation, id, message, map[string]string{file.LocalPath: ""}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func preparePrivateStageCleanup(ctx context.Context, j *privatechat.Journal, o privatechat.Owner, generation int64, id, messageID string) error {
@@ -169,7 +255,10 @@ func preparePrivateStageCleanup(ctx context.Context, j *privatechat.Journal, o p
 	return j.PrepareStagingCleanup(ctx, o, generation, id, messageID, files)
 }
 
-type privateStageReducer struct{ host *App }
+type privateStageReducer struct {
+	host    *App
+	journal *privatechat.Journal
+}
 
 func (r privateStageReducer) ReduceHostReceipt(app *privatechat.App, effect privatechat.Effect, raw json.RawMessage) ([]eventcontract.Event, error) {
 	if err := (privateHostReducer{r.host}).check(app); err != nil {
@@ -184,7 +273,7 @@ func (r privateStageReducer) ReduceHostReceipt(app *privatechat.App, effect priv
 	if err = json.Unmarshal(raw, &receipt); err != nil {
 		return nil, err
 	}
-	if cmd == nil || cmd.Kind != control.DaemonCommandPrivateStageInput || receipt.Version != 1 || receipt.EffectID != effect.ID || receipt.SurfaceID != event.SurfaceSessionID || len(receipt.Files) == 0 {
+	if cmd == nil || cmd.Kind != control.DaemonCommandPrivateStageInput || receipt.Version != 1 || receipt.EffectID != effect.ID || receipt.SurfaceID != event.SurfaceSessionID || (receipt.Cancelled && receipt.Failed) || (receipt.LegacyTargetUnknown && (cmd.StageObjectID != "" || receipt.Cancelled || receipt.Failed || len(receipt.Files) != 0)) || ((receipt.Cancelled || receipt.Failed) && len(receipt.Files) != 0) || (!receipt.Cancelled && !receipt.Failed && !receipt.LegacyTargetUnknown && len(receipt.Files) == 0) {
 		return nil, privatechat.ErrJournalConflict
 	}
 	var action control.Action
@@ -194,15 +283,59 @@ func (r privateStageReducer) ReduceHostReceipt(app *privatechat.App, effect priv
 	if err = app.ValidateAction(action); err != nil {
 		return nil, err
 	}
-	instanceAction := action
-	instanceAction.InstanceID = cmd.InstanceID
-	if err = app.ValidateAction(instanceAction); err != nil {
-		return nil, privatechat.ErrDeferred
+	if cmd.StageObjectID != "" && receipt.Failed {
+		return app.Service().FailPrivateStage(action.SurfaceSessionID, cmd.StageObjectID, action.MessageID, action.ActorUserID, receipt.FailureReason)
+	}
+	if cmd.StageObjectID != "" && receipt.Cancelled {
+		pending, e := app.Service().PrivateStagePending(action.SurfaceSessionID, cmd.StageObjectID, action.MessageID, action.ActorUserID)
+		if e != nil {
+			return nil, e
+		}
+		if pending {
+			return nil, privatechat.ErrJournalConflict
+		}
+		return nil, nil
+	}
+	if cmd.StageObjectID != "" {
+		var files []control.ActionFileAttachment
+		for _, file := range receipt.Files {
+			if file.Target == "" || !filepath.IsLocal(file.Target) || filepath.Clean(file.Target) != file.Target || file.SHA256 == "" {
+				return nil, privatechat.ErrJournalConflict
+			}
+			files = append(files, control.ActionFileAttachment{SourceMessageID: file.SourceMessageID, LocalPath: filepath.Join(cmd.ThreadCWD, file.Target), FileName: file.Name})
+		}
+		var path, name string
+		if action.Kind == control.ActionFileMessage {
+			if len(files) != 1 {
+				return nil, privatechat.ErrJournalConflict
+			}
+			path, name = files[0].LocalPath, files[0].FileName
+		}
+		return app.Service().CompletePrivateStage(action.SurfaceSessionID, cmd.StageObjectID, action.MessageID, action.ActorUserID, path, name, inboundFileAttachmentPrompt(files))
+	}
+	if r.journal == nil {
+		return nil, privatechat.ErrJournalState
+	}
+	discarded, e := r.journal.LegacyStageRouteDiscarded(context.Background(), effect.ID)
+	if e != nil {
+		return nil, e
+	}
+	if discarded || receipt.LegacyTargetUnknown || (!action.RecoveryNewThread && action.RecoverySessionID == "") {
+		return legacyStageTargetUnknown(action), nil
 	}
 	surface := app.Service().Surface(action.SurfaceSessionID)
 	instance := app.Service().Instance(cmd.InstanceID)
-	if surface == nil || surface.AttachedInstanceID != cmd.InstanceID || instance == nil || !instance.Online || filepath.Clean(instance.WorkspaceRoot) != cmd.ThreadCWD || (action.RecoveryNewThread && (surface.RouteMode != state.RouteModeNewThreadReady || surface.SelectedThreadID != "")) || (action.RecoverySessionID != "" && surface.SelectedThreadID != action.RecoverySessionID) {
+	if surface == nil {
 		return nil, privatechat.ErrDeferred
+	}
+	if surface.AttachedInstanceID != cmd.InstanceID || (action.RecoveryNewThread && (surface.RouteMode != state.RouteModeNewThreadReady || surface.SelectedThreadID != "")) || (action.RecoverySessionID != "" && surface.SelectedThreadID != action.RecoverySessionID) {
+		return legacyStageTargetUnknown(action), nil
+	}
+	if instance == nil || !instance.Online {
+		return nil, privatechat.ErrDeferred
+	}
+	if filepath.Clean(instance.WorkspaceRoot) != cmd.ThreadCWD {
+		return legacyStageTargetUnknown(action), nil
 	}
 	var files []control.ActionFileAttachment
 	for _, file := range receipt.Files {
@@ -226,4 +359,50 @@ func (r privateStageReducer) ReduceHostReceipt(app *privatechat.App, effect priv
 		return nil, privatechat.ErrJournalConflict
 	}
 	return app.Action(action)
+}
+
+func settlePrivateStageFailure(ctx context.Context, host *App, p *privatechat.Processor, j *privatechat.Journal, o privatechat.Owner, generation int64, record privatechat.EffectRecord, cmd *control.DaemonCommand, cause error) ([]privatechat.EffectRecord, error) {
+	if cmd.StageObjectID == "" {
+		return nil, fmt.Errorf("attachment staging failed")
+	}
+	current, err := j.LoadEffect(ctx, o, generation, record.Effect.ID)
+	if err != nil {
+		return nil, err
+	}
+	if current.State == "prepared" {
+		if err = j.MarkEffectSending(ctx, o, generation, record.Effect.ID); err != nil {
+			return nil, err
+		}
+	}
+	reason := "附件暂存失败"
+	if errors.Is(cause, os.ErrNotExist) {
+		reason = "附件文件或目录不存在"
+	} else if errors.Is(cause, os.ErrPermission) {
+		reason = "没有权限访问附件或工作目录"
+	} else if cause != nil && strings.Contains(cause.Error(), "附件工作目录") {
+		reason = "附件工作目录已变化"
+	}
+	detail := ""
+	if cause != nil {
+		detail = cause.Error()
+	}
+	receipt, err := json.Marshal(privateStageReceipt{Version: 1, EffectID: record.Effect.ID, SurfaceID: o.SurfaceID, Failed: true, FailureReason: reason, InternalError: detail})
+	if err != nil {
+		return nil, err
+	}
+	if err = j.ConfirmLocalEffect(ctx, o, generation, record.Effect.ID, receipt, privateLocalVerifier{o, generation, record.Effect, receipt}); err != nil {
+		return nil, err
+	}
+	var action control.Action
+	if err = json.Unmarshal([]byte(cmd.Text), &action); err != nil {
+		return nil, err
+	}
+	if err = preparePrivateStageCleanupIfPresent(ctx, j, o, generation, record.Effect.ID, action); err != nil {
+		return nil, err
+	}
+	return p.ApplyLocalHostReceipt(ctx, o, generation, record.Effect.ID, privateStageReducer{host: host, journal: j})
+}
+
+func legacyStageTargetUnknown(action control.Action) []eventcontract.Event {
+	return []eventcontract.Event{{Kind: eventcontract.KindNotice, GatewayID: action.GatewayID, SurfaceSessionID: action.SurfaceSessionID, Notice: &control.Notice{Code: "legacy_attachment_target_unavailable", Text: "无法确认旧版附件的原目标，未自动发送。请重新发送附件。"}}}
 }

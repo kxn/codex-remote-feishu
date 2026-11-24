@@ -17,6 +17,9 @@ type FeishuPageView struct {
 	TemporarySessionLabel         string
 	MessageID                     string
 	TrackingKey                   string
+	PrivateModelResult            bool   `json:",omitempty"`
+	PrivateExpectedViewToken      string `json:",omitempty"`
+	PrivateCatalogNamespace       string `json:",omitempty"`
 	ThemeKey                      string
 	Patchable                     bool
 	Breadcrumbs                   []CommandCatalogBreadcrumb

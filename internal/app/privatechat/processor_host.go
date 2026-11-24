@@ -74,13 +74,24 @@ func (p *Processor) applyHostReceipt(ctx context.Context, o Owner, generation in
 		if err = json.Unmarshal(receipt, &delivered); err != nil {
 			return nil, err
 		}
-		if delivered.Version != 1 || delivered.EffectID != id || delivered.PlanHash != publication.PlanHash || !bytes.Equal(delivered.Plan, publication.Plan) || delivered.CompletedAt.IsZero() || len(delivered.Results) != len(publication.Operations) {
+		if delivered.EffectID != id || delivered.PlanHash != publication.PlanHash || !bytes.Equal(delivered.Plan, publication.Plan) || delivered.CompletedAt.IsZero() {
 			return nil, ErrJournalConflict
 		}
-		for i, op := range publication.Operations {
-			result := delivered.Results[i]
-			if op.State != "confirmed" || result.Ordinal != op.Ordinal || !bytes.Equal(result.Operation, op.Body) || !bytes.Equal(result.Receipt, op.Receipt) {
+		if delivered.Version == 2 && delivered.Kind == "suppressed" && delivered.Reason == "stale_model_view" && len(delivered.Results) == 0 {
+			for _, op := range publication.Operations {
+				if op.State != "prepared" {
+					return nil, ErrJournalConflict
+				}
+			}
+		} else {
+			if delivered.Version != 1 || len(delivered.Results) != len(publication.Operations) {
 				return nil, ErrJournalConflict
+			}
+			for i, op := range publication.Operations {
+				result := delivered.Results[i]
+				if op.State != "confirmed" || result.Ordinal != op.Ordinal || !bytes.Equal(result.Operation, op.Body) || !bytes.Equal(result.Receipt, op.Receipt) {
+					return nil, ErrJournalConflict
+				}
 			}
 		}
 	}

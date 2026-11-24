@@ -26,6 +26,17 @@ func (a *App) teamProfileCatalog(ctx context.Context, binding work.RoleBotBindin
 }
 
 func (a *App) withTeamProfileCatalog(ctx context.Context, binding work.RoleBotBinding, profileID, cursor string, consume func(teamProfileCatalogTarget) error) (teamProfileCatalogTarget, error) {
+	return a.withProfileCatalog(ctx, profileCatalogScope{binding.RoleID, binding.GatewayRef, binding.AppID, binding.IdentityGeneration}, profileID, cursor, consume)
+}
+
+// profileCatalogScope identifies the configured bot, independent of a team
+// role or an active execution carrier. It preserves the existing cache key.
+type profileCatalogScope struct {
+	RoleID, GatewayID, AppID string
+	BotGeneration            int64
+}
+
+func (a *App) withProfileCatalog(ctx context.Context, scope profileCatalogScope, profileID, cursor string, consume func(teamProfileCatalogTarget) error) (teamProfileCatalogTarget, error) {
 	var target teamProfileCatalogTarget
 	a.adminConfigMu.Lock()
 	defer a.adminConfigMu.Unlock()
@@ -96,7 +107,7 @@ func (a *App) withTeamProfileCatalog(ctx context.Context, binding work.RoleBotBi
 			return target, err
 		}
 	}
-	target.Key = workui.ID("profile-model-catalog-v1", binding.RoleID, binding.GatewayRef, binding.AppID, fmt.Sprint(binding.IdentityGeneration), profileID, fmt.Sprintf("%+v", connection), account, cursor)
+	target.Key = workui.ID("profile-model-catalog-v1", scope.RoleID, scope.GatewayID, scope.AppID, fmt.Sprint(scope.BotGeneration), profileID, fmt.Sprintf("%+v", connection), account, cursor)
 	target.Launch = projection.Launch
 	target.Options.Env, target.Options.Args = codexprofile.ApplyLaunchMaterial(a.headlessRuntime.BaseEnv, []string{"app-server", "--listen=stdio://"}, projection.Launch)
 	target.Options.BinaryPath = a.headlessRuntime.CodexRealBinary

@@ -222,7 +222,11 @@ func (a privateApplicationAdmitter) BuildPrivateIngress(ctx context.Context, rec
 			lane = "input"
 		}
 	}
-	return privatechat.Ingress{Owner: o, Generation: owner.Epoch, EventID: record.Event.Key.EventID, Lane: lane, Payload: raw, Sources: sources}, nil
+	in := privatechat.Ingress{Owner: o, Generation: owner.Epoch, EventID: record.Event.Key.EventID, Lane: lane, Payload: raw, Sources: sources}
+	if record.Sequence > 0 {
+		in.OriginRouter, in.OriginSequence = a.router.RouterID(), record.Sequence
+	}
+	return in, nil
 
 }
 

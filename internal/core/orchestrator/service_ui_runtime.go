@@ -181,6 +181,7 @@ type activePathPickerRecord struct {
 }
 
 type surfaceUIRuntimeRecord struct {
+	PrivateModelWait            *PrivateModelWait
 	PrivateUpgradeFlow          *PrivateUpgradeFlow
 	PrivateCodexContractVersion string
 	PrivateMCPOAuth             map[string]privateMCPOAuthRequest

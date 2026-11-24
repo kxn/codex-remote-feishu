@@ -28,7 +28,7 @@ func TestModelCatalogColdPageWithoutWorkerOrHostQueriesWithoutBusinessPrompt(t *
 	if _, e := f.a.queueTeamSettings(t.Context(), f.source, "model", ""); e != nil {
 		t.Fatal(e)
 	}
-	f.a.teamRuntime.workers.Wait()
+	f.a.profileCatalogWorkers.Wait()
 	select {
 	case o := <-calls:
 		if o.ExpectedAccountFingerprint == "" {
@@ -171,7 +171,7 @@ func TestModelCatalogOfflineGenerationThreeRecoveryGateDoesNotBlockIndependentRe
 	if e = f.a.refreshTeamModelCatalog(t.Context(), f.source, binding, teamSettingsState{ContextID: workerBefore.ContextID, Fingerprint: snapshot.Fingerprint}); e != nil {
 		t.Fatal(e)
 	}
-	f.a.teamRuntime.workers.Wait()
+	f.a.profileCatalogWorkers.Wait()
 	pickerTx(t, f.a, func(tx *workstore.Tx) error {
 		record, e := tx.GetProfileModelCatalog(key)
 		if e != nil {

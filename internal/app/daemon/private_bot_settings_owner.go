@@ -67,6 +67,18 @@ func privateSettingsFingerprint(record state.BotCapabilitySettingsRecord, profil
 	return hex.EncodeToString(h[:])
 }
 
+// A broken backend profile must remain editable. Freeze the full configuration
+// identity for CAS without exposing its contents, while launch still validates
+// and reports the actual profile error.
+func privateSettingsResolutionFingerprint(record state.BotCapabilitySettingsRecord, cfg config.AppConfig, resolved resolvedWorkBotSettings) string {
+	if resolved.err == nil {
+		return privateSettingsFingerprint(record, resolved.fingerprint)
+	}
+	raw, _ := json.Marshal(cfg)
+	sum := sha256.Sum256(raw)
+	return privateSettingsFingerprint(record, "unavailable:"+hex.EncodeToString(sum[:]))
+}
+
 // readPrivateBotSettings must be called outside the private Processor lock.
 func (a *App) readPrivateBotSettings(gateway, appID string) (privateBotSettingsSnapshot, error) {
 	loaded, err := a.loadAdminConfig()
@@ -83,10 +95,7 @@ func (a *App) readPrivateBotSettings(gateway, appID string) (privateBotSettingsS
 	}
 	record := a.workBotSettingsLocked(gateway)
 	resolved := a.resolveWorkBotSettings(record, loaded.Config)
-	if resolved.err != nil {
-		return privateBotSettingsSnapshot{}, resolved.err
-	}
-	return privateBotSettingsSnapshot{Record: record, Fingerprint: privateSettingsFingerprint(record, resolved.fingerprint), Revision: a.privateSettingsRevision.Load()}, nil
+	return privateBotSettingsSnapshot{Record: record, Fingerprint: privateSettingsResolutionFingerprint(record, loaded.Config, resolved), Revision: a.privateSettingsRevision.Load()}, nil
 }
 
 // compareAndSwapPrivateBotSettings is serialized with team settings writes by
@@ -108,16 +117,13 @@ func (a *App) compareAndSwapPrivateBotSettings(gateway, appID, principal, expect
 	}
 	current := a.workBotSettingsLocked(gateway)
 	resolved := a.resolveWorkBotSettings(current, loaded.Config)
-	if resolved.err != nil {
-		return privateBotSettingsSnapshot{}, resolved.err
-	}
 	if next.GatewayID != gateway {
 		return privateBotSettingsSnapshot{}, fmt.Errorf("bot settings gateway mismatch")
 	}
 	if expected == "" {
 		return privateBotSettingsSnapshot{}, fmt.Errorf("bot settings expectation missing")
 	}
-	if privateSettingsFingerprint(current, resolved.fingerprint) != expected {
+	if privateSettingsResolutionFingerprint(current, loaded.Config, resolved) != expected {
 		// A crash after Store.Put but before receipt can be reconciled only
 		// when the authoritative record already equals this exact intent.
 		wanted, ok := state.NormalizeBotCapabilitySettingsRecord(next)
@@ -132,7 +138,7 @@ func (a *App) compareAndSwapPrivateBotSettings(gateway, appID, principal, expect
 		if string(actualJSON) != string(wantedJSON) {
 			return privateBotSettingsSnapshot{}, errPrivateBotSettingsConflict
 		}
-		return privateBotSettingsSnapshot{Record: current, Fingerprint: privateSettingsFingerprint(current, resolved.fingerprint), Revision: a.privateSettingsRevision.Load()}, nil
+		return privateBotSettingsSnapshot{Record: current, Fingerprint: privateSettingsResolutionFingerprint(current, loaded.Config, resolved), Revision: a.privateSettingsRevision.Load()}, nil
 	}
 	next.UpdatedBy, next.UpdatedAt = principal, time.Now().UTC()
 	next, ok := state.NormalizeBotCapabilitySettingsRecord(next)

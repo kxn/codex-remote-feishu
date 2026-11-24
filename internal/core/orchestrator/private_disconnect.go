@@ -3,8 +3,10 @@ package orchestrator
 import (
 	"fmt"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 // ApplyPrivateTransportDisconnected records connectivity only. It never
@@ -15,8 +17,12 @@ func (s *Service) ApplyPrivateTransportDisconnected(surfaceID, instanceID string
 	}
 	surface := s.root.Surfaces[surfaceID]
 	instance := s.root.Instances[instanceID]
-	if surface == nil || instance == nil || (surface.AttachedInstanceID != instanceID && (surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID != instanceID)) {
+	if surface == nil || instance == nil {
 		return nil, fmt.Errorf("private disconnect owner mismatch")
+	}
+	if surface.AttachedInstanceID != instanceID && (surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID != instanceID) {
+		instance.Online = false
+		return nil, nil
 	}
 	checkpoint, err := s.ExportPrivateCheckpoint(surfaceID)
 	if err != nil {
@@ -55,4 +61,44 @@ func (s *Service) ReconcilePrivateRecoveryGate(surfaceID string, queueProven boo
 	}
 	s.restoreSurfaceDispatchNormal(surface)
 	return s.dispatchNext(surface), nil
+}
+
+// MarkPrivateStopProjectionOffline prevents dispatch to the carrier being retired
+// without changing the user’s dispatch preference.
+func (s *Service) MarkPrivateStopProjectionOffline(surfaceID, instanceID string) error {
+	v := s.root.Surfaces[surfaceID]
+	if !s.config.PrivateApplication || v == nil || v.AttachedInstanceID != instanceID {
+		return fmt.Errorf("private stop projection owner mismatch")
+	}
+	inst := s.root.Instances[instanceID]
+	if inst == nil {
+		return fmt.Errorf("private stopped instance missing")
+	}
+	inst.Online = false
+	return nil
+}
+
+// MaterializePrivateStoppedInstance restores only offline carrier metadata so
+// authenticated persisted terminal facts can be projected after a restart.
+func (s *Service) MaterializePrivateStoppedInstance(surfaceID string, owner agentproto.NativeOwner) error {
+	v := s.root.Surfaces[surfaceID]
+	if !s.config.PrivateApplication || v == nil || v.AttachedInstanceID != owner.InstanceID || owner.Validate() != nil {
+		return fmt.Errorf("private stopped owner mismatch")
+	}
+	if inst := s.root.Instances[owner.InstanceID]; inst != nil {
+		return nil
+	}
+	cp, err := s.ExportPrivateCheckpoint(surfaceID)
+	if err != nil {
+		return err
+	}
+	h := cp.HistoricalInstance
+	if h == nil || h.InstanceID != owner.InstanceID || h.Backend != owner.Backend || h.WorkspaceRoot == "" {
+		return fmt.Errorf("private stopped instance metadata missing")
+	}
+	if cp.Navigation != nil && cp.Navigation.Owner != owner {
+		return fmt.Errorf("private stopped carrier identity mismatch")
+	}
+	s.UpsertInstance(&state.InstanceRecord{InstanceID: owner.InstanceID, Source: "headless", Managed: true, Online: false, Backend: owner.Backend, WorkspaceRoot: h.WorkspaceRoot, WorkspaceKey: h.WorkspaceKey, Threads: map[string]*state.ThreadRecord{}})
+	return nil
 }

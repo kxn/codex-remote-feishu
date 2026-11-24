@@ -136,7 +136,11 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
 	}
-	_, goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item)
+	item.StagePending = s.privateStageAdmission
+	var goalEvents []eventcontract.Event
+	if !item.StagePending {
+		_, goalEvents = s.maybeBeginGoalInterlockForQueueItem(surface, inst, item)
+	}
 	return append(routeAdjustmentEvents, append(goalEvents, s.enqueuePreparedQueueItem(surface, item, front)...)...)
 }
 
@@ -209,6 +213,7 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 	if item == nil || surface == nil {
 		return nil
 	}
+	item.StagePending = s.privateStageAdmission
 	s.nextQueueItemID++
 	itemID := fmt.Sprintf("queue-%d", s.nextQueueItemID)
 	item.ID = itemID
@@ -281,7 +286,7 @@ func stagedFilePrompt(surface *state.SurfaceConsoleRecord, fileKeys []string, ac
 	lines := []string{"附带参考文件（内容未直接注入上下文，可按需读取以下本地路径）："}
 	for _, fileID := range fileKeys {
 		file := surface.StagedFiles[fileID]
-		if file == nil || file.State != state.FileStaged || file.ActorUserID != actorUserID {
+		if file == nil || file.StagePending || file.State != state.FileStaged || file.ActorUserID != actorUserID {
 			continue
 		}
 		path := strings.TrimSpace(file.LocalPath)
@@ -340,6 +345,9 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 			return nil
 		}
 		return s.maybeDispatchPendingAutoContinue(surface, s.now())
+	}
+	if item := surface.QueueItems[surface.QueuedQueueItemIDs[0]]; item != nil && item.StagePending {
+		return nil
 	}
 	if autoContinue := s.maybeDispatchPendingAutoContinue(surface, s.now()); len(autoContinue) != 0 {
 		return autoContinue

@@ -19,6 +19,9 @@ import (
 // The relay ingress stays alive until this returns. Disconnect and deadline
 // leave occupied native work recoverable; they never manufacture release.
 func (a *App) shutdownWorkRuntime(ctx context.Context) error {
+	if err := a.stopProfileCatalogWorkers(ctx); err != nil {
+		return err
+	}
 	r := a.teamRuntime
 	if r == nil {
 		return nil

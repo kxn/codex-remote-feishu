@@ -34,7 +34,7 @@ func (p *Processor) reconnectPendingInputProven(ctx context.Context, o Owner, ge
 			return false, nil
 		}
 		seen[id] = true
-		rows, err := p.journal.db.QueryContext(ctx, `SELECT i.seq FROM ingress i JOIN private_applied a ON a.seq=i.seq JOIN json_each(i.sources) src WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND i.lane='input' AND src.value=? AND NOT EXISTS(SELECT 1 FROM dispatch_input d WHERE d.seq=i.seq) AND NOT EXISTS(SELECT 1 FROM private_migration_input_holds h JOIN private_migration_imports m ON m.import_id=h.import_id WHERE m.tenant=i.tenant AND m.app_id=i.app_id AND m.gateway=i.gateway AND m.surface=i.surface AND m.chat=i.chat AND m.user_id=i.user_id AND m.generation=i.generation AND h.message_id=src.value)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, id)
+		rows, err := p.journal.db.QueryContext(ctx, `SELECT i.seq FROM ingress i JOIN private_applied a ON a.seq=i.seq AND a.canceled_by IS NULL JOIN json_each(i.sources) src WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND i.lane='input' AND src.value=? AND NOT EXISTS(SELECT 1 FROM dispatch_input d WHERE d.seq=i.seq) AND NOT EXISTS(SELECT 1 FROM private_migration_input_holds h JOIN private_migration_imports m ON m.import_id=h.import_id WHERE m.tenant=i.tenant AND m.app_id=i.app_id AND m.gateway=i.gateway AND m.surface=i.surface AND m.chat=i.chat AND m.user_id=i.user_id AND m.generation=i.generation AND h.message_id=src.value)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, id)
 		if err != nil {
 			return false, err
 		}

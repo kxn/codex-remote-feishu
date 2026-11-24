@@ -46,6 +46,14 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 		return nil, err
 	}
 	if publication.EffectState == "confirmed" {
+		effect, e := p.journal.LoadEffect(ctx, o, generation, id)
+		if e != nil {
+			return nil, e
+		}
+		var local privatechat.PublicationReceipt
+		if json.Unmarshal(effect.Receipt, &local) == nil && local.Version == 2 && local.Kind == "suppressed" {
+			return p.processor.ApplyHostReceipt(ctx, o, generation, id, privateHostReceiptReducer{p.host})
+		}
 		if err = p.confirmOwnership(ctx, o, generation, publication); err != nil {
 			return nil, err
 		}
@@ -79,6 +87,26 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 		}
 		if op.State != "prepared" {
 			return nil, errPrivatePublicationUnknown
+		}
+		planned, _, e := decodePrivatePublicationPlan(publication.Plan)
+		if e != nil {
+			return nil, e
+		}
+		if planned.PageView != nil && planned.PageView.PrivateModelResult {
+			predecessor, e := p.journal.ResolveDisplayPredecessor(ctx, o, generation, id)
+			if e != nil {
+				return nil, e
+			}
+			stale, e := p.modelPublicationTarget(ctx, o, generation, id, &planned, predecessor)
+			if e != nil {
+				return nil, e
+			}
+			if stale {
+				if e = p.journal.SuppressPreparedPublication(ctx, o, generation, id, "stale_model_view", time.Now().UTC()); e != nil {
+					return nil, e
+				}
+				return p.processor.ApplyHostReceipt(ctx, o, generation, id, privateHostReceiptReducer{p.host})
+			}
 		}
 		operation, err := feishu.ThawPrivateOperation(op.Body)
 		if err != nil {

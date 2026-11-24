@@ -788,6 +788,7 @@ type RequestCaptureRecord struct {
 }
 
 type QueueItemRecord struct {
+	StagePending          bool `json:",omitempty"`
 	ID                    string
 	SurfaceSessionID      string
 	ActorUserID           string
@@ -826,6 +827,7 @@ type StagedImageRecord struct {
 }
 
 type StagedFileRecord struct {
+	StagePending     bool `json:",omitempty"`
 	FileID           string
 	SurfaceSessionID string
 	SourceMessageID  string

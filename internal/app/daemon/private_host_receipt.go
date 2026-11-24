@@ -25,6 +25,9 @@ func (r privateHostReceiptReducer) ReduceHostReceipt(app *privatechat.App, effec
 	if err = json.Unmarshal(raw, &receipt); err != nil {
 		return nil, err
 	}
+	if receipt.Version == 2 && receipt.Kind == "suppressed" && receipt.Reason == "stale_model_view" && receipt.EffectID == effect.ID && len(receipt.Results) == 0 {
+		return nil, nil
+	}
 	if receipt.Version != 1 || receipt.EffectID != effect.ID || strings.TrimSpace(receipt.PlanHash) == "" {
 		return nil, fmt.Errorf("invalid publication receipt identity")
 	}
@@ -67,6 +70,13 @@ func (r privateHostReceiptReducer) ReduceHostReceipt(app *privatechat.App, effec
 		}
 		if err = r.recordDelivery(event, op); err != nil {
 			return nil, err
+		}
+		if payload, ok := pagePayloadFromEvent(event); ok && payload.View.PrivateModelResult && (op.Kind == feishu.OperationSendCard || op.Kind == feishu.OperationUpdateCard) {
+			_, token, e := feishu.UnstampPrivateView(item.Operation)
+			if e != nil {
+				return nil, e
+			}
+			r.host.service.RecordPrivateModelPublishedView(event.SurfaceSessionID, payload.View.TrackingKey, op.MessageID, token)
 		}
 	}
 	return privatePreviewRetryEvents(event, retry, receipt)

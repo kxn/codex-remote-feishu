@@ -132,6 +132,9 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 	if surface == nil || surface.PendingHeadless == nil {
 		return nil
 	}
+	if s.privateReplacementInputAction(action) {
+		return nil
+	}
 	if s.targetPickerHasBlockingProcessing(surface) {
 		return nil
 	}

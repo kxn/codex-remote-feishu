@@ -18,7 +18,7 @@ func (p *Processor) restoreReconnectNativeEvidence(ctx context.Context, l *Nativ
 	if inst := p.app.Service().Instance(l.native.InstanceID); inst != nil && inst.Threads[v.SelectedThreadID] != nil {
 		return nil, nil
 	}
-	rows, err := p.journal.db.QueryContext(ctx, `SELECT payload,payload_hash FROM native_events WHERE incarnation=? AND applied=1 ORDER BY sequence DESC LIMIT 1024`, l.native.CarrierIncarnation)
+	rows, err := p.journal.db.QueryContext(ctx, `SELECT payload,payload_hash FROM native_events WHERE incarnation=? AND applied=1 AND json_extract(payload,'$.kind')=? AND json_extract(payload,'$.threadId')=? ORDER BY sequence DESC`, l.native.CarrierIncarnation, string(agentproto.EventThreadDiscovered), v.SelectedThreadID)
 	if err != nil {
 		return nil, err
 	}

@@ -37,8 +37,6 @@ type teamRuntime struct {
 	laneWakes                map[string]chan struct{}
 	humanActionsMu           sync.Mutex
 	humanActionsPending      map[string]bool
-	catalogMu                sync.Mutex
-	catalogPending           map[string]bool
 	catalogViewCursor        string
 	runContext               context.Context
 	active                   atomic.Bool

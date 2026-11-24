@@ -151,7 +151,7 @@ func effectInputSequences(ctx context.Context, tx *sql.Tx, o Owner, generation i
 				// More than one producer is an ownership error, not a cue to use latest.
 				var count int
 				var seq sql.NullInt64
-				err := tx.QueryRowContext(ctx, `SELECT count(*),min(i.seq) FROM ingress i JOIN private_applied a ON a.seq=i.seq WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND EXISTS (SELECT 1 FROM json_each(i.sources) WHERE value=?)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, source).Scan(&count, &seq)
+				err := tx.QueryRowContext(ctx, `SELECT count(*),min(i.seq) FROM ingress i JOIN private_applied a ON a.seq=i.seq AND a.canceled_by IS NULL WHERE i.tenant=? AND i.app_id=? AND i.gateway=? AND i.surface=? AND i.chat=? AND i.user_id=? AND i.generation=? AND EXISTS (SELECT 1 FROM json_each(i.sources) WHERE value=?)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, source).Scan(&count, &seq)
 				if err != nil {
 					return nil, err
 				}

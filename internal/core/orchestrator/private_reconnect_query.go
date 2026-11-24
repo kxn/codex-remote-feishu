@@ -120,10 +120,33 @@ func (s *Service) restorePrivateReconnectPendingText(surfaceID string) {
 // PrivateReconnectInputUnavailable rejects a new input until the original
 // selected thread's navigation is established. Control actions remain usable.
 func (s *Service) PrivateReconnectInputUnavailable(surface string) bool {
+	if _, ok := s.PrivateReplacementInputTarget(surface); ok {
+		return false
+	}
 	v := s.root.Surfaces[surface]
 	if v == nil || v.RouteMode != state.RouteModePinned || v.AttachedInstanceID == "" || v.SelectedThreadID == "" {
 		return false
 	}
 	inst := s.root.Instances[v.AttachedInstanceID]
 	return inst == nil || !inst.Online || inst.Threads[v.SelectedThreadID] == nil || !s.surfaceOwnsThread(v, v.SelectedThreadID)
+}
+
+// PrivateReconnectProfileChanged identifies a settled launch's configuration
+// mismatch so the existing unavailable-input notice can be actionable.
+func (s *Service) PrivateReconnectProfileChanged(surface string) bool {
+	v := s.root.Surfaces[surface]
+	n, ok := s.privateNavigation[surface]
+	if v == nil || !ok {
+		return false
+	}
+	c := s.headlessLaunchContract(v)
+	switch n.Owner.Backend {
+	case agentproto.BackendCodex:
+		return state.NormalizeCodexProfileID(c.CodexProfileID) != state.NormalizeCodexProfileID(n.Actual.Codex)
+	case agentproto.BackendClaude:
+		return state.NormalizeClaudeProfileID(c.ClaudeProfileID) != state.NormalizeClaudeProfileID(n.Actual.Claude)
+	case agentproto.BackendOpenCode:
+		return state.NormalizeOpenCodeProfileID(c.OpenCodeProfileID) != state.NormalizeOpenCodeProfileID(n.Actual.OpenCode)
+	}
+	return true
 }

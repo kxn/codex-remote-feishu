@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -20,11 +21,19 @@ func (a *App) shutdownApplications(ctx context.Context) error {
 	a.mu.Lock()
 	a.shuttingDown = true
 	a.mu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
-	defer cancel()
 	// Keep the outbound gateway available for final durable notices, while
 	// rejecting new human input before workers and native carriers drain.
 	var problems []error
+	// Close intake immediately, then publish with a separate budget before
+	// slow native/team shutdown can exhaust the drain context.
+	r.platformDeliveries.closeReady()
+	noticeCtx, noticeCancel := context.WithTimeout(ctx, a.shutdownGracePeriodValue())
+	if err := a.publishPrivateShutdownNotices(noticeCtx); err != nil {
+		log.Printf("private shutdown notice delivery incomplete: %v", err)
+	}
+	noticeCancel()
+	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
 	problems = append(problems, r.platformDeliveries.drain(ctx))
 	if team := a.teamRuntime; team != nil {
 		team.active.Store(false)
@@ -43,7 +52,6 @@ func (a *App) shutdownApplications(ctx context.Context) error {
 		go func() { defer wg.Done(); teamErr = a.shutdownWorkRuntime(ctx) }()
 		wg.Wait()
 		problems = append(problems, privateErr, teamErr)
-		problems = append(problems, a.publishPrivateShutdownNotices(ctx))
 	}
 	a.stopGatewayRuntime(true)
 	problems = append(problems, r.drainNativeDeliveries(ctx))
@@ -53,21 +61,39 @@ func (a *App) shutdownApplications(ctx context.Context) error {
 
 func (a *App) publishPrivateShutdownNotices(ctx context.Context) error {
 	r := a.applications
-	effects, err := r.processor.ApplyHostLifecycle(ctx, "shutdown:"+a.daemonLifecycleID, a.daemonStartedAt, func(app *privatechat.App, owner privatechat.Owner) []eventcontract.Event {
-		surface := app.Service().Surface(owner.SurfaceID)
-		if surface == nil || !surfaceAllowsDaemonLifecycleNotice(surface) {
-			return nil
-		}
-		notice := orchestrator.GlobalRuntimeShutdownNotice(daemonShutdownNoticeText)
-		return []eventcontract.Event{{Kind: eventcontract.KindNotice, SurfaceSessionID: owner.SurfaceID, GatewayID: owner.GatewayID, Notice: &notice}}
-	})
-	if err != nil {
-		return err
-	}
 	var problems []error
-	for _, item := range effects {
-		if _, err := r.publisher.Publish(ctx, item.Owner, item.Generation, item.Effect.Effect.ID); err != nil {
-			problems = append(problems, fmt.Errorf("shutdown display surface=%s: %w", item.Owner.SurfaceID, err))
+	for offset := 0; ; offset += 128 {
+		owners, err := r.journal.DeadlineOwnersPage(ctx, 128, offset)
+		if err != nil {
+			return errors.Join(append(problems, err)...)
+		}
+		for _, entry := range owners {
+			if _, err = r.ingress.privatePublicationBindingFor(ctx, entry.Owner, entry.Generation); err != nil {
+				continue
+			}
+			effects, e := r.processor.ApplyOwnerHostLifecycle(ctx, entry.Owner, entry.Generation, "shutdown:"+a.daemonLifecycleID, a.daemonStartedAt, func(app *privatechat.App, owner privatechat.Owner) []eventcontract.Event {
+				surface := app.Service().Surface(owner.SurfaceID)
+				if surface == nil || !surfaceAllowsDaemonLifecycleNotice(surface) {
+					return nil
+				}
+				notice := orchestrator.GlobalRuntimeShutdownNotice(daemonShutdownNoticeText)
+				return []eventcontract.Event{{Kind: eventcontract.KindNotice, SurfaceSessionID: owner.SurfaceID, GatewayID: owner.GatewayID, Notice: &notice}}
+			})
+			if e != nil {
+				problems = append(problems, fmt.Errorf("shutdown notice owner: %w", e))
+				continue
+			}
+			for _, item := range effects {
+				publishCtx, publishCancel := context.WithTimeout(ctx, a.shutdownNoticeTimeoutValue())
+				_, e = r.publisher.Publish(publishCtx, item.Owner, item.Generation, item.Effect.Effect.ID)
+				publishCancel()
+				if e != nil {
+					problems = append(problems, fmt.Errorf("shutdown display surface=%s: %w", item.Owner.SurfaceID, e))
+				}
+			}
+		}
+		if len(owners) < 128 {
+			break
 		}
 	}
 	return errors.Join(problems...)

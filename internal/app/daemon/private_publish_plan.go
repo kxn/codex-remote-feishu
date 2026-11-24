@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
@@ -55,6 +56,22 @@ func (p *privatePublisher) prepare(ctx context.Context, o privatechat.Owner, gen
 	if predecessor != nil && event.ExecCommandProgress != nil {
 		if err = resolvePrivateProgressPublication(&event, *predecessor); err != nil {
 			return err
+		}
+	}
+	if event.PageView != nil && event.PageView.PrivateModelResult {
+		stale, e := p.modelPublicationTarget(ctx, o, generation, id, &event, predecessor)
+		if e != nil {
+			return e
+		}
+		if stale {
+			plan, e := encodePrivatePublicationPlan(event, nil)
+			if e != nil {
+				return e
+			}
+			if e = p.journal.PreparePublication(ctx, o, generation, id, plan, nil); e != nil {
+				return e
+			}
+			return p.journal.SuppressPreparedPublication(ctx, o, generation, id, "stale_model_view", time.Now().UTC())
 		}
 	}
 	if preview != nil {

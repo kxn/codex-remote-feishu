@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -116,6 +117,12 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			if err = r.ingress.refreshPrivateThreadPolicy(ctx, r.native, r.processor, item.Owner, item.Generation, scanSeq); err != nil {
 				continue
 			}
+			if item.Lane == "input" {
+				recovering, recoveryErr := r.prepareRetiredRuntime(ctx, item.Owner, item.Generation)
+				if recovering && recoveryErr != nil {
+					continue
+				}
+			}
 			if _, err = r.processor.ApplyIngress(ctx, item.Owner, item.Generation, item.Sequence); err != nil {
 				continue
 			}
@@ -129,6 +136,16 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 	}
 	if err := r.runOwnerDeadlines(ctx); err != nil {
 		return err
+	}
+
+	retired, err := r.native.store.byState(ctx, "retired")
+	if err != nil {
+		return err
+	}
+	for _, rec := range retired {
+		if err := r.native.projectRetiredCarrierEvents(ctx, rec); err != nil {
+			log.Printf("private retired projection owner=%s: %v", rec.Surface.SurfaceID, err)
+		}
 	}
 
 	for _, state := range []string{"running", "draining", "sealed"} {
@@ -314,6 +331,8 @@ func (r *privateWorkRunner) runEffect(ctx context.Context, work privatechat.Pend
 		case control.DaemonCommandPrivateBotSettings:
 			_, err = runPrivateBotSettings(ctx, r.host, r.processor, r.journal, work.Owner, work.Generation, e.Effect.ID)
 			return err
+		case control.DaemonCommandPrivateModelCatalogQuery:
+			return runPrivateModelCatalogQuery(ctx, r.host, r.processor, r.journal, work.Owner, work.Generation, e.Effect.ID)
 		case control.DaemonCommandPrivateClaudeWorkspace:
 			return runPrivateClaudeWorkspace(ctx, r.host, r.processor, r.journal, work.Owner, work.Generation, e.Effect.ID)
 		case control.DaemonCommandPrivateStageInput:
@@ -362,7 +381,11 @@ func (r *privateWorkRunner) runNativeEffect(ctx context.Context, work privatecha
 		if rec.Surface != work.Owner || rec.SurfaceGeneration != work.Generation {
 			return privatechat.ErrJournalConflict
 		}
-		_, err = r.processor.ApplyLocalHostReceipt(ctx, work.Owner, work.Generation, work.Effect.Effect.ID, privateKnownUnsentReducer{host: r.host})
+		if receipt.Reason == "shutdown_prepared_unstarted" {
+			_, err = r.processor.ApplyLocalHostReceipt(ctx, work.Owner, work.Generation, work.Effect.Effect.ID, privatechat.ShutdownKnownUnsentReducer{})
+		} else {
+			_, err = r.processor.ApplyLocalHostReceipt(ctx, work.Owner, work.Generation, work.Effect.Effect.ID, privateKnownUnsentReducer{host: r.host})
+		}
 		return err
 	}
 	_, inputs, target, err := privatechat.DecodeStoredEffectTarget(work.Effect.Effect.Body)

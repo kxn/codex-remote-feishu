@@ -239,6 +239,9 @@ func privateRecoveryReadOnlyAction(action control.Action) bool {
 // PrivateRecoveryActionAllowed lets a host keep an unprocessed durable input
 // pending before invoking any reducer or attachment preparation.
 func (s *Service) PrivateRecoveryActionAllowed(action control.Action) bool {
+	if s.privateReplacementInputAction(action) {
+		return true
+	}
 	_, held := s.privateRecoveryHolds[action.SurfaceSessionID]
 	return !held || s.privateRecoveryLocalAction(action)
 }

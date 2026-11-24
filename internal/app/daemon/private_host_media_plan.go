@@ -22,6 +22,11 @@ type privateStageIntent struct {
 	Files                        []privateStagedFile
 }
 type privateStageReceipt struct {
+	Cancelled           bool   `json:",omitempty"`
+	LegacyTargetUnknown bool   `json:",omitempty"`
+	Failed              bool   `json:",omitempty"`
+	FailureReason       string `json:",omitempty"`
+	InternalError       string `json:",omitempty"`
 	Version             int
 	EffectID, SurfaceID string
 	Files               []privateStagedFile
@@ -29,7 +34,10 @@ type privateStageReceipt struct {
 
 func privateSourceHash(path string) (string, int64, error) {
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() {
+	if err != nil {
+		return "", 0, fmt.Errorf("attachment source: %w", err)
+	}
+	if !info.Mode().IsRegular() {
 		return "", 0, fmt.Errorf("attachment source is not a regular file")
 	}
 	f, err := os.Open(path)

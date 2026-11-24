@@ -61,8 +61,17 @@ func (s *Service) ResumePrivateUpgradeDispatch(surfaceID, newInstanceID string, 
 // directory/thread selection, this transition never discards queued drafts,
 // staged media or per-conversation settings, and never invents a terminal turn.
 func (s *Service) PreparePrivateUpgradeResume(req PrivateUpgradeResume) ([]eventcontract.Event, error) {
-	if !s.config.PrivateApplication || req.SurfaceID == "" || req.OldInstanceID == "" || req.CWD == "" || req.HistoryNamespace == "" || req.Backend != agentproto.BackendCodex {
+	if req.Backend != agentproto.BackendCodex {
 		return nil, fmt.Errorf("invalid private upgrade recovery")
+	}
+	return s.PreparePrivateRuntimeReplacement(req)
+}
+
+// PreparePrivateRuntimeReplacement preserves the selected route and queue;
+// its caller independently proves retirement of the exact previous carrier.
+func (s *Service) PreparePrivateRuntimeReplacement(req PrivateUpgradeResume) ([]eventcontract.Event, error) {
+	if !s.config.PrivateApplication || req.SurfaceID == "" || req.OldInstanceID == "" || req.CWD == "" || req.HistoryNamespace == "" || (req.Backend != agentproto.BackendCodex && req.Backend != agentproto.BackendClaude && req.Backend != agentproto.BackendOpenCode) {
+		return nil, fmt.Errorf("invalid private runtime replacement")
 	}
 	v, old := s.root.Surfaces[req.SurfaceID], s.root.Instances[req.OldInstanceID]
 	if v == nil || old == nil || v.AttachedInstanceID != req.OldInstanceID || v.SelectedThreadID != req.ThreadID || v.PendingHeadless != nil || !isHeadlessInstance(old) || state.EffectiveInstanceBackend(old) != req.Backend || s.surfaceBackend(v) != req.Backend {
@@ -73,7 +82,19 @@ func (s *Service) PreparePrivateUpgradeResume(req PrivateUpgradeResume) ([]event
 		return nil, fmt.Errorf("private upgrade history namespace changed")
 	}
 	contract := s.headlessLaunchContract(v)
-	if contract.Backend != req.Backend || contract.CodexProfileID != req.ProfileID || state.NormalizeCodexProfileID(old.CodexProfileID) != req.ProfileID || normalizeWorkspaceClaimKey(old.WorkspaceRoot) != normalizeWorkspaceClaimKey(req.CWD) {
+	profileMatches := false
+	switch req.Backend {
+	case agentproto.BackendCodex:
+		profileMatches = state.NormalizeCodexProfileID(contract.CodexProfileID) == state.NormalizeCodexProfileID(req.ProfileID) && state.NormalizeCodexProfileID(old.CodexProfileID) == state.NormalizeCodexProfileID(req.ProfileID)
+	case agentproto.BackendClaude:
+		profileMatches = state.NormalizeClaudeProfileID(contract.ClaudeProfileID) == state.NormalizeClaudeProfileID(req.ProfileID) && state.NormalizeClaudeProfileID(old.ClaudeProfileID) == state.NormalizeClaudeProfileID(req.ProfileID)
+	case agentproto.BackendOpenCode:
+		profileMatches = state.NormalizeOpenCodeProfileID(contract.OpenCodeProfileID) == state.NormalizeOpenCodeProfileID(req.ProfileID) && state.NormalizeOpenCodeProfileID(old.OpenCodeProfileID) == state.NormalizeOpenCodeProfileID(req.ProfileID)
+	}
+	if !profileMatches {
+		return nil, ErrPrivateRuntimeProfileChanged
+	}
+	if contract.Backend != req.Backend || (normalizeWorkspaceClaimKey(old.WorkspaceRoot) != normalizeWorkspaceClaimKey(req.CWD) && (req.ThreadID == "" && normalizeWorkspaceClaimKey(v.PreparedThreadCWD) != normalizeWorkspaceClaimKey(req.CWD) || req.ThreadID != "" && (old.Threads[req.ThreadID] == nil || normalizeWorkspaceClaimKey(old.Threads[req.ThreadID].CWD) != normalizeWorkspaceClaimKey(req.CWD)))) {
 		return nil, fmt.Errorf("private upgrade launch settings changed")
 	}
 	cp, err := s.ExportPrivateCheckpoint(req.SurfaceID)
@@ -89,7 +110,7 @@ func (s *Service) PreparePrivateUpgradeResume(req PrivateUpgradeResume) ([]event
 	}
 	s.nextHeadlessID++
 	id := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
-	pending := &state.HeadlessLaunchRecord{InstanceID: id, SourceInstanceID: old.InstanceID, ThreadID: req.ThreadID, WorkspaceKey: workspace, ThreadCWD: req.CWD, Backend: contract.Backend, CodexProfileID: contract.CodexProfileID, CodexAdmissionRef: state.NormalizeCodexAdmissionRef(contract.CodexAdmissionRef), CodexConnectionContract: state.CloneCodexConnectionContract(contract.CodexConnectionContract), CodexThreadPolicy: state.CloneCodexThreadPolicy(contract.CodexThreadPolicy), RequestedAt: s.now(), ExpiresAt: s.now().Add(s.config.HeadlessLaunchWait), Status: state.HeadlessLaunchStarting, Purpose: state.HeadlessLaunchPurposePrivateUpgrade, PrepareNewThread: v.RouteMode == state.RouteModeNewThreadReady}
+	pending := &state.HeadlessLaunchRecord{InstanceID: id, SourceInstanceID: old.InstanceID, ThreadID: req.ThreadID, WorkspaceKey: workspace, ThreadCWD: req.CWD, Backend: contract.Backend, CodexProfileID: contract.CodexProfileID, CodexAdmissionRef: state.NormalizeCodexAdmissionRef(contract.CodexAdmissionRef), CodexConnectionContract: state.CloneCodexConnectionContract(contract.CodexConnectionContract), CodexThreadPolicy: state.CloneCodexThreadPolicy(contract.CodexThreadPolicy), ClaudeProfileID: contract.ClaudeProfileID, ClaudeReasoningEffort: contract.ClaudeReasoningEffort, OpenCodeProfileID: contract.OpenCodeProfileID, OpenCodeAdmissionRef: state.NormalizeOpenCodeAdmissionRef(contract.OpenCodeAdmissionRef), OpenCodeRuntimeAccessMode: contract.OpenCodeRuntimeAccessMode, RequestedAt: s.now(), ExpiresAt: s.now().Add(s.config.HeadlessLaunchWait), Status: state.HeadlessLaunchStarting, Purpose: state.HeadlessLaunchPurposePrivateUpgrade, PrepareNewThread: v.RouteMode == state.RouteModeNewThreadReady}
 	if thread := old.Threads[req.ThreadID]; thread != nil {
 		pending.ThreadTitle, pending.ThreadName, pending.ThreadPreview = displayThreadTitle(old, thread), thread.Name, thread.Preview
 	}
@@ -109,7 +130,18 @@ func (s *Service) RestorePrivateUpgradeHeadlessProjection(req PrivateUpgradeResu
 		return fmt.Errorf("private upgrade recovery target changed")
 	}
 	match := func(p *state.HeadlessLaunchRecord) bool {
-		return p != nil && p.Purpose == state.HeadlessLaunchPurposePrivateUpgrade && p.InstanceID == newInstanceID && p.SourceInstanceID == req.OldInstanceID && p.ThreadID == req.ThreadID && p.ThreadCWD == req.CWD && p.Backend == req.Backend && p.CodexProfileID == req.ProfileID
+		if p == nil || p.Purpose != state.HeadlessLaunchPurposePrivateUpgrade || p.InstanceID != newInstanceID || p.SourceInstanceID != req.OldInstanceID || p.ThreadID != req.ThreadID || p.ThreadCWD != req.CWD || p.Backend != req.Backend {
+			return false
+		}
+		switch req.Backend {
+		case agentproto.BackendCodex:
+			return state.NormalizeCodexProfileID(p.CodexProfileID) == state.NormalizeCodexProfileID(req.ProfileID)
+		case agentproto.BackendClaude:
+			return state.NormalizeClaudeProfileID(p.ClaudeProfileID) == state.NormalizeClaudeProfileID(req.ProfileID)
+		case agentproto.BackendOpenCode:
+			return state.NormalizeOpenCodeProfileID(p.OpenCodeProfileID) == state.NormalizeOpenCodeProfileID(req.ProfileID)
+		}
+		return false
 	}
 	if v.PendingHeadless != nil {
 		if match(v.PendingHeadless) {
@@ -126,7 +158,12 @@ func (s *Service) RestorePrivateUpgradeHeadlessProjection(req PrivateUpgradeResu
 		return fmt.Errorf("private upgrade headless evidence mismatch")
 	}
 	v.PendingHeadless = &pending
-	delete(s.privateRecoveryHolds, req.SurfaceID)
+	if pending.AutoRestore && len(held.QueuedQueueItemIDs) > 0 {
+		held.Holds = nil
+		s.privateRecoveryHolds[req.SurfaceID] = held
+	} else {
+		delete(s.privateRecoveryHolds, req.SurfaceID)
+	}
 	return nil
 }
 

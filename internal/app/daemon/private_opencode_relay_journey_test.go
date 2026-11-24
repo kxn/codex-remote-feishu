@@ -211,12 +211,12 @@ func testPrivateOpenCodeRealRelayHost(t *testing.T, active bool) {
 	}, OnEvents: func(c context.Context, m relayws.ConnectionMeta, id string, events []agentproto.Event) {
 		for _, event := range events {
 			if e := h.receive(c, m, id, event); e != nil {
-				failures <- e
+				failures <- fmt.Errorf("event kind=%s action=%s status=%s command=%s seq=%d: %w", event.Kind, event.Action, event.Status, event.CommandID, event.Seq, e)
 			}
 		}
 	}, OnCommandAck: func(c context.Context, m relayws.ConnectionMeta, id string, ack agentproto.CommandAck) {
 		if e := h.receiveAck(c, m, id, ack); e != nil {
-			failures <- e
+			failures <- fmt.Errorf("ack command=%s accepted=%v: %w", ack.CommandID, ack.Accepted, e)
 		}
 	}, OnDisconnect: func(c context.Context, m relayws.ConnectionMeta, id string) { _ = h.disconnect(c, m, id) }})
 	h.relay.SetServerIdentity(agentproto.ServerIdentity{BinaryIdentity: agentproto.BinaryIdentity{Product: relayruntime.ProductName, Version: "fixture", BuildFingerprint: "fixture"}})
@@ -325,6 +325,23 @@ func testPrivateOpenCodeRealRelayHost(t *testing.T, active bool) {
 		}
 	}
 	if e = h.Shutdown(ctx); e != nil {
+		probe, cancelProbe := context.WithTimeout(context.Background(), time.Second)
+		if rec, probeErr := h.store.lookup(probe, owner.InstanceID); probeErr == nil {
+			t.Logf("stop state=%s stop=%s inspect=%s", rec.State, rec.StopEffectID, rec.StopInspectionID)
+			if l, leaseErr := h.lease(probe, rec, nil); leaseErr == nil {
+				turns, turnErr := l.ActiveAcceptedTurns(probe)
+				t.Logf("accepted turns=%d err=%v", len(turns), turnErr)
+				pending, pendingErr := l.PendingBusinessNativeEvents(probe, 0, 128)
+				for _, item := range pending {
+					t.Logf("pending kind=%s command=%s seq=%d", item.Event.Kind, item.Event.CommandID, item.Ref.Sequence)
+				}
+				t.Logf("pending err=%v", pendingErr)
+			}
+			if rec.State == "sealed" {
+				t.Logf("retire retry: %v", h.retire(probe, owner.InstanceID))
+			}
+		}
+		cancelProbe()
 		select {
 		case f := <-failures:
 			t.Fatalf("shutdown %v, callback %v", e, f)

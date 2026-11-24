@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/executionowner"
@@ -40,6 +43,7 @@ type privateNativeHost struct {
 	drainMu               sync.Mutex
 	connections           map[string]uint64
 	deliveryCapabilities  map[string]privateDeliveryCapability
+	sealedMu              sync.RWMutex
 	sealedReady           map[string]bool
 }
 
@@ -94,6 +98,8 @@ func (h *privateNativeHost) lease(ctx context.Context, rec privateCarrierRecord,
 // acceptHello requires relayws to have authenticated the exact connection with
 // store.authorize before invoking this method; hello alone is not authority.
 func (h *privateNativeHost) acceptHello(ctx context.Context, meta relayws.ConnectionMeta, hello agentproto.Hello) error {
+	h.drainMu.Lock()
+	defer h.drainMu.Unlock()
 	if meta.ConnectionID == 0 || !meta.PrivateAuthenticated {
 		return fmt.Errorf("connection identity required")
 	}
@@ -119,8 +125,10 @@ func (h *privateNativeHost) acceptHello(ctx context.Context, meta relayws.Connec
 			}
 			h.connectionEpoch = hex.EncodeToString(nonce[:])
 		}
-		if _, err := h.processor.ApplyAuthenticatedNativeHello(ctx, lease, hello, fmt.Sprintf("%s:%d", h.connectionEpoch, meta.ConnectionID), orchestrator.PrivateNativeProfiles{Codex: rec.CodexProfileID, Claude: rec.ClaudeProfileID, OpenCode: rec.OpenCodeProfileID}); err != nil {
-			return err
+		if rec.State == "running" {
+			if _, err := h.processor.ApplyAuthenticatedNativeHello(ctx, lease, hello, fmt.Sprintf("%s:%d", h.connectionEpoch, meta.ConnectionID), orchestrator.PrivateNativeProfiles{Codex: rec.CodexProfileID, Claude: rec.ClaudeProfileID, OpenCode: rec.OpenCodeProfileID}); err != nil {
+				return err
+			}
 		}
 		if h.connections == nil {
 			h.connections = make(map[string]uint64)
@@ -377,8 +385,8 @@ func (h *privateNativeHost) sealDrain(ctx context.Context, instance string, ref 
 }
 
 func (h *privateNativeHost) markSealed(instance string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.sealedMu.Lock()
+	defer h.sealedMu.Unlock()
 	if h.sealedReady == nil {
 		h.sealedReady = make(map[string]bool)
 	}
@@ -482,14 +490,16 @@ func (h *privateNativeHost) VerifyStop(ctx context.Context, reg executionowner.R
 	if rec.State == "aborted" && evidence == "unspawned:"+rec.Snapshot.Owner.CarrierIncarnation && rec.Process.PID == 0 && privateRegistration(rec.Snapshot.Owner) == reg && rec.Snapshot.Owner.HostID == h.hostID {
 		return nil
 	}
-	if rec.State != "sealed" || privateRegistration(rec.Snapshot.Owner) != reg || rec.Snapshot.Owner.HostID != h.hostID {
+	if (rec.State != "sealed" && rec.State != "retired") || privateRegistration(rec.Snapshot.Owner) != reg || rec.Snapshot.Owner.HostID != h.hostID {
 		return executionowner.ErrConflict
 	}
-	h.mu.Lock()
-	ready := h.sealedReady[reg.Carrier.InstanceID]
-	h.mu.Unlock()
-	if !ready {
-		return fmt.Errorf("outbound drain not restored")
+	if rec.State == "sealed" {
+		h.sealedMu.RLock()
+		ready := h.sealedReady[reg.Carrier.InstanceID]
+		h.sealedMu.RUnlock()
+		if !ready {
+			return fmt.Errorf("outbound drain not restored")
+		}
 	}
 	ref := rec.Inspection
 	if evidence != privateInspectionEvidence(ref) {
@@ -504,7 +514,12 @@ func (h *privateNativeHost) VerifyStop(ctx context.Context, reg executionowner.R
 	}); err != nil {
 		return err
 	}
-	if err = hostinventory.WaitProcessExit(ctx, rec.Process); err != nil {
+	// Poll only the OS exit with a short budget; database projection and
+	// ownership commits must retain the caller's shutdown deadline.
+	exitCtx, cancelExit := context.WithTimeout(ctx, 100*time.Millisecond)
+	err = hostinventory.WaitProcessExit(exitCtx, rec.Process)
+	cancelExit()
+	if err != nil {
 		return err
 	}
 	return runtimejournal.VerifyRetiredPrivateWriteFence(ctx, rec.Snapshot, h.stateDir, result.NativeWriteWatermark)
@@ -549,6 +564,10 @@ func (h *privateNativeHost) retire(ctx context.Context, instance string) error {
 	if rec.State != "sealed" {
 		return fmt.Errorf("carrier not sealed")
 	}
+	// Project durable terminal events before the registry stops this lease.
+	if err = h.projectStoppedCarrierEvents(ctx, rec); err != nil {
+		return err
+	}
 	if err = h.outbound.Retire(ctx, privateRegistration(rec.Snapshot.Owner), privateInspectionEvidence(rec.Inspection)); err != nil {
 		return err
 	}
@@ -556,12 +575,29 @@ func (h *privateNativeHost) retire(ctx context.Context, instance string) error {
 }
 
 func (h *privateNativeHost) receiveLive(ctx context.Context, meta relayws.ConnectionMeta, instance string, event agentproto.Event) error {
+	h.drainMu.Lock()
+	defer h.drainMu.Unlock()
 	if !h.validConnection(instance, meta) || agentproto.PrivateDeliveryForEvent(event.Kind) != agentproto.PrivateEventLive || event.Journal != nil || event.Live == nil {
 		return executionowner.ErrConflict
 	}
 	rec, err := h.store.lookup(ctx, instance)
 	if err != nil {
 		return err
+	}
+	if rec.State == "draining" || rec.State == "sealed" {
+		if event.Live.Version != agentproto.RuntimeLiveProtocolVersion || event.Live.CarrierIncarnation != rec.Snapshot.Owner.CarrierIncarnation || event.Live.Sequence == 0 || event.Live.Sequence > math.MaxInt64 || event.Seq != 0 || event.NativeBinding == nil || event.NativeBinding.Owner != rec.Snapshot.Owner || event.ThreadID == "" || event.TurnID == "" || event.ItemID == "" || strings.TrimSpace(event.Delta) == "" {
+			return executionowner.ErrConflict
+		}
+		hash, e := agentproto.HashRuntimeLiveEvent(event)
+		if e != nil || hash != event.Live.PayloadHash {
+			return executionowner.ErrConflict
+		}
+		return h.relay.WithCurrentConnection(instance, meta.ConnectionID, func() error {
+			if !h.validConnection(instance, meta) {
+				return executionowner.ErrConflict
+			}
+			return nil
+		})
 	}
 	return h.relay.WithCurrentConnection(instance, meta.ConnectionID, func() error {
 		if !h.validConnection(instance, meta) {
@@ -574,4 +610,29 @@ func (h *privateNativeHost) receiveLive(ctx context.Context, meta relayws.Connec
 		_, e = h.processor.ApplyLiveNative(ctx, lease, event, privatechat.CoreNativeReducer{})
 		return e
 	})
+}
+
+// beginDrainForStop serializes the offline projection with authenticated hello;
+// a later reconnect can carry stop traffic but cannot resume user dispatch.
+func (h *privateNativeHost) beginDrainForStop(ctx context.Context, instance string) error {
+	h.drainMu.Lock()
+	defer h.drainMu.Unlock()
+	rec, err := h.store.lookup(ctx, instance)
+	if err != nil {
+		return err
+	}
+	if rec.State == "draining" {
+		return nil
+	}
+	if rec.State != "running" {
+		return privatechat.ErrDeferred
+	}
+	lease, err := h.lease(ctx, rec, nil)
+	if err != nil {
+		return err
+	}
+	if err = h.processor.MarkNativeStopping(ctx, lease); err != nil {
+		return err
+	}
+	return h.store.transition(ctx, instance, "running", "draining", hostinventory.ProcessIdentity{})
 }

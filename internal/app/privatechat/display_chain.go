@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
@@ -34,6 +35,10 @@ func bindNativeDisplayChains(o Owner, carrier string, events []eventcontract.Eve
 
 func explicitCardDisplayKey(o Owner, event eventcontract.Event) string {
 	event = event.Normalized()
+	if event.PageView != nil && event.PageView.CommandID == control.FeishuCommandModel && event.PageView.TrackingKey != "" {
+		h := sha256.Sum256([]byte(fmt.Sprintf("model-card\x00%s\x00%s\x00%s\x00%s", o.TenantID, o.AppID, o.SurfaceID, event.PageView.TrackingKey)))
+		return hex.EncodeToString(h[:])
+	}
 	if event.PendingInput != nil && event.PendingInput.SourceMessageID != "" {
 		h := sha256.Sum256([]byte(fmt.Sprintf("reaction\x00%s\x00%s\x00%s\x00%s", o.TenantID, o.AppID, o.SurfaceID, event.PendingInput.SourceMessageID)))
 		return hex.EncodeToString(h[:])
@@ -83,7 +88,7 @@ func (j *Journal) ResolveDisplayPredecessor(ctx context.Context, o Owner, genera
 	var state string
 	var raw []byte
 	var applied sql.NullInt64
-	err = j.db.QueryRowContext(ctx, `SELECT p.state,p.receipt,a.revision FROM private_display_chain c JOIN private_effect p ON p.id=c.effect_id LEFT JOIN private_effect_applied a ON a.effect_id=p.id WHERE c.chain_key=? AND p.tenant=? AND p.app_id=? AND p.gateway=? AND p.surface=? AND p.chat=? AND p.user_id=? AND p.generation=? AND (p.revision<? OR (p.revision=? AND p.ordinal<?)) ORDER BY p.revision DESC,p.ordinal DESC LIMIT 1`, currentKey.String, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, rev, rev, ordinal).Scan(&state, &raw, &applied)
+	err = j.db.QueryRowContext(ctx, `SELECT p.state,p.receipt,a.revision FROM private_display_chain c JOIN private_effect p ON p.id=c.effect_id LEFT JOIN private_effect_applied a ON a.effect_id=p.id WHERE c.chain_key=? AND p.tenant=? AND p.app_id=? AND p.gateway=? AND p.surface=? AND p.chat=? AND p.user_id=? AND p.generation=? AND NOT (p.state='confirmed' AND json_valid(p.receipt) AND coalesce(json_extract(p.receipt,'$.Kind'),'')='suppressed') AND (p.revision<? OR (p.revision=? AND p.ordinal<?)) ORDER BY p.revision DESC,p.ordinal DESC LIMIT 1`, currentKey.String, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, rev, rev, ordinal).Scan(&state, &raw, &applied)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -444,6 +444,7 @@ func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.
 	}
 	s.nextFileID++
 	file := &state.StagedFileRecord{
+		StagePending:     s.privateStageAdmission,
 		FileID:           fmt.Sprintf("file-%d", s.nextFileID),
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SourceMessageID:  action.MessageID,
@@ -929,6 +930,7 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 		})
 	}
 	if surface.AttachedInstanceID == "" {
+		s.recordPrivateInputDiscard(surface)
 		return notice(surface, "detached", s.detachedNoneText(surface))
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)

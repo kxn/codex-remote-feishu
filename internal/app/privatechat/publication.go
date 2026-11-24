@@ -23,6 +23,7 @@ type PublicationResult struct {
 }
 type PublicationReceipt struct {
 	Version            int
+	Kind, Reason       string `json:",omitempty"`
 	EffectID, PlanHash string
 	CompletedAt        time.Time
 	Results            []PublicationResult

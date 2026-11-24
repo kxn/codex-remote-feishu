@@ -413,6 +413,14 @@ type PendingNativeEvent struct {
 }
 
 func (l *NativeLease) PendingNativeEvents(ctx context.Context, after uint64, limit int) ([]PendingNativeEvent, error) {
+	return l.pendingNativeEvents(ctx, after, limit, false)
+}
+
+func (l *NativeLease) PendingBusinessNativeEvents(ctx context.Context, after uint64, limit int) ([]PendingNativeEvent, error) {
+	return l.pendingNativeEvents(ctx, after, limit, true)
+}
+
+func (l *NativeLease) pendingNativeEvents(ctx context.Context, after uint64, limit int, businessOnly bool) ([]PendingNativeEvent, error) {
 	if l == nil || limit < 1 || limit > 1000 {
 		return nil, ErrJournalState
 	}
@@ -421,7 +429,7 @@ func (l *NativeLease) PendingNativeEvents(ctx context.Context, after uint64, lim
 		rows, e := l.journal.db.QueryContext(ctx, `SELECT e.sequence,e.payload_hash,e.payload,
 CASE WHEN e.command_id<>'' THEN coalesce((SELECT CASE WHEN d.state IN ('prepared','sending','unknown') THEN 1 ELSE 0 END FROM native_commands c JOIN dispatch d ON d.id=c.dispatch_id WHERE c.command_id=e.command_id),1)
  ELSE EXISTS(SELECT 1 FROM dispatch d WHERE d.carrier=e.incarnation AND d.lane='input' AND d.state IN ('prepared','sending','unknown')) END
-FROM native_events e WHERE e.incarnation=? AND e.sequence>? AND e.applied=0 ORDER BY e.sequence LIMIT ?`, l.native.CarrierIncarnation, after, limit)
+FROM native_events e WHERE e.incarnation=? AND e.sequence>? AND e.applied=0 AND (?=0 OR coalesce(json_extract(e.payload,'$.kind'),'')<>?) ORDER BY e.sequence LIMIT ?`, l.native.CarrierIncarnation, after, businessOnly, string(agentproto.EventRuntimeInspectionCompleted), limit)
 		if e != nil {
 			return e
 		}
@@ -656,4 +664,37 @@ func (l *NativeLease) markDispatchState(ctx context.Context, id, old, next strin
 		}
 		return tx.Commit()
 	})
+}
+
+// OpenStoppedNativeProjection grants only access to an existing carrier journal;
+// the caller must provide authority proving this exact carrier has retired.
+func (j *Journal) openStoppedNativeProjection(ctx context.Context, authority NativeLeaseAuthority, native agentproto.NativeOwner, surface Owner, generation int64) (*NativeLease, error) {
+	if authority == nil || native.Validate() != nil || !validOwner(surface) || generation < 1 {
+		return nil, ErrJournalState
+	}
+	ownerJSON, _ := json.Marshal(native)
+	surfaceJSON, _ := json.Marshal(surface)
+	err := authority.WithNativeLease(ctx, native, surface, generation, func() error {
+		var oldOwner, oldSurface []byte
+		var oldGeneration int64
+		if err := j.db.QueryRowContext(ctx, `SELECT owner_json,surface_json,generation FROM native_carriers WHERE incarnation=?`, native.CarrierIncarnation).Scan(&oldOwner, &oldSurface, &oldGeneration); err != nil {
+			return err
+		}
+		if string(oldOwner) != string(ownerJSON) || string(oldSurface) != string(surfaceJSON) || oldGeneration != generation {
+			return ErrJournalConflict
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &NativeLease{journal: j, authority: authority, native: native, surface: surface, generation: generation}, nil
+}
+
+// HasPendingNativeProjection is a read-only scheduling hint; authority is still
+// required to read or apply the event.
+func (j *Journal) HasPendingNativeProjection(ctx context.Context, incarnation string) (bool, error) {
+	var exists bool
+	err := j.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_events WHERE incarnation=? AND applied=0 AND coalesce(json_extract(payload,'$.kind'),'')<>?)`, incarnation, string(agentproto.EventRuntimeInspectionCompleted)).Scan(&exists)
+	return exists, err
 }

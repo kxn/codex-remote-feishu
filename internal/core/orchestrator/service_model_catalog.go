@@ -55,6 +55,9 @@ func (s *Service) applyModelCatalogUpdated(inst *state.InstanceRecord, event age
 }
 
 func (s *Service) modelCatalogCommandOptions(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) ([]control.CommandCatalogFormFieldOption, bool) {
+	if s.config.PrivateApplication && !s.privateModelInstanceMatches(surface, inst) {
+		inst = nil
+	}
 	if s.promptConfigBackend(inst, surface) == agentproto.BackendCodex {
 		profile, ok := s.surfaceCodexProfileSummary(surface)
 		if ok {
@@ -360,6 +363,9 @@ func modelCatalogOptionBaseLabel(entry agentproto.ModelCatalogEntry) string {
 }
 
 func (s *Service) maybeModelCatalogStatusText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, backend agentproto.Backend, truncated bool) (string, string) {
+	if s.config.PrivateApplication && !s.privateModelInstanceMatches(surface, inst) {
+		inst = nil
+	}
 	if agentproto.NormalizeBackend(backend) == agentproto.BackendCodex {
 		if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
 			if _, fixed := fixedCodexAPIProfileModel(profile); fixed {
@@ -379,8 +385,11 @@ func (s *Service) maybeModelCatalogStatusText(surface *state.SurfaceConsoleRecor
 	if inst.ModelCatalog.Unsupported {
 		return "info", "当前 Codex 实例暂不支持动态模型列表；请手动输入模型名。"
 	}
-	if strings.TrimSpace(inst.ModelCatalog.ErrorMessage) != "" && len(inst.ModelCatalog.Entries) == 0 {
-		return "info", "模型列表刷新失败；请手动输入模型名。"
+	if problem := strings.TrimSpace(inst.ModelCatalog.ErrorMessage); problem != "" {
+		if len(inst.ModelCatalog.Entries) != 0 {
+			return "error", "模型列表刷新失败：" + problem + "；已保留上次成功的模型列表。"
+		}
+		return "error", "模型列表刷新失败：" + problem + "；请手动输入模型名。"
 	}
 	if len(inst.ModelCatalog.Entries) == 0 {
 		return "info", "当前模型列表为空；请手动输入模型名。"
@@ -393,6 +402,9 @@ func (s *Service) modelCatalogRefreshEvents(surface *state.SurfaceConsoleRecord)
 		return nil
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	if s.config.PrivateApplication && !s.privateModelInstanceMatches(surface, inst) {
+		return nil
+	}
 	if !state.InstanceSupportsModelCatalog(inst) {
 		return nil
 	}
@@ -407,6 +419,13 @@ func (s *Service) modelCatalogRefreshEvents(surface *state.SurfaceConsoleRecord)
 			},
 		},
 	}}
+}
+
+func (s *Service) privateModelInstanceMatches(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {
+	if surface == nil || inst == nil || state.EffectiveInstanceBackend(inst) != s.surfaceBackend(surface) {
+		return false
+	}
+	return privateProfilesCompatible(surface, PrivateNativeProfiles{Codex: inst.CodexProfileID, Claude: inst.ClaudeProfileID, OpenCode: inst.OpenCodeProfileID})
 }
 
 func NonTurnAgentCommand(kind agentproto.CommandKind) bool {

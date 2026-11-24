@@ -27,6 +27,14 @@ type privatePublicationProof struct {
 	Ordinal    int               `json:"ordinal"`
 }
 
+func (p *privatePublicationBinding) CheckPrivateModelView(ctx context.Context, o privatechat.Owner, generation int64, message, token, sourceEventID string) (bool, bool, error) {
+	b, err := p.binding(ctx, o, generation)
+	if err != nil {
+		return false, false, err
+	}
+	return p.router.CurrentPrivateView(ctx, b.Owner, b.Tenant, b.AppID, b.ChatID, message, token, sourceEventID)
+}
+
 func (p *privatePublicationBinding) binding(ctx context.Context, o privatechat.Owner, generation int64) (ingressowner.PrivateBinding, error) {
 	if p == nil || p.router == nil || p.journal == nil || p.bindingFor == nil {
 		return ingressowner.PrivateBinding{}, fmt.Errorf("private publication ownership unavailable")

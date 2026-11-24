@@ -95,6 +95,12 @@ type vscodeCompatibilityCacheState struct {
 }
 
 type App struct {
+	profileCatalogMu            sync.Mutex
+	profileCatalogPending       map[string]bool
+	profileCatalogWorkers       sync.WaitGroup
+	profileCatalogClosed        bool
+	profileCatalogCancel        context.CancelFunc
+	profileCatalogContext       context.Context
 	privateCatalogSnapshot      atomic.Pointer[[]string]
 	privateProfilesSnapshot     atomic.Pointer[privateProfileCatalog]
 	privateCodexContracts       atomic.Pointer[privateCodexContractSnapshot]

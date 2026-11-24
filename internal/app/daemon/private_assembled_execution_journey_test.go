@@ -226,23 +226,20 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 		before := len(gateway.snapshotOperations())
 		send("model-menu", "/model")
 		foundModel := false
-		nextRefresh := time.Now().Add(500 * time.Millisecond)
-		modelRetry := 0
+		modelCardID := ""
 		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
 			for _, op := range gateway.snapshotOperations()[before:] {
+				if modelCardID == "" && op.Kind == feishu.OperationSendCard && op.MessageID != "" {
+					modelCardID = op.MessageID
+				}
 				body, e := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
-				if e == nil && strings.Contains(string(body), "Fixture Model") {
+				if e == nil && op.Kind == feishu.OperationUpdateCard && op.MessageID == modelCardID && modelCardID != "" && strings.Contains(string(body), "Fixture Model") {
 					foundModel = true
 					break
 				}
 			}
 			if foundModel {
 				break
-			}
-			if time.Now().After(nextRefresh) {
-				modelRetry++
-				send(fmt.Sprintf("model-reopen-%d", modelRetry), "/model")
-				nextRefresh = time.Now().Add(500 * time.Millisecond)
 			}
 			time.Sleep(10 * time.Millisecond)
 		}

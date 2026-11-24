@@ -561,26 +561,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		inst.ShortName = state.WorkspaceShortName(inst.WorkspaceKey)
 	}
 	inst.Backend = backend
-	if backend == agentproto.BackendCodex {
-		inst.CodexProfileID = state.NormalizeCodexProfileID(hello.Instance.CodexProfileID)
-	} else {
-		inst.CodexProfileID = ""
-	}
-	if backend == agentproto.BackendClaude {
-		inst.ClaudeProfileID = state.NormalizeClaudeProfileID(hello.Instance.ClaudeProfileID)
-		inst.ClaudeReasoningEffort = state.NormalizeReasoningEffort(hello.Instance.ClaudeReasoningEffort)
-	} else {
-		inst.ClaudeProfileID = ""
-		inst.ClaudeReasoningEffort = ""
-	}
-	if backend == agentproto.BackendOpenCode {
-		inst.OpenCodeProfileID = state.NormalizeOpenCodeProfileID(hello.Instance.OpenCodeProfileID)
-		inst.OpenCodeRuntimeAccessMode = state.NormalizeOpenCodeRuntimeAccessMode(hello.Instance.OpenCodeRuntimeAccessMode)
-	} else {
-		inst.OpenCodeProfileID = ""
-		inst.OpenCodeAdmissionRef = nil
-		inst.OpenCodeRuntimeAccessMode = ""
-	}
+	state.ApplyInstanceHelloProfile(inst, backend, hello.Instance)
 	inst.Source = xutil.FirstNonEmpty(strings.TrimSpace(hello.Instance.Source), string(state.InstanceSourceVSCode))
 	inst.Capabilities = capabilities
 	inst.CapabilitiesDeclared = hello.CapabilitiesDeclared

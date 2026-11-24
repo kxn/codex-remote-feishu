@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
@@ -79,6 +80,19 @@ func runPrivateHeadlessStart(ctx context.Context, host *App, native *privateNati
 	upgradePlan, upgradeRequired, err := j.UpgradeRecoverySelection(ctx, o, generation, id)
 	if err != nil {
 		return nil, err
+	}
+	var retired *privateCarrierRecord
+	if !upgradeRequired {
+		retired, err = runtimeReplacementForEffect(ctx, j, o, generation, cmd, native)
+		if err != nil {
+			return nil, err
+		}
+		if retired != nil {
+			profiles := orchestrator.PrivateNativeProfiles{Codex: retired.CodexProfileID, Claude: retired.ClaudeProfileID, OpenCode: retired.OpenCodeProfileID}
+			if err = p.RestoreRetiredRuntimeReplacement(ctx, o, generation, id, retired.Snapshot.Owner, profiles, retired.Snapshot.CWD, native); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if effect.State == "confirmed" {
 		if upgradeRequired {
@@ -211,6 +225,11 @@ func runPrivateHeadlessStart(ctx context.Context, host *App, native *privateNati
 		}
 		if migration != nil {
 			nativeOwner.HistoryNamespace = migration.Namespace
+		}
+		if retired != nil {
+			nativeOwner.HistoryNamespace = retired.Snapshot.Owner.HistoryNamespace
+			nativeOwner.InstanceGeneration = retired.Snapshot.Owner.InstanceGeneration + 1
+			nativeOwner.ProcessGeneration = retired.Snapshot.Owner.ProcessGeneration + 1
 		}
 		rec = privateCarrierRecord{Snapshot: agentproto.PrivateNativeLaunchSnapshot{Version: 1, Owner: nativeOwner, CWD: cwd, JournalPath: filepath.Join(native.stateDir, "private-carriers", incarnation, "runtime.db")}, Surface: o, SurfaceGeneration: generation}
 		_, err = host.launchPrivateNative(ctx, native, privateNativeLaunchRequest{Record: rec, OpenCodeProfileID: cmd.OpenCodeProfileID, OpenCodeAdmissionRef: cmd.OpenCodeAdmissionRef, OpenCodeRuntimeAccessMode: cmd.OpenCodeRuntimeAccessMode, CodexProfileID: cmd.CodexProfileID, ClaudeProfileID: cmd.ClaudeProfileID, ClaudeReasoningEffort: cmd.ClaudeReasoningEffort, ResumeSession: cmd.ThreadID, CodexAdmissionRef: cmd.CodexAdmissionRef, MigrationResume: migration, UpgradeRecovery: upgrade, UpgradeRecoveryEffectID: id})

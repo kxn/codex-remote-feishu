@@ -155,6 +155,11 @@ func (s *Service) startWorkspaceHeadlessLaunchWithOverlayCleanup(surface *state.
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
+	// Profile restoration below requires valid bot settings. Check before
+	// discarding the current route so a rejected picker keeps its drafts.
+	if s.botCapabilitySettingsInvalid(surface) {
+		return s.botCapabilitySettingsInvalidEvents(surface)
+	}
 	if options.ValidateRoomWorkspaceSet {
 		if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
 			return blocked

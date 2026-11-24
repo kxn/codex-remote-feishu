@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatestaging"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 type privateStagingBaseProvider interface {
@@ -28,6 +29,22 @@ func runPrivateStagingCleanup(ctx context.Context, host *App, j *privatechat.Jou
 		return err
 	}
 	for _, item := range work {
+		if item.IngressSequence == 0 {
+			effect, e := j.LoadEffect(ctx, item.Owner, item.Generation, item.EffectID)
+			if e != nil {
+				continue
+			}
+			event, _, e := privatechat.DecodeStoredEffect(effect.Effect.Body)
+			if e != nil {
+				continue
+			}
+			if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandPrivateStageInput && event.DaemonCommand.StageObjectID == "" {
+				if e = j.FinishStagingCleanup(ctx, item, true); e != nil {
+					return e
+				}
+				continue
+			}
+		}
 		base, e := provider.PrivateStagingBase(item.Owner.GatewayID, item.Owner.AppID)
 		if e != nil {
 			continue

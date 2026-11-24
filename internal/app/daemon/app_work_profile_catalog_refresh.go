@@ -25,17 +25,20 @@ func (a *App) startProfileCatalogRefresh(ctx context.Context, target teamProfile
 		}
 	}()
 	r := a.teamRuntime
-	r.catalogMu.Lock()
-	defer r.catalogMu.Unlock()
+	a.profileCatalogMu.Lock()
+	defer a.profileCatalogMu.Unlock()
+	if a.profileCatalogClosed {
+		return workstore.ProfileModelCatalog{}, errApplicationClosing
+	}
 	var record workstore.ProfileModelCatalog
 	load := func() error {
 		return r.store.Within(ctx, func(tx *workstore.Tx) error { var e error; record, e = tx.GetProfileModelCatalog(target.Key); return e })
 	}
-	if r.catalogPending[target.Key] {
+	if a.profileCatalogPending[target.Key] {
 		err := load()
 		return record, err
 	}
-	if len(r.catalogPending) >= 2 {
+	if len(a.profileCatalogPending) >= 2 {
 		err := load()
 		if err != nil && !errors.Is(err, workstore.ErrNotFound) {
 			return record, err
@@ -61,25 +64,25 @@ func (a *App) startProfileCatalogRefresh(ctx context.Context, target teamProfile
 	if err != nil {
 		return record, err
 	}
-	if r.runContext == nil || r.runContext.Err() != nil {
-		err = r.store.Within(ctx, func(tx *workstore.Tx) error {
-			var e error
-			record, e = tx.CompleteProfileModelCatalogRefresh(target.Key, attempt, nil, "", "模型查询服务当前未运行，请稍后刷新重试。", time.Now().UTC())
-			return e
-		})
-		return record, err
+	if a.profileCatalogPending == nil {
+		a.profileCatalogPending = map[string]bool{}
 	}
-	if r.catalogPending == nil {
-		r.catalogPending = map[string]bool{}
+	a.profileCatalogPending[target.Key] = true
+	if a.profileCatalogContext == nil {
+		a.profileCatalogContext, a.profileCatalogCancel = context.WithCancel(context.WithoutCancel(ctx))
 	}
-	r.catalogPending[target.Key] = true
-	r.workers.Add(1)
+	workerContext := a.profileCatalogContext
+	a.profileCatalogWorkers.Add(1)
 	async = true
 	go func() {
 		defer finished()
-		defer r.workers.Done()
-		defer func() { r.catalogMu.Lock(); delete(r.catalogPending, target.Key); r.catalogMu.Unlock() }()
-		probeCtx, cancel := context.WithTimeout(r.runContext, 35*time.Second)
+		defer a.profileCatalogWorkers.Done()
+		defer func() {
+			a.profileCatalogMu.Lock()
+			delete(a.profileCatalogPending, target.Key)
+			a.profileCatalogMu.Unlock()
+		}()
+		probeCtx, cancel := context.WithTimeout(workerContext, 35*time.Second)
 		defer cancel()
 		run := a.runCodexModelCatalogProbe
 		if run == nil {
@@ -99,9 +102,17 @@ func (a *App) startProfileCatalogRefresh(ctx context.Context, target teamProfile
 		if problem == nil && (observation.Snapshot.Unsupported || observation.Snapshot.ErrorMessage != "") {
 			problem = fmt.Errorf("模型服务未能返回可用的模型列表")
 		}
+		// Shutdown cancellation is not a failed lookup. Leave the durable
+		// refresh marker in place so the next host retries immediately rather
+		// than treating an interrupted observation as a five-minute failure.
+		a.profileCatalogMu.Lock()
+		defer a.profileCatalogMu.Unlock()
+		if errors.Is(workerContext.Err(), context.Canceled) {
+			return
+		}
 		// This is read-only discovery, so an interrupted attempt can safely be
 		// retried. Completion only replaces this namespace's registered attempt.
-		saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(r.runContext), 5*time.Second)
+		saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer saveCancel()
 		err := r.store.Within(saveCtx, func(tx *workstore.Tx) error {
 			reason := ""
@@ -141,5 +152,24 @@ func profileCatalogError(err error) string {
 		return "Codex 未能完成本次模型查询，请检查登录或服务连接后刷新。"
 	default:
 		return "读取模型列表失败：" + teamStatusPreview(err.Error(), 180)
+	}
+}
+
+// Stop shared discovery before its durable store can be closed. Holding the
+// admission mutex while closing prevents a concurrent Add after Wait starts.
+func (a *App) stopProfileCatalogWorkers(ctx context.Context) error {
+	a.profileCatalogMu.Lock()
+	a.profileCatalogClosed = true
+	if a.profileCatalogCancel != nil {
+		a.profileCatalogCancel()
+	}
+	a.profileCatalogMu.Unlock()
+	done := make(chan struct{})
+	go func() { a.profileCatalogWorkers.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("profile catalog discovery did not stop: %w", ctx.Err())
 	}
 }

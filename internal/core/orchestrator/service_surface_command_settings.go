@@ -160,6 +160,7 @@ func (s *Service) openConfigCommandPageForAction(surface *state.SurfaceConsoleRe
 	}
 	events := []eventcontract.Event{s.configPageEventFromCatalogView(surface, view)}
 	if strings.TrimSpace(view.Config.CommandID) == control.FeishuCommandModel {
+		s.beginPrivateModelWait(surface, action, &events[0])
 		events = append(events, s.modelCatalogRefreshEvents(surface)...)
 	}
 	return events
@@ -649,6 +650,10 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 
 func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
+	if s.config.PrivateApplication && len(parts) == 2 && strings.EqualFold(parts[1], "refresh") {
+		action.Text = "/model"
+		return s.openConfigCommandPageForAction(surface, action)
+	}
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}

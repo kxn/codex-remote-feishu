@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/executionowner"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
@@ -129,8 +130,30 @@ func TestPrivateHostRetirementNeedsInspectionExitAndFence(t *testing.T) {
 	}
 	if err = child.Wait(); err != nil { /* killed process is expected */
 	}
-	if err = host.retire(ctx, "instance"); err != nil {
-		t.Fatal(err)
+	// A disconnect owns the connection mutex while acquiring its registry
+	// lease. Retirement must not need that mutex while holding the registry.
+	host.connections = map[string]uint64{"instance": 1}
+	host.mu.Lock()
+	retired := make(chan error, 1)
+	disconnected := make(chan error, 1)
+	go func() { retired <- host.retire(ctx, "instance") }()
+	go func() {
+		disconnected <- host.disconnect(ctx, relayws.ConnectionMeta{ConnectionID: 1, PrivateAuthenticated: true}, "instance")
+	}()
+	select {
+	case err = <-retired:
+		host.mu.Unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		host.mu.Unlock()
+		t.Fatal("retirement waited on the disconnect connection mutex")
+	}
+	select {
+	case <-disconnected:
+	case <-time.After(3 * time.Second):
+		t.Fatal("disconnect did not finish after retirement")
 	}
 	if _, err = host.registry.Resolve(ctx, privateRegistration(owner).Carrier, 1); err == nil {
 		t.Fatal("retired carrier still active")

@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 // privateHostReducer is invoked exclusively under Processor's lock. The host
@@ -69,7 +70,11 @@ func (r privateHostReducer) Reduce(app *privatechat.App, action control.Action) 
 			if err != nil {
 				return nil, err
 			}
-			return []eventcontract.Event{{Kind: eventcontract.KindDaemonCommand, GatewayID: action.GatewayID, SurfaceSessionID: action.SurfaceSessionID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandPrivateStageInput, SurfaceSessionID: action.SurfaceSessionID, InstanceID: instance.InstanceID, ThreadCWD: instance.WorkspaceRoot, Text: string(raw)}}}, nil
+			stageID, events, err := app.Service().BeginPrivateStage(action)
+			if err != nil || stageID == "" {
+				return events, err
+			}
+			return append(events, eventcontract.Event{Kind: eventcontract.KindDaemonCommand, GatewayID: action.GatewayID, SurfaceSessionID: action.SurfaceSessionID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandPrivateStageInput, StageObjectID: stageID, SurfaceSessionID: action.SurfaceSessionID, InstanceID: instance.InstanceID, ThreadCWD: instance.WorkspaceRoot, Text: string(raw)}}), nil
 		}
 		// The legacy detached path performs no staging; it references the
 		// already-admitted local attachments directly until a workspace exists.
@@ -89,6 +94,48 @@ func (r privateHostReducer) Reduce(app *privatechat.App, action control.Action) 
 	events, err := app.Action(action)
 	if err != nil {
 		return nil, err
+	}
+	for _, event := range events {
+		if event.PageView == nil || event.PageView.CommandID != control.FeishuCommandModel || event.PageView.TrackingKey == "" {
+			continue
+		}
+		surface := app.Service().Surface(action.SurfaceSessionID)
+		if surface == nil || state.SurfaceDesiredBackendContract(surface).Backend != agentproto.BackendCodex {
+			continue
+		}
+		hasNativeQuery := false
+		for _, emitted := range events {
+			if emitted.Command != nil && emitted.Command.Kind == agentproto.CommandModelList {
+				hasNativeQuery = true
+				break
+			}
+		}
+		if hasNativeQuery {
+			break
+		}
+		owner, generation, ok := app.OwnerGeneration(action.SurfaceSessionID)
+		if !ok {
+			return nil, privatechat.ErrJournalConflict
+		}
+		value, ok := r.host.privateSettingsCache.Load(action.GatewayID)
+		if !ok {
+			return nil, privatechat.ErrDeferred
+		}
+		entry, ok := value.(privateBotSettingsCacheEntry)
+		if !ok || entry.Owner.TenantID != owner.TenantID || entry.Owner.AppID != owner.AppID || entry.Owner.GatewayID != owner.GatewayID || entry.Snapshot.Revision != r.host.privateSettingsRevision.Load() {
+			return nil, privatechat.ErrDeferred
+		}
+		profile := entry.Snapshot.Record.CodexProfileID
+		if profile == "" {
+			profile = surface.CodexProfileID
+		}
+		query := privateModelQueryIntent{Version: 1, Owner: owner, Generation: generation, ProfileID: state.NormalizeCodexProfileID(profile), Fingerprint: entry.Snapshot.Fingerprint, TrackingKey: event.PageView.TrackingKey, Force: strings.EqualFold(strings.TrimSpace(action.Text), "/model refresh")}
+		raw, e := json.Marshal(query)
+		if e != nil {
+			return nil, e
+		}
+		events = append(events, eventcontract.Event{Kind: eventcontract.KindDaemonCommand, GatewayID: owner.GatewayID, SurfaceSessionID: owner.SurfaceID, DaemonCommand: &control.DaemonCommand{Kind: control.DaemonCommandPrivateModelCatalogQuery, SurfaceSessionID: owner.SurfaceID, Text: string(raw)}})
+		break
 	}
 	return r.withHistoricalRecovery(app, action, events)
 }
@@ -132,6 +179,9 @@ func (r privateHostReducer) withHistoricalRecovery(app *privatechat.App, action 
 // Bot-level mutations wait for their durable config-owner intent and receipt;
 // viewing a settings page remains available while that port is being wired.
 func privateSettingsWriteNeedsOwnerReceipt(action control.Action) bool {
+	if action.Kind == control.ActionModelCommand && strings.EqualFold(strings.TrimSpace(action.Text), "/model refresh") {
+		return false
+	}
 	switch action.Kind {
 	case control.ActionModeCommand, control.ActionModelCommand, control.ActionReasoningCommand, control.ActionAccessCommand, control.ActionCodexProfileCommand, control.ActionClaudeProfileCommand, control.ActionOpenCodeProfileCommand:
 		return len(strings.Fields(action.Text)) > 1 || strings.TrimSpace(action.OptionID) != ""
