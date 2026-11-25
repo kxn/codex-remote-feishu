@@ -465,3 +465,14 @@ execution-owner registry 1→2：用部署前 HEAD `1ac41368` 的实际旧 write
 3. 常规路径自己原子提交推进或终态；另用低频对账检查“有待处理记录但没有处理者”“依赖已终结却仍等待”“超过期限无进展”。能凭证据修复的自动结算；证据不足则退出自动执行集合，进入带原因和核查入口的待核区，不形成整个用户的新门禁。
 4. 监控分别展示尚未处理输入、会话排队、后端执行与飞书交付的进度和最老等待原因；healthz 只证明进程存活，不能替代这些结果。
 5. 已终结且没有活动引用的记录按保留策略归档；待核记录与历史文件有独立索引和存储预算。归档或删除须保留恢复及去重所需的证据关系；当前没有统一物理归档策略，本轮未用删除历史来代替结束操作。
+
+
+### 本轮最终验证与现场交付
+
+最终源码提交 `cb232c3f`，在所有生产改动冻结后执行 `go test -json -buildvcs=false ./... -count=1`：122 个测试包通过，32 个无测试包，7336 个 test/subtest pass 事件，daemon 290.057 秒，无失败；证据 `/tmp/private-lifecycle-final-all.jsonl`。Windows 交叉构建通过 `/tmp/private-lifecycle-final-windows.log`。真实受管 Codex 0.171.0 的冷工作区选择、三轮对话含实际文件读写、独立审阅／追问／退出及返回主会话流程再通过，51.88 秒，证据 `/tmp/private-lifecycle-final-native.log`。平台网关仍为受控测试入口，不冒称真实客户端视觉验收。暂存清理定向 race 的工具输出中 privatechat 1.483 秒、daemon 3.467 秒通过；新增两个用例也包含在上述最终整仓日志中。
+
+通过唯一 stable 服务的仓库升级 helper 部署，事务 committed，实际新 PID **3193359**，版本 **local-e5b67ccd49ba**。进程实际执行文件、安装文件及固定升级产物 SHA256 都为 `e5b67ccd49ba9c7efa4fb67f75047ed116f0e416e3ee4b6d43c1e4a34891d9c2`。healthz=ok，六个 gateway connected，active／pending remote turn 均为空；配置 SHA256 仍为 `2e7fcef80d7a183dea7327a789aec58da3d1cedaa634625176a9e61d0fd47e7e`。升级前 15 个数据库各自一致的备份及配置保存在 `/tmp/private-publication-predeploy-_5tx7byu`，不是跨库原子快照。证据 `/tmp/private-lifecycle-backup.log`、`/tmp/private-lifecycle-upgrade.log`、`/tmp/private-lifecycle-deployment-proof.json`。
+
+用户 21:18:40 的原始 `hi` 已生成的“嗨！”最终答复，在新加坡时间 **21:48:27.485** 由飞书返回真实消息 ID `om_x100b7f5a3c7d6ca0b363b52a96bf652`；对应 publication op 与 effect 均 confirmed，effect 回执已 applied。由原 MessageID 关联的原生 dispatch 只有一次。没有重发真人输入、重跑 Codex 或手改业务数据库。
+
+调用当前版本真正的 journal 查询进行只读现场检查：未应用历史清单 16 项，可执行候选 1 项，其中可执行发布 **0** 项；原来的两项未知发布与受其阻挡的历史记录仍保留，已不反复占用发送池。剩余候选是历史停止核对，不表示旧运行已经有完整退出证明，不能借本次发布修复宣布它成功或删去证据。证据 `/tmp/private-lifecycle-live-candidates.log`。新进程日志 `/tmp/private-lifecycle-deployed-journal.log` 保留启动初期精确 gateway 尚未安装时的未开始重试，以及该历史停止项的 `another stop is in progress`；未把这些记录说成无错误启动。发布已随后获得真实平台收据，诊断不反复刷同一错误。构建生成的两份 shim 文件只恢复生成差异，未带入源码提交。
