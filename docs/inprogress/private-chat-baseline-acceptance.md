@@ -319,3 +319,9 @@
 `TestPrivateSDKRecoveryNoticeUnknownDoesNotBlockInput` 另从相同冷入口完成重启旅程，仅将恢复说明的真实平台 Apply 替换为一次结果未知失败。放行 authenticated hello 后，原消息及下一轮均得到 source-bound final，所有 turn 继续原 session；说明只尝试一次，未被记作成功可见，事后核对持久 op 保留 unknown 和实际错误。定向 race 通过，日志 `/tmp/private-recovery-unknown-sdk-race2.log`。
 
 生产实现冻结后的全仓普通测试通过（122 个有测试包，daemon 207.333 秒），日志 `/tmp/private-recovery-notice-all.log`。恢复与发布交错、clean/interrupted restart、普通队列 reaction 和菜单后继续对话的定向 race 通过（daemon 94.963 秒），日志 `/tmp/private-recovery-notice-race.log`。Windows 全仓生产构建通过，日志 `/tmp/private-recovery-notice-windows.log`；最后新增的 unknown 旅程另有上述新鲜 race 证据，不声称它已包含在较早开始的全仓测试二进制中。真实飞书客户端仍不是该受控 gateway 测试的覆盖范围。
+
+测试文件最终冻结后，延迟 hello 的恢复接续、恢复中取消后新建、恢复说明 unknown 三条 SDK 旅程再次统一执行 race 通过（21.442 秒），日志 `/tmp/private-recovery-notice-final-sdk-race.log`。提交前 `scripts/check/pre-commit.sh` 通过，包含文件长度 gate；原有跨平台测试路径扫描仍为脚本的非阻断提示，没有跳过检查。
+
+修复提交 `ec9090fd9a6428ecef446c926712a2213c450c0d` 已经 `safe-push` 推送，并按 `local-upgrade` 发布到已核实的单一 `stable`／`codex-remote.service`。升级事务 `committed`，版本 `local-abf723324f26`，实际 PID `2281905`；`/proc/2281905/exe`、安装文件和升级 artifact 的 SHA-256 同为 `abf723324f2634f3b945865c603c695437a4c3b939acb49fa371a88458e07ed1`。健康检查 `ok`，六个 gateway connected、团队运行时可用、私人读取无错误；现场原 session、pinned 导航保留，dispatch normal，无 pending launch 和队列输入。配置 SHA 与升级前相同，未手动改业务数据库；升级前留存 13 个数据库各自的一致 SQLite 快照，定位 `/tmp/private-recovery-notice-predeploy-location.json`，不作为跨库原子快照。构建产生的两份 shim 嵌入文件已仅恢复其生成改动。
+
+本次部署证据：`/tmp/private-recovery-notice-upgrade.log`、`/tmp/private-recovery-notice-deployed.json`、`/tmp/private-recovery-notice-deployed.log`。该进程启动日志未见 poison、panic、fatal 或失败。没有向实际飞书会话发送伪造的真人业务消息；新提示的来源关联和失败流程由上述 SDK 连续旅程证明。
