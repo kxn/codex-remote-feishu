@@ -29,6 +29,16 @@ type StagingCleanup struct {
 	IngressSequence                            int64
 }
 
+type StagingCleanupPosition struct {
+	EffectID        string
+	IngressSequence int64
+	Path            string
+}
+
+func (w StagingCleanup) Position() StagingCleanupPosition {
+	return StagingCleanupPosition{EffectID: w.EffectID, IngressSequence: w.IngressSequence, Path: w.Path}
+}
+
 // The canceled ingress itself is the only authority. Cleanup still validates
 // the SDK manifest before removing any path.
 func insertCanceledStagingCleanup(ctx context.Context, tx *sql.Tx, seq int64) error {
@@ -105,47 +115,52 @@ func (j *Journal) PrepareStagingCleanup(ctx context.Context, o Owner, generation
 	}
 	return tx.Commit()
 }
+
 func (j *Journal) PendingStagingCleanup(ctx context.Context, limit int) ([]StagingCleanup, error) {
+	return j.PendingStagingCleanupAfter(ctx, limit, StagingCleanupPosition{})
+}
+
+// PendingStagingCleanupAfter scans receipt work and then cancellation work by
+// their immutable primary keys. Settling items cannot shift the next page.
+func (j *Journal) PendingStagingCleanupAfter(ctx context.Context, limit int, after StagingCleanupPosition) ([]StagingCleanup, error) {
 	if limit < 1 || limit > 128 {
 		return nil, ErrJournalState
 	}
-	rows, e := j.db.QueryContext(ctx, `SELECT c.effect_id,c.path,c.event_id,c.message_id,c.sha256,e.tenant,e.app_id,e.gateway,e.surface,e.chat,e.user_id,e.generation FROM private_staging_cleanup c JOIN private_effect e ON e.id=c.effect_id WHERE c.state='pending' ORDER BY e.revision,e.ordinal,c.path LIMIT ?`, limit)
-	if e != nil {
-		return nil, e
-	}
-	defer rows.Close()
 	var out []StagingCleanup
-	for rows.Next() {
-		var x StagingCleanup
-		e = rows.Scan(&x.EffectID, &x.Path, &x.EventID, &x.MessageID, &x.SHA256, &x.Owner.TenantID, &x.Owner.AppID, &x.Owner.GatewayID, &x.Owner.SurfaceID, &x.Owner.ChatID, &x.Owner.UserID, &x.Generation)
-		if e != nil {
-			return nil, e
+	read := func(query string, args ...any) error {
+		rows, err := j.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
 		}
-		out = append(out, x)
-	}
-	if e = rows.Err(); e != nil {
-		return nil, e
-	}
-	if e = rows.Close(); e != nil {
-		return nil, e
-	}
-	if len(out) >= limit {
-		return out, nil
-	}
-	rows, e = j.db.QueryContext(ctx, `SELECT c.ingress_seq,c.path,i.event_id,c.message_id,i.tenant,i.app_id,i.gateway,i.surface,i.chat,i.user_id,i.generation FROM private_canceled_staging_cleanup c JOIN ingress i ON i.seq=c.ingress_seq JOIN private_applied a ON a.seq=i.seq AND a.canceled_by IS NOT NULL WHERE c.state='pending' ORDER BY i.seq,c.path LIMIT ?`, limit-len(out))
-	if e != nil {
-		return nil, e
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var x StagingCleanup
-		if e = rows.Scan(&x.IngressSequence, &x.Path, &x.EventID, &x.MessageID, &x.Owner.TenantID, &x.Owner.AppID, &x.Owner.GatewayID, &x.Owner.SurfaceID, &x.Owner.ChatID, &x.Owner.UserID, &x.Generation); e != nil {
-			return nil, e
+		defer rows.Close()
+		for rows.Next() {
+			var x StagingCleanup
+			if err := rows.Scan(&x.EffectID, &x.IngressSequence, &x.Path, &x.EventID, &x.MessageID, &x.SHA256, &x.Owner.TenantID, &x.Owner.AppID, &x.Owner.GatewayID, &x.Owner.SurfaceID, &x.Owner.ChatID, &x.Owner.UserID, &x.Generation); err != nil {
+				return err
+			}
+			out = append(out, x)
 		}
-		out = append(out, x)
+		return rows.Err()
 	}
-	return out, rows.Err()
+	if after.IngressSequence == 0 {
+		err := read(`SELECT c.effect_id,0,c.path,c.event_id,c.message_id,c.sha256,e.tenant,e.app_id,e.gateway,e.surface,e.chat,e.user_id,e.generation
+FROM private_staging_cleanup c JOIN private_effect e ON e.id=c.effect_id
+WHERE c.state='pending' AND (c.effect_id,c.path)>(?,?) ORDER BY c.effect_id,c.path LIMIT ?`, after.EffectID, after.Path, limit)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(out) < limit {
+		err := read(`SELECT '',c.ingress_seq,c.path,i.event_id,c.message_id,'',i.tenant,i.app_id,i.gateway,i.surface,i.chat,i.user_id,i.generation
+FROM private_canceled_staging_cleanup c JOIN ingress i ON i.seq=c.ingress_seq JOIN private_applied a ON a.seq=i.seq AND a.canceled_by IS NOT NULL
+WHERE c.state='pending' AND (c.ingress_seq,c.path)>(?,?) ORDER BY c.ingress_seq,c.path LIMIT ?`, after.IngressSequence, after.Path, limit-len(out))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
+
 func (j *Journal) FinishStagingCleanup(ctx context.Context, work StagingCleanup, retained bool) error {
 	state := "done"
 	if retained {

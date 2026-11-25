@@ -30,6 +30,17 @@ func publicationOrderKeys(o Owner, generation int64, scopes []string) []string {
 	return keys
 }
 
+// Visit only the current effect's indexed dependencies before loading prior
+// effect rows. The owner/revision index would otherwise scan unrelated history.
+const publicationOrderHeldSQL = `EXISTS(SELECT 1 FROM private_publication_order current
+CROSS JOIN private_publication_order prior ON prior.order_key=current.order_key
+CROSS JOIN private_effect p ON p.id=prior.effect_id
+WHERE current.effect_id=e.id AND p.tenant=e.tenant AND p.app_id=e.app_id AND p.gateway=e.gateway AND p.surface=e.surface AND p.chat=e.chat AND p.user_id=e.user_id AND p.generation=e.generation
+AND (p.revision<e.revision OR (p.revision=e.revision AND p.ordinal<e.ordinal))
+AND NOT EXISTS(SELECT 1 FROM private_effect_applied a WHERE a.effect_id=p.id)
+AND NOT (coalesce(CASE WHEN json_valid(p.body) THEN json_extract(p.body,'$.event.TimelineText.Type') END,'')='recovery_input_waiting'
+	AND p.state IN ('unknown','confirmed')))`
+
 // PublicationOrderReady is a causal barrier, independent of replacement-card
 // receipt resolution. Only publications sharing an original operation wait.
 // Unknown sends remain evidence; independent operations can continue.
@@ -45,7 +56,7 @@ func (j *Journal) PublicationOrderReady(ctx context.Context, o Owner, generation
 	if n != 1 {
 		return ErrJournalConflict
 	}
-	err = j.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM private_publication_order current JOIN private_publication_order prior ON prior.order_key=current.order_key JOIN private_effect e ON e.id=current.effect_id JOIN private_effect p ON p.id=prior.effect_id WHERE current.effect_id=? AND p.tenant=e.tenant AND p.app_id=e.app_id AND p.gateway=e.gateway AND p.surface=e.surface AND p.chat=e.chat AND p.user_id=e.user_id AND p.generation=e.generation AND (p.revision<e.revision OR (p.revision=e.revision AND p.ordinal<e.ordinal)) AND NOT EXISTS(SELECT 1 FROM private_effect_applied a WHERE a.effect_id=p.id) AND NOT (coalesce(json_extract(p.body,'$.event.TimelineText.Type'),'')='recovery_input_waiting' AND p.state IN ('unknown','confirmed')))`, id).Scan(&n)
+	err = j.db.QueryRowContext(ctx, `SELECT `+publicationOrderHeldSQL+` FROM private_effect e WHERE e.id=?`, id).Scan(&n)
 	if err != nil {
 		return err
 	}

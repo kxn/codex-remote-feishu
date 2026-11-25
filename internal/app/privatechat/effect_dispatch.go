@@ -209,9 +209,14 @@ func effectInputSequences(ctx context.Context, tx *sql.Tx, o Owner, generation i
 	return out, nil
 }
 
+const detachedCarrierRowsSQL = `SELECT 1 FROM private_checkpoint c, json_each(c.data,'$.DetachedExecutions') d
+WHERE c.tenant=e.tenant AND c.app_id=e.app_id AND c.gateway=e.gateway AND c.surface=e.surface AND c.chat=e.chat AND c.user_id=e.user_id AND c.generation=e.generation
+AND json_extract(d.value,'$.InstanceID')=`
+
 func assertCarrierNotDetached(ctx context.Context, tx *sql.Tx, o Owner, generation int64, instance string) error {
 	var detached bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM private_checkpoint c, json_each(c.data,'$.DetachedExecutions') d WHERE c.tenant=? AND c.app_id=? AND c.gateway=? AND c.surface=? AND c.chat=? AND c.user_id=? AND c.generation=? AND json_extract(d.value,'$.InstanceID')=?)`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, instance).Scan(&detached); err != nil {
+	if err := tx.QueryRowContext(ctx, `WITH e(tenant,app_id,gateway,surface,chat,user_id,generation) AS (VALUES(?,?,?,?,?,?,?))
+SELECT EXISTS(`+detachedCarrierRowsSQL+`?) FROM e`, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, instance).Scan(&detached); err != nil {
 		return err
 	}
 	if detached {

@@ -432,3 +432,36 @@ execution-owner registry 1→2：用部署前 HEAD `1ac41368` 的实际旧 write
 线上 healthz=ok，authority=separate_applications，六个 gateway 均 connected，团队运行时 available。47 个既有 surface 的 selected thread、route/input mode、工作区键、后端与配置引用与升级前一致，active／pending remote turn 均为空；没有伪造真人消息或手改业务数据。配置 SHA256 保持 `2e7fcef80d7a183dea7327a789aec58da3d1cedaa634625176a9e61d0fd47e7e`。实际数据库版本为 private-chat=11、private-carriers=2、execution-owners=2；旧 reader fence 验证见前文，回退必须配合对应备份，不能强制降低版本。
 
 升级前保留 14 个数据库各自一致的备份及配置／install-state，定位 `/tmp/private-protocol-predeploy-location.json`，目录 `/tmp/private-protocol-predeploy-ffrktb6f`；不是跨数据库原子快照。现场证据为 `/tmp/private-protocol-upgrade.log`、`/tmp/private-protocol-deployed-runtime.json`、`/tmp/private-protocol-deployment-proof.json`、`/tmp/private-protocol-deployed-daemon.log`。新 PID 日志确认 ready，未见 poison／panic／fatal／failed；构建生成的两份 shim 文件仅恢复生成改动，不带入源码提交。
+
+### 2026-11-25 现场发现：历史发布积压饿死新回复
+
+用户在 21:18:40 发送 `hi` 后无反馈。现场 PID 3040189 仍运行，healthz=ok，六个 gateway connected；原生后台在 21:18:51 已生成“嗨！”并完成该轮，私人 checkpoint 也已保存，但恢复说明、reaction 与最终答复都仍为 prepared，没有平台发送收据。截图中最近一条关闭提示的实际发送时间是 19:25:54，属于升级前的历史消息，不代表服务此刻仍在关闭。
+
+实际候选列表保留了旧 unknown 菜单和旧 unknown 过程卡，后续过程卡仍须等待精确前序收据。它们没有与本次输入共享因果屏障；在隔离 journal 副本中逐项调用原 publisher，新产生的七项发布都可以成功，实际 neutral owner／Bot generation／迁移绑定也已独立核验。问题来自有限并发的领取顺序：每轮从最早候选开始，旧效果反复抢占八个发布名额，新效果到达时名额已满，于是一直没有尝试机会。未知状态保留本身是正确行为；把扫描顺序当成公平调度才是根因。
+
+本次补充验收必须包含超过执行槽及跨分页的历史积压，验证新的独立回复、reaction 和菜单仍能获得执行机会，同时旧 unknown 不重发，同卡／同 turn 的因果顺序和原输入 FIFO 不变。现场原始日志、状态、只读栈和隔离诊断分别保存于 `/tmp/private-no-reply-since-start.log`、`/tmp/private-no-reply-runtime.json`、`/tmp/private-no-reply-goroutines.txt`、`/tmp/private-no-reply-snapshot-diagnostic.log`。未手改线上数据库或重新发送真人输入。
+
+
+本轮修复并非仅调整领取顺序。私人普通、停止／取消和发布三个执行池共用公平调度；按 owner／epoch 先确定首条可执行输入再轮转，跨页及跨 owner 的 revision／ordinal 相同情况用 effect ID 排序，不扩大并发。`PendingHostEffects*` 保留核查账本，普通 worker 改用 `RunnableHostEffectsAfter`；未知平台操作、依赖未满足的未渲染发布、缺少冻结目标的旧命令与显式 detached 载体上未派发命令，均不因保留证据而反复领取。只读观察超时及确认收据的应用仍可推进。共享 SQL 谓词同时用于实际授权／因果检查，避免查询和执行各维护一套规则。
+
+独立复核再补齐三处相关边界：原始异常不再静默丢弃，按阶段／效果记录原原因并去重限流；已冻结发布在实际平台调用前重验 owner／epoch／原始视图并捕获精确 AppID 的 gateway，配置替换不能改变目的 Bot，明确尚未开始的失败仍保持 prepared；暂存清理用稳定主键遍历回执与取消来源，旧授权不可确认的记录不再挡住后续合法文件清理。没有增加第二份队列、修改 Codex 协议或数据库格式，也没有删除旧未知结果冒充已处理。
+
+查询执行计划发现同一用户历史效果曾先于精确依赖键被扫描。共享依赖查询改为先取 current effect／chain key，再查 prior 及其实际 effect；只读现场五次测量候选均为相同三项，中位时间 24.4ms→2.3ms，证据 `/tmp/private-publication-candidate-query-plan.log`。该时间不是平台回复延迟承诺，也不把 race 插桩下的慢查询说成服务死锁。
+
+已获得的定向证据：
+
+- 旧发布调度在 140 条长期失败记录、18 轮完整 pass 后仍未发送新回复；旧源码 overlay 的完整 SDK 流程也在 14 条未知旧发送后，出现原生已接收 `hi` 但最终答复未呈现，证据 `/tmp/private-publication-backlog-sdk-old-scheduler.log`。早先按错误标题注入的 fixture 未创建积压，不计为产品失败证明。
+- 修后 SDK 路径验证首条 `hi` 的实际正文及同一 THINKING reaction 的开始／移除，随后 `/menu`、不等待内部收据就点击原卡、下一条 `hi` 均成功；旧 14 次平台未知调用未重复，两个真人输入各只发往原生一次。最终完整积压、冻结发布授权和诊断 race 连续三次通过 `/tmp/private-publication-final-race.log`。
+- 三个执行池的饥饿、首条合法输入顺序、跨页、同卡／同 turn 因果、确定退出的旧命令休眠及关停收据 race 通过 `/tmp/private-publication-keyfirst-race.log`；140 条积压调度在 race 下 3.57 秒完成，daemon 定向组合 10.602 秒，privatechat 2.098 秒。
+- 已冻结视图的 AppID 替换、owner epoch 改变、无按钮卡片发行记录及原应用恢复的测试，通过 `/tmp/private-frozen-publication-verified.log` 和上述最终 race。凭据未在测试日志中输出。
+- 129 条旧授权不可确认的暂存清理记录曾让新回执与取消来源的文件均无法清理；修后两者真实文件删除并各自结算 done，旧文件与待核证据保留。以旧源码 overlay 复现，定向 race 包括既有图片取消和附件恢复链路。
+
+### 后续机制建议：发现被遗忘的异步工作（尚未作为通用机制实现）
+
+公平调度和可执行候选筛选是本轮修复；它们不能替代所有异步操作的完整结束合同。后续应在既有 ingress／effect／dispatch／receipt 身份上补齐统一的操作生命周期，不建立另一份工作队列：
+
+1. 每个异步开始点必须同时登记负责处理者、所属业务及代次、原始来源、完成／失败／取消条件、最长等待条件和可否重试。外部发送结果未知与尚未发送分开，不能由 TTL 猜测副作用是否发生。
+2. 会话退出、操作被替代或来源取消时，沿明确依赖边撤销尚未开始的后续；已开始的步骤保存结果核对义务。取消后的迟到回调只补历史，不复活已撤销工作。
+3. 常规路径自己原子提交推进或终态；另用低频对账检查“有待处理记录但没有处理者”“依赖已终结却仍等待”“超过期限无进展”。能凭证据修复的自动结算；证据不足则退出自动执行集合，进入带原因和核查入口的待核区，不形成整个用户的新门禁。
+4. 监控分别展示尚未处理输入、会话排队、后端执行与飞书交付的进度和最老等待原因；healthz 只证明进程存活，不能替代这些结果。
+5. 已终结且没有活动引用的记录按保留策略归档；待核记录与历史文件有独立索引和存储预算。归档或删除须保留恢复及去重所需的证据关系；当前没有统一物理归档策略，本轮未用删除历史来代替结束操作。

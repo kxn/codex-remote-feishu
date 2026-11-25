@@ -29,7 +29,12 @@ type privatePublisher struct {
 // durable publication result; it must not trust a caller-supplied message ID.
 type privatePublicationOwnership interface {
 	PrepareOperation(context.Context, privatechat.Owner, int64, string, int, json.RawMessage) (json.RawMessage, error)
+	ValidateOperation(context.Context, privatechat.Owner, int64, string, int, json.RawMessage) error
 	ConfirmOperation(context.Context, privatechat.Owner, int64, string, int) error
+}
+
+type privatePublicationGatewaySelector interface {
+	PrivatePublicationGateway(gatewayID, appID string) (feishu.Gateway, error)
 }
 
 func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, generation int64, id string) ([]privatechat.EffectRecord, error) {
@@ -63,11 +68,7 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 		}
 		return p.processor.ApplyHostReceipt(ctx, o, generation, id, privateHostReceiptReducer{p.host})
 	}
-	if publication.EffectState == "prepared" {
-		if err = p.journal.MarkEffectSending(ctx, o, generation, id); err != nil {
-			return nil, err
-		}
-	} else {
+	if publication.EffectState != "prepared" {
 		// A committed per-operation begin marks the actual uncertainty boundary.
 		// Confirmed operations are never replayed; prepared operations have not
 		// reached the platform and may continue after the preceding receipt.
@@ -76,9 +77,17 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 				return nil, errPrivatePublicationUnknown
 			}
 		}
-		if err = p.journal.ResumePublication(ctx, o, generation, id); err != nil {
-			return nil, err
+	}
+	started := false
+	start := func() error {
+		if started {
+			return nil
 		}
+		started = true
+		if publication.EffectState == "prepared" {
+			return p.journal.MarkEffectSending(ctx, o, generation, id)
+		}
+		return p.journal.ResumePublication(ctx, o, generation, id)
 	}
 	for _, op := range publication.Operations {
 		if op.State == "confirmed" {
@@ -106,6 +115,9 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 				return nil, e
 			}
 			if stale {
+				if e = start(); e != nil {
+					return nil, e
+				}
 				if e = p.journal.SuppressPreparedPublication(ctx, o, generation, id, "stale_model_view", time.Now().UTC()); e != nil {
 					return nil, e
 				}
@@ -133,6 +145,23 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 				return nil, errPrivatePublicationUnknown
 			}
 		}
+		// Capture the exact application's adapter before starting a durable
+		// operation. A worker replacement cannot redirect the captured call.
+		gateway := p.host.gateway
+		if selector, ok := gateway.(privatePublicationGatewaySelector); ok {
+			gateway, err = selector.PrivatePublicationGateway(o.GatewayID, o.AppID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if p.ownership != nil {
+			if err = p.ownership.ValidateOperation(ctx, o, generation, id, op.Ordinal, op.Body); err != nil {
+				return nil, err
+			}
+		}
+		if err = start(); err != nil {
+			return nil, err
+		}
 		begun := false
 		if planned.TimelineText != nil && planned.TimelineText.Type == control.TimelineTextRecoveryInputWaiting {
 			var suppressed bool
@@ -152,7 +181,7 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 		}
 		batch := []feishu.Operation{operation}
 		applyCtx, cancel := p.host.newTimeoutContext(ctx, p.host.gatewayApplyTimeout)
-		sendErr := p.host.gateway.Apply(applyCtx, batch)
+		sendErr := gateway.Apply(applyCtx, batch)
 		cancel()
 		var receipt feishu.PrivateOperationReceipt
 		if sendErr == nil {
@@ -186,6 +215,9 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 				return nil, err
 			}
 		}
+	}
+	if err = start(); err != nil {
+		return nil, err
 	}
 	if _, err = p.journal.FinishPublication(ctx, o, generation, id, time.Now().UTC()); err != nil {
 		return nil, err

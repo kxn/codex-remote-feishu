@@ -74,6 +74,31 @@ func (p *privatePublicationBinding) PrepareOperation(ctx context.Context, o priv
 	stamped, _, err := feishu.StampPrivateView(raw, view.Token)
 	return stamped, err
 }
+
+func (p *privatePublicationBinding) ValidateOperation(ctx context.Context, o privatechat.Owner, generation int64, effectID string, ordinal int, raw json.RawMessage) error {
+	b, err := p.binding(ctx, o, generation)
+	if err != nil {
+		return err
+	}
+	op, err := feishu.ThawPrivateOperation(raw)
+	if err != nil || (op.Kind != feishu.OperationSendCard && op.Kind != feishu.OperationUpdateCard) {
+		return err
+	}
+	unstamped, token, err := feishu.UnstampPrivateView(raw)
+	if err != nil {
+		return err
+	}
+	view, err := p.router.PrivateView(ctx, b.Owner, effectID, ordinal)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(unstamped)
+	if view.RenderHash != hex.EncodeToString(digest[:]) || (token != "" && view.Token != token) {
+		return ingressowner.ErrConflict
+	}
+	return nil
+}
+
 func (p *privatePublicationBinding) ConfirmOperation(ctx context.Context, o privatechat.Owner, generation int64, effectID string, ordinal int) error {
 	return p.confirmOperation(ctx, o, generation, effectID, ordinal, false)
 }

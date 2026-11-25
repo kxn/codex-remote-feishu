@@ -68,6 +68,16 @@ func explicitCardDisplayKey(o Owner, event eventcontract.Event) string {
 	return hex.EncodeToString(h[:])
 }
 
+// Start from the indexed chain before reading effects for the selected owner.
+const displayPredecessorJoinSQL = `CROSS JOIN private_display_chain prior ON prior.chain_key=current.chain_key
+CROSS JOIN private_effect p ON p.id=prior.effect_id
+LEFT JOIN private_effect_applied a ON a.effect_id=p.id`
+
+const displayPredecessorSQL = `p.tenant=e.tenant AND p.app_id=e.app_id AND p.gateway=e.gateway AND p.surface=e.surface AND p.chat=e.chat AND p.user_id=e.user_id AND p.generation=e.generation
+AND NOT (p.state='confirmed' AND coalesce(CASE WHEN json_valid(p.receipt) THEN json_extract(p.receipt,'$.Kind') END,'')='suppressed')
+AND (p.revision<e.revision OR (p.revision=e.revision AND p.ordinal<e.ordinal))
+ORDER BY p.revision DESC,p.ordinal DESC LIMIT 1`
+
 // ResolveDisplayPredecessor returns a verified, applied predecessor receipt.
 // A nil receipt means this is the first event of an independent display chain.
 // The caller may use it to enrich only presentation; the stored event is fixed.
@@ -76,9 +86,7 @@ func (j *Journal) ResolveDisplayPredecessor(ctx context.Context, o Owner, genera
 		return nil, ErrJournalState
 	}
 	var currentKey sql.NullString
-	var rev int64
-	var ordinal int
-	err := j.db.QueryRowContext(ctx, `SELECT c.chain_key,e.revision,e.ordinal FROM private_effect e LEFT JOIN private_display_chain c ON c.effect_id=e.id WHERE e.id=? AND e.tenant=? AND e.app_id=? AND e.gateway=? AND e.surface=? AND e.chat=? AND e.user_id=? AND e.generation=?`, id, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation).Scan(&currentKey, &rev, &ordinal)
+	err := j.db.QueryRowContext(ctx, `SELECT c.chain_key FROM private_effect e LEFT JOIN private_display_chain c ON c.effect_id=e.id WHERE e.id=? AND e.tenant=? AND e.app_id=? AND e.gateway=? AND e.surface=? AND e.chat=? AND e.user_id=? AND e.generation=?`, id, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation).Scan(&currentKey)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +96,9 @@ func (j *Journal) ResolveDisplayPredecessor(ctx context.Context, o Owner, genera
 	var state string
 	var raw []byte
 	var applied sql.NullInt64
-	err = j.db.QueryRowContext(ctx, `SELECT p.state,p.receipt,a.revision FROM private_display_chain c JOIN private_effect p ON p.id=c.effect_id LEFT JOIN private_effect_applied a ON a.effect_id=p.id WHERE c.chain_key=? AND p.tenant=? AND p.app_id=? AND p.gateway=? AND p.surface=? AND p.chat=? AND p.user_id=? AND p.generation=? AND NOT (p.state='confirmed' AND json_valid(p.receipt) AND coalesce(json_extract(p.receipt,'$.Kind'),'')='suppressed') AND (p.revision<? OR (p.revision=? AND p.ordinal<?)) ORDER BY p.revision DESC,p.ordinal DESC LIMIT 1`, currentKey.String, o.TenantID, o.AppID, o.GatewayID, o.SurfaceID, o.ChatID, o.UserID, generation, rev, rev, ordinal).Scan(&state, &raw, &applied)
+	err = j.db.QueryRowContext(ctx, `SELECT p.state,p.receipt,a.revision FROM private_effect e
+JOIN private_display_chain current ON current.effect_id=e.id
+`+displayPredecessorJoinSQL+` WHERE e.id=? AND `+displayPredecessorSQL, id).Scan(&state, &raw, &applied)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

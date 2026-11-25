@@ -40,12 +40,12 @@ func blockPreparedFixtureEffects(r *privateWorkRunner) func() {
 func TestPreparedFixtureSlotSwapLetsOlderEffectFinish(t *testing.T) {
 	r := &privateWorkRunner{}
 	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	r.startEffect("old", "", false, false, func() { close(started); <-release; close(finished) })
+	r.startEffect("old", "", privateEffectNormal, func() { close(started); <-release; close(finished) })
 	<-started
 	restore := blockPreparedFixtureEffects(r)
 	defer restore()
 	called := make(chan struct{}, 1)
-	r.startEffect("blocked", "", false, false, func() { called <- struct{}{} })
+	r.startEffect("blocked", "", privateEffectNormal, func() { called <- struct{}{} })
 	close(release)
 	select {
 	case <-finished:

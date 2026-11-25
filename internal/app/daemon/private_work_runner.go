@@ -33,6 +33,9 @@ type privateWorkRunner struct {
 	normalSlots   chan struct{}
 	controlSlots  chan struct{}
 	publishSlots  chan struct{}
+
+	effectCursors [privateEffectPoolCount]privatechat.HostEffectPosition
+	diagnostics   privateRunnerDiagnostics
 }
 
 func (r *privateWorkRunner) signal() {
@@ -86,6 +89,7 @@ func (r *privateWorkRunner) Run(ctx context.Context) error {
 			r.effectWG.Wait()
 			return ctx.Err()
 		}
+		r.diagnostics.report("pass", "", err)
 	}
 }
 func (r *privateWorkRunner) pass(ctx context.Context) error {
@@ -230,22 +234,7 @@ func (r *privateWorkRunner) passUntilStopped(ctx, stop context.Context) error {
 			}
 		}
 	}
-	for offset := 0; ; offset += 128 {
-		effects, err := r.journal.PendingHostEffectsPage(ctx, 128, offset)
-		if err != nil {
-			return err
-		}
-		for _, work := range effects {
-			if stop.Err() != nil {
-				return stop.Err()
-			}
-			r.scheduleEffectWithStop(ctx, stop, work)
-		}
-		if len(effects) < 128 {
-			break
-		}
-	}
-	return nil
+	return r.scheduleHostEffects(ctx, stop)
 }
 
 func (r *privateWorkRunner) tickCarrier(ctx context.Context, rec privateCarrierRecord, lease *privatechat.NativeLease) {
@@ -283,99 +272,6 @@ func (r *privateWorkRunner) tickCarrier(ctx context.Context, rec privateCarrierR
 	})
 }
 
-// scheduleEffect isolates slow network/process work from durable ingress and
-// gives control/cancellation an independent bounded execution pool.
-func (r *privateWorkRunner) scheduleEffect(ctx context.Context, work privatechat.PendingEffectWork) {
-	r.scheduleEffectWithStop(ctx, ctx, work)
-}
-
-func (r *privateWorkRunner) scheduleEffectWithStop(ctx, stop context.Context, work privatechat.PendingEffectWork) {
-	event, _, err := privatechat.DecodeStoredEffect(work.Effect.Effect.Body)
-	if err == nil && event.Command != nil && work.Effect.State != "confirmed" {
-		registered, lookupErr := r.journal.HasNativeDispatch(ctx, work.Effect.Effect.ID)
-		if lookupErr != nil || (registered && (privateSessionCommandScope(event.Command.Kind) != privateSessionRead || (event.Command.Target.ThreadID == "" && event.Command.Kind != agentproto.CommandMCPOAuthLogin))) {
-			return
-		}
-		if registered {
-			state, e := r.journal.DispatchState(ctx, work.Effect.Effect.ID+":native")
-			if e != nil || (state != "prepared" && state != "sending" && state != "unknown" && state != "sent") {
-				return
-			}
-		}
-	}
-	controlLane := err == nil && event.DaemonCommand != nil && (event.DaemonCommand.Kind == control.DaemonCommandKillHeadless || event.DaemonCommand.Kind == control.DaemonCommandGitWorkspaceImportCancel || event.DaemonCommand.Kind == control.DaemonCommandGitWorkspaceWorktreeCancel)
-	key := fmt.Sprintf("%v:%d:%s", work.Owner, work.Generation, work.Effect.Effect.ID)
-	laneKey := ""
-	if err == nil && event.Command != nil && (event.Command.Kind == agentproto.CommandPromptSend || event.Command.Kind == agentproto.CommandTurnSteer) {
-		laneKey = fmt.Sprintf("input:%v:%d", work.Owner, work.Generation)
-	}
-	r.startEffect(key, laneKey, controlLane, work.Effect.Effect.Lane == "interactive", func() {
-		if stop.Err() != nil {
-			return
-		}
-		// Scheduled effects can be in a local receipt transaction when worker
-		// shutdown begins. stopWorkers waits for their completion; if the
-		// caller's shutdown deadline expires, stores remain open.
-		effectCtx := context.WithoutCancel(ctx)
-		if err == nil && event.DaemonCommand != nil && localEffectReturnsAfterHostCall(event.DaemonCommand.Kind) {
-			_ = r.runLocalEffectWithRecovery(effectCtx, work, func() error { return r.runEffect(effectCtx, work) })
-			return
-		}
-		_ = r.runEffect(effectCtx, work)
-	})
-}
-
-func (r *privateWorkRunner) startEffect(key, laneKey string, controlLane, publication bool, run func()) {
-	r.effectMu.Lock()
-	if r.running == nil {
-		r.running = make(map[string]struct{})
-		r.normalSlots = make(chan struct{}, 8)
-		r.controlSlots = make(chan struct{}, 4)
-		r.publishSlots = make(chan struct{}, 8)
-	}
-	if _, exists := r.running[key]; exists {
-		r.effectMu.Unlock()
-		return
-	}
-	if laneKey != "" {
-		if _, exists := r.running[laneKey]; exists {
-			r.effectMu.Unlock()
-			return
-		}
-	}
-	slots := r.normalSlots
-	if controlLane {
-		slots = r.controlSlots
-	}
-	if publication {
-		slots = r.publishSlots
-	}
-	select {
-	case slots <- struct{}{}:
-	default:
-		r.effectMu.Unlock()
-		return
-	}
-	r.running[key] = struct{}{}
-	r.effectWG.Add(1)
-	if laneKey != "" {
-		r.running[laneKey] = struct{}{}
-	}
-	r.effectMu.Unlock()
-	go func() {
-		defer r.effectWG.Done()
-		defer func() {
-			r.effectMu.Lock()
-			delete(r.running, key)
-			if laneKey != "" {
-				delete(r.running, laneKey)
-			}
-			<-slots
-			r.effectMu.Unlock()
-		}()
-		run()
-	}()
-}
 func (r *privateWorkRunner) runEffect(ctx context.Context, work privatechat.PendingEffectWork) error {
 	e := work.Effect
 	if e.Effect.Lane == "interactive" {

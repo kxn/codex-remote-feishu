@@ -294,10 +294,14 @@ func (c *MultiGatewayController) applyStateHook(gatewayID string, generation uin
 }
 
 func (c *MultiGatewayController) updateWorkerError(gatewayID string, err error) {
+	c.updateWorkerRuntimeError(gatewayID, nil, err)
+}
+
+func (c *MultiGatewayController) updateWorkerRuntimeError(gatewayID string, runtime gatewayRuntime, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	worker := c.workers[gatewayID]
-	if worker == nil {
+	if worker == nil || runtime != nil && worker.runtime != runtime {
 		return
 	}
 	worker.status.LastError = err.Error()
