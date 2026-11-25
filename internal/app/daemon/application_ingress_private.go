@@ -87,13 +87,17 @@ func (a privateApplicationAdmitter) Admit(ctx context.Context, record ingressown
 		lease, _ := a.native.settingsLease(ctx, o, owner.Epoch)
 		_ = reconcilePrivateBotSettings(ctx, a.host, a.processor, a.journal, lease, o, owner.Epoch)
 	}
-	if a.native != nil {
+	needHistory, err := shouldPreparePrivateHistory(ctx, a.processor, o, owner.Epoch, in.Payload)
+	if err != nil {
+		return receipt, err
+	}
+	if a.native != nil && needHistory {
 		g := applicationIngress{host: a.host, router: a.router}
 		scanSeq := int64(0)
 		if historyAliasNeedsRefresh(in.Payload) {
 			scanSeq = seq
 		}
-		if err = g.refreshPrivateThreadPolicy(ctx, a.native, a.processor, o, owner.Epoch, scanSeq); err != nil {
+		if err = g.preparePrivateHistory(ctx, a.native, a.processor, o, owner.Epoch, scanSeq); err != nil {
 			return receipt, err
 		}
 	}
@@ -186,6 +190,11 @@ func (a privateApplicationAdmitter) BuildPrivateIngress(ctx context.Context, rec
 		raw, e := ingressmapper.RestoreCard(record.Event)
 		if e != nil {
 			return privatechat.Ingress{}, e
+		}
+		// SDK callbacks may omit chat_id. The resolved message binding above
+		// supplies the authenticated target without changing captured facts.
+		if raw.ChatID == "" && record.Route != nil && record.Route.Message != nil {
+			raw.ChatID = b.ChatID
 		}
 		action, ok = feishu.DecodePrivateCard(raw, o.SurfaceID)
 	case ingressowner.Menu:

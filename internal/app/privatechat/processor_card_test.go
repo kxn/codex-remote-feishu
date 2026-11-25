@@ -14,7 +14,7 @@ import (
 
 type testCardReducer struct{ CoreReducer }
 
-func (testCardReducer) PlanCard(_ *App, _ control.Action, events []eventcontract.Event) (*CardResponse, []eventcontract.Event, error) {
+func (testCardReducer) PlanCard(_ *App, _ control.Action, events []eventcontract.Event, _ bool) (*CardResponse, []eventcontract.Event, error) {
 	return &CardResponse{Version: 1, TargetMessageID: "card", Response: json.RawMessage(`{"card":{"type":"raw","data":{}}}`)}, events, nil
 }
 

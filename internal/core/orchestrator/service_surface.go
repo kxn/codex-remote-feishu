@@ -153,7 +153,20 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 		control.ActionMessageRecalled:
 		return nil
 	default:
-		return notice(surface, headlessPendingNoticeCode(surface.PendingHeadless), headlessPendingNoticeText(surface.PendingHeadless))
+		text := headlessPendingNoticeText(surface.PendingHeadless)
+		if s.config.PrivateApplication && (action.Kind == control.ActionTextMessage || action.Kind == control.ActionImageMessage || action.Kind == control.ActionFileMessage) {
+			text += " 本条消息未发送，请在启动完成后重新发送。"
+		}
+		events := notice(surface, headlessPendingNoticeCode(surface.PendingHeadless), text)
+		operation := eventcontract.OperationRef{Kind: "headless", ID: surface.PendingHeadless.InstanceID}
+		if picker := s.activeTargetPicker(surface); picker != nil && picker.Stage == control.FeishuTargetPickerStageProcessing && normalizeWorkspaceClaimKey(picker.PendingWorkspaceKey) == normalizeWorkspaceClaimKey(surface.PendingHeadless.WorkspaceKey) {
+			operation = eventcontract.OperationRef{Kind: "target-picker", ID: picker.PickerID}
+		}
+		for i := range events {
+			events[i].Meta.Operation = operation
+			events[i].Payload = nil
+		}
+		return events
 	}
 }
 

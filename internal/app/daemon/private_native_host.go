@@ -126,6 +126,9 @@ func (h *privateNativeHost) acceptHello(ctx context.Context, meta relayws.Connec
 			h.connectionEpoch = hex.EncodeToString(nonce[:])
 		}
 		if rec.State == "running" {
+			if err := h.updateThreadCarrier(ctx, h.processor, rec); err != nil {
+				return err
+			}
 			if _, err := h.processor.ApplyAuthenticatedNativeHello(ctx, lease, hello, fmt.Sprintf("%s:%d", h.connectionEpoch, meta.ConnectionID), orchestrator.PrivateNativeProfiles{Codex: rec.CodexProfileID, Claude: rec.ClaudeProfileID, OpenCode: rec.OpenCodeProfileID}); err != nil {
 				return err
 			}

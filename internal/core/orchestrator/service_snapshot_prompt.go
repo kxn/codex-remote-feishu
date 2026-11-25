@@ -223,7 +223,12 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 	if override.Model != "" {
 		effectiveModel = configValue{Value: override.Model, Source: "surface_override"}
 	} else if effectiveModel.Value == "" {
-		if defaultValue := defaultPromptModelForBackend(backend); defaultValue != "" {
+		// A private Codex launch has its own native profile/configuration.
+		// An absent user model must remain absent in the frozen command so
+		// the native backend chooses its actual configured default.
+		if s.config.PrivateApplication && agentproto.NormalizeBackend(backend) == agentproto.BackendCodex {
+			effectiveModel = configValue{Source: "native_default"}
+		} else if defaultValue := defaultPromptModelForBackend(backend); defaultValue != "" {
 			effectiveModel = configValue{Value: defaultValue, Source: "surface_default"}
 		}
 	}

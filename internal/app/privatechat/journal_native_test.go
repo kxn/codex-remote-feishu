@@ -85,7 +85,7 @@ func testNativeCodexReplay(t *testing.T, unknown bool) {
 	if err = json.Unmarshal(frames[0], &first); err != nil {
 		t.Fatal(err)
 	}
-	observed, err := translator.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,"result":{"thread":{"id":"session"}}}`, first.ID)))
+	observed, err := translator.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,"result":{"thread":{"id":"session"},"model":"fixture-model"}}`, first.ID)))
 	if err != nil || len(observed.OutboundToCodex) != 1 {
 		t.Fatalf("thread response: %v", err)
 	}

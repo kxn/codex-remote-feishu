@@ -52,7 +52,7 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceWorktree, "", s.workspacePageParentPayload(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowCommandMenu:
-		return []eventcontract.Event{s.menuPageEvent(surface, intent.RawText, intent.SourceMessageID)}
+		return []eventcontract.Event{s.menuPageEvent(surface, intent.RawText, intent.SourceMessageID, s.config.PrivateApplication && (action.Inbound == nil || !action.Inbound.CardCallback))}
 	case control.FeishuUIIntentShowHistory:
 		return s.openThreadHistory(surface, intent.SourceMessageID, intent.Inline)
 	case control.FeishuUIIntentShowReviewRoot:

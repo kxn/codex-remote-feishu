@@ -124,7 +124,7 @@ func TestCodexNativeAppliedAndFinalAfterAckRestart(t *testing.T) {
 	if err = json.Unmarshal(frames[0], &request); err != nil {
 		t.Fatal(err)
 	}
-	observed, err := translator.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,"result":{"thread":{"id":"thread"},"turn":{"id":"turn"}}}`, request.ID)))
+	observed, err := translator.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,"result":{"thread":{"id":"thread"},"turn":{"id":"turn"},"model":"fixture-model"}}`, request.ID)))
 	turnFrame := frames[0]
 	if err == nil && len(observed.OutboundToCodex) > 0 {
 		turnFrame = observed.OutboundToCodex[0]

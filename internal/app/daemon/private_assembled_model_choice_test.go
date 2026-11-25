@@ -54,7 +54,13 @@ func exerciseAssembledSDKModelChoice(t *testing.T, ctx context.Context, app *App
 				continue
 			}
 			if found := findPrivateModelSubmit(document); found != nil {
-				card, value = op, found
+				// Apply records the physical PATCH before the publisher commits its
+				// receipt and installs the new callback view. An earlier message
+				// receipt alone does not authorize this particular card version.
+				message, err := r.router.PublishedMessage(ctx, "tenant", "app", "private-chat", op.MessageID)
+				if token, ok := found["private_view"].(string); err == nil && ok && message.CardRef == token {
+					card, value = op, found
+				}
 			}
 		}
 		if value != nil {
@@ -64,15 +70,6 @@ func exerciseAssembledSDKModelChoice(t *testing.T, ctx context.Context, app *App
 	}
 	if value == nil {
 		t.Fatal("controlled native model selector missing")
-	}
-	for deadline := time.Now().Add(5 * time.Second); ; {
-		if _, err := r.router.PublishedMessage(ctx, "tenant", "app", "private-chat", card.MessageID); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("model card receipt missing")
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 	beforeSubmit := len(gateway.snapshotOperations())
 	click := platformingress.HumanInteractionEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", EventID: "fixture-model-select", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, ChatID: "private-chat", MessageID: card.MessageID, Kind: "card", Values: value, Form: map[string]any{"command_args_model_preset": "fixture-model"}, ReceivedAt: time.Now()}

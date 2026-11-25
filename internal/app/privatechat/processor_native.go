@@ -316,6 +316,10 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 				return e
 			}
 		}
+		restoredRequest, e := p.restoreRequestInventoryLocked(ctx, l, ref, event)
+		if e != nil {
+			return e
+		}
 		var events []eventcontract.Event
 		if (event.Kind == agentproto.EventThreadHistoryRead || event.Kind == agentproto.EventNativeCommandRejected) && p.app.Service().PrivateReconnectQueryMatches(l.surface.SurfaceID, l.native.InstanceID, event.CommandID) {
 			pending, _ := p.app.Service().PrivateReconnectPendingText(l.surface.SurfaceID)
@@ -345,6 +349,13 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 		if !stopping && event.Kind != agentproto.EventTurnCompleted {
 			events = append(events, p.app.Service().ResumePrivateOfflineStop(l.surface.SurfaceID, l.native.InstanceID)...)
 		}
+		if restoredRequest {
+			events, e = p.appendRequestVisibility(ctx, l.surface, l.generation, events, false)
+			if e != nil {
+				p.poisoned = true
+				return e
+			}
+		}
 		effects, e := p.freezeEffects(l.surface, l.generation, fmt.Sprintf("native:%s:%d", ref.Incarnation, ref.Sequence), events)
 		if e != nil {
 			p.poisoned = true
@@ -354,6 +365,7 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 			p.poisoned = true
 			return e
 		}
+		bindNativePublicationOrder(l.surface, l.generation, ref.Incarnation, event.ThreadID, event.TurnID, events, effects)
 		core, e := p.app.Service().ExportPrivateCheckpoint(l.surface.SurfaceID)
 		if e != nil {
 			p.poisoned = true

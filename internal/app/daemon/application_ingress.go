@@ -120,23 +120,25 @@ func (g *applicationIngress) hook() *feishu.RawIngressHook {
 			if err != nil {
 				return feishu.InteractionResponse{}, err
 			}
-			record, err := g.deliver(ctx, e)
-			if err != nil {
-				return feishu.InteractionResponse{}, err
-			}
-			if record.State == ingressowner.Unresolved && e.Kind == ingressowner.Card && e.CardKind == "private_view" {
-				// A same-card response belongs to this HTTP callback. Background
-				// admission would commit navigation after its response was gone.
-				readCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
-				readErr := g.recoverUnknownPrivateCard(readCtx, e)
-				cancel()
-				if readErr != nil {
-					return feishu.InteractionResponse{RawBody: json.RawMessage(`{"toast":{"type":"info","content":"暂时无法核实这张卡片，菜单未改变。请稍后再点，或发送 /menu 打开菜单。"}}`)}, nil
-				}
-				record, err = g.deliver(ctx, e)
+			var record ingressowner.Record
+			if e.Kind == ingressowner.Card && e.CardKind == "private_view" {
+				record, _, err = g.router.Admit(ctx, e, nil)
 				if err != nil {
 					return feishu.InteractionResponse{}, err
 				}
+				e = record.Event
+				if record.State == ingressowner.Unresolved {
+					readCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+					_, settleErr := g.settlePrivateCardCallback(readCtx, e)
+					cancel()
+					if settleErr != nil {
+						return feishu.InteractionResponse{RawBody: json.RawMessage(`{"toast":{"type":"info","content":"本次点击未执行，菜单未改变。请稍后点击当前卡片。"}}`)}, nil
+					}
+				}
+			}
+			record, err = g.deliver(ctx, e)
+			if err != nil {
+				return feishu.InteractionResponse{}, err
 			}
 			if record.Receipt != nil && record.Receipt.Replacement != nil {
 				current, err := g.router.CallbackResponseCurrent(ctx, record)

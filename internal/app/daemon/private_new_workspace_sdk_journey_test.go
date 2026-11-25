@@ -50,7 +50,14 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	r := app.applications
 	cwd := t.TempDir()
 	app.service.SetPersistedThreadCatalog(newWorkspaceJourneyCatalog{cwd: cwd})
-	setTestWorkBotSettings(t, app, state.BotCapabilitySettingsRecord{GatewayID: "gateway", Backend: agentproto.BackendCodex, CodexProfileID: state.OAuthCodexProfileID})
+	settings := state.BotCapabilitySettingsRecord{GatewayID: "gateway", Backend: agentproto.BackendCodex, CodexProfileID: state.OAuthCodexProfileID}
+	if os.Getenv("PRIVATE_REAL_CODEX_EXISTING_MODEL") == "1" {
+		settings.PromptOverride.Model = os.Getenv("PRIVATE_REAL_CODEX_MODEL")
+		if settings.PromptOverride.Model == "" {
+			t.Fatal("existing model case requires PRIVATE_REAL_CODEX_MODEL")
+		}
+	}
+	setTestWorkBotSettings(t, app, settings)
 	timeout := 10 * time.Second
 	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
 		timeout = 180 * time.Second
@@ -146,6 +153,44 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		_ = r.drainNativeDeliveries(stop)
 	}()
 	raw := platformingress.RawIngressEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", SenderTenant: "tenant", EventID: "list", MessageID: "source", ChatID: "private-chat", ChatType: "p2p", SenderType: "user", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, MessageType: "text", RawContent: `{"text":"/list"}`, ReceivedAt: time.Now()}
+	if os.Getenv("PRIVATE_REAL_CODEX_TOOLS") == "1" {
+		access := raw
+		access.EventID, access.MessageID, access.RawContent = "real-access", "real-access", `{"text":"/access full"}`
+		if e := r.hook.Receive(ctx, access); e != nil {
+			t.Fatal(e)
+		}
+		owner := privatechat.Owner{GatewayID: "gateway", SurfaceID: gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "user"), ChatID: "private-chat", UserID: "user", TenantID: "tenant", AppID: "app"}
+		for {
+			cp, e := r.journal.LoadCheckpoint(ctx, owner, 1)
+			if e == nil && cp.Core.PromptOverride.AccessMode == agentproto.AccessModeFullAccess {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("SDK full access setting did not persist")
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+	}
+	if os.Getenv("PRIVATE_REAL_CODEX_PLAN") == "1" {
+		plan := raw
+		plan.EventID, plan.MessageID, plan.RawContent = "real-plan", "real-plan", `{"text":"/plan on"}`
+		if e := r.hook.Receive(ctx, plan); e != nil {
+			t.Fatal(e)
+		}
+		owner := privatechat.Owner{GatewayID: "gateway", SurfaceID: gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "user"), ChatID: "private-chat", UserID: "user", TenantID: "tenant", AppID: "app"}
+		for {
+			cp, e := r.journal.LoadCheckpoint(ctx, owner, 1)
+			if e == nil && cp.Core.PlanModeOverrideSet && cp.Core.PlanMode == "on" {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("SDK plan setting did not persist")
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+	}
 	if err = r.hook.Receive(ctx, raw); err != nil {
 		t.Fatal(err)
 	}
@@ -276,6 +321,9 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
+	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+		testPrivateRealCodexTwoTurns(t, ctx, r, gateway, app, raw)
+	}
 	owner := privatechat.Owner{GatewayID: "gateway", SurfaceID: surface, ChatID: "private-chat", UserID: "user", TenantID: "tenant", AppID: "app"}
 	effects, e := r.processor.ApplyOwnerDeadline(ctx, owner, 1, "after-fresh-hello", time.Now().Add(time.Minute))
 	if e != nil {
@@ -296,9 +344,6 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	}
 	for _, inst := range final.Instances {
 		if inst.InstanceID == readyInstance && inst.Online {
-			if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
-				testPrivateRealCodexTwoTurns(t, ctx, r, gateway, app, raw)
-			}
 			return
 		}
 	}

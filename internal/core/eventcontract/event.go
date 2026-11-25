@@ -8,7 +8,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 )
 
+// OperationRef names the domain operation that produced a status event. It is
+// captured at production time, never inferred from whichever UI is now active.
+type OperationRef struct{ Kind, ID string }
+
 type EventMeta struct {
+	Operation            OperationRef
 	Target               TargetRef
 	SourceMessageID      string
 	SourceMessagePreview string
@@ -20,6 +25,8 @@ type EventMeta struct {
 }
 
 func (meta EventMeta) Normalized() EventMeta {
+	meta.Operation.Kind = strings.TrimSpace(meta.Operation.Kind)
+	meta.Operation.ID = strings.TrimSpace(meta.Operation.ID)
 	meta.Target = meta.Target.Normalized()
 	meta.SourceMessageID = strings.TrimSpace(meta.SourceMessageID)
 	meta.SourceMessagePreview = strings.TrimSpace(meta.SourceMessagePreview)

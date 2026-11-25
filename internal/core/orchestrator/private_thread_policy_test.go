@@ -91,3 +91,25 @@ func TestPrivateOpenCodeOldVersionVisibleDuringAutoRestore(t *testing.T) {
 		t.Fatal("pending launch not cleared")
 	}
 }
+
+func TestUnavailablePrivateHistoryRemainsClosedWithExactRetiredCarrier(t *testing.T) {
+	s := NewService(nil, Config{PrivateApplication: true}, nil)
+	s.EnablePrivateThreadPolicy()
+	s.SetPrivateThreadPolicy("s", PrivateThreadPolicy{Unavailable: "inventory unavailable"})
+	s.RecordPrivateRetiredSession("s", agentproto.BackendCodex, "old", "namespace", "owned")
+	if s.privateThreadVisible("s", agentproto.BackendCodex, "old", "owned") || s.privateThreadVisible("s", agentproto.BackendCodex, "old", "foreign") {
+		t.Fatal("retired replacement proof exposed history")
+	}
+	p := s.privateThreadPolicies["s"]
+	if !p.ExactRetired[PrivateHistoryKey{Backend: agentproto.BackendCodex, Namespace: "namespace", Session: "owned"}] {
+		t.Fatal("exact retired proof missing")
+	}
+	if p.ExactRetired[PrivateHistoryKey{Backend: agentproto.BackendCodex, Namespace: "namespace", Session: "foreign"}] {
+		t.Fatal("foreign session gained retired proof")
+	}
+	fresh := NewService(nil, Config{PrivateApplication: true}, nil)
+	fresh.RecordPrivateRetiredSession("s", agentproto.BackendCodex, "old", "namespace", "owned")
+	if fresh.privateThreadVisible("s", agentproto.BackendCodex, "old", "foreign") {
+		t.Fatal("retired proof opened unverified catalog")
+	}
+}

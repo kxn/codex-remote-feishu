@@ -19,6 +19,27 @@ type RuntimeInspectionRequest struct {
 	ExpectedProcessGeneration  int64  `json:"expectedProcessGeneration"`
 	ExpectedLocationGeneration int64  `json:"expectedLocationGeneration"`
 	StopBackground             bool   `json:"stopBackground,omitempty"`
+	IncludePendingRequests     bool   `json:"includePendingRequests,omitempty"`
+}
+
+// RuntimePendingRequestInventory is a versioned observation of an exact
+// carrier's durable request stream. Incomplete inventories cannot restore UI.
+type RuntimePendingRequestInventory struct {
+	Version            int                     `json:"version"`
+	Complete           bool                    `json:"complete"`
+	CarrierIncarnation string                  `json:"carrierIncarnation"`
+	InstanceGeneration int64                   `json:"instanceGeneration"`
+	ProcessGeneration  int64                   `json:"processGeneration"`
+	EventSequence      uint64                  `json:"eventSequence"`
+	Requests           []RuntimePendingRequest `json:"requests"`
+}
+
+type RuntimePendingRequest struct {
+	RequestID       string `json:"requestId"`
+	ThreadID        string `json:"threadId"`
+	TurnID          string `json:"turnId"`
+	StartedSequence uint64 `json:"startedSequence"`
+	StartedHash     string `json:"startedHash"`
 }
 
 type RPCProbe struct {
@@ -44,22 +65,23 @@ type BackgroundInspection struct {
 }
 
 type RuntimeInspectionResult struct {
-	NativeWriteWatermark int64                   `json:"nativeWriteWatermark"`
-	InstanceGeneration   int64                   `json:"instanceGeneration"`
-	ProcessGeneration    int64                   `json:"processGeneration"`
-	LocationGeneration   int64                   `json:"locationGeneration"`
-	Bootstrap            RPCProbe                `json:"bootstrap"`
-	OwnerScope           *RuntimeOwnerInspection `json:"ownerScope,omitempty"`
-	Version              int                     `json:"version"`
-	RequestCommandID     string                  `json:"requestCommandId"`
-	CarrierIncarnation   string                  `json:"carrierIncarnation"`
-	Native               RPCProbe                `json:"native"`
-	Continuation         RPCProbe                `json:"continuation"`
-	StreamTerminal       *Event                  `json:"streamTerminal,omitempty"`
-	NativeRejection      *Event                  `json:"nativeRejection,omitempty"`
-	Background           BackgroundInspection    `json:"background"`
-	ObservedAt           time.Time               `json:"observedAt"`
-	Problem              *ErrorInfo              `json:"problem,omitempty"`
+	PendingRequests      *RuntimePendingRequestInventory `json:"pendingRequests,omitempty"`
+	NativeWriteWatermark int64                           `json:"nativeWriteWatermark"`
+	InstanceGeneration   int64                           `json:"instanceGeneration"`
+	ProcessGeneration    int64                           `json:"processGeneration"`
+	LocationGeneration   int64                           `json:"locationGeneration"`
+	Bootstrap            RPCProbe                        `json:"bootstrap"`
+	OwnerScope           *RuntimeOwnerInspection         `json:"ownerScope,omitempty"`
+	Version              int                             `json:"version"`
+	RequestCommandID     string                          `json:"requestCommandId"`
+	CarrierIncarnation   string                          `json:"carrierIncarnation"`
+	Native               RPCProbe                        `json:"native"`
+	Continuation         RPCProbe                        `json:"continuation"`
+	StreamTerminal       *Event                          `json:"streamTerminal,omitempty"`
+	NativeRejection      *Event                          `json:"nativeRejection,omitempty"`
+	Background           BackgroundInspection            `json:"background"`
+	ObservedAt           time.Time                       `json:"observedAt"`
+	Problem              *ErrorInfo                      `json:"problem,omitempty"`
 }
 
 type RuntimeOwnerInspection struct {

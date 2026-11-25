@@ -24,11 +24,9 @@ func (r *privateWorkRunner) runOwnerDeadlines(ctx context.Context) error {
 			// Only exact proven-unsent input can initiate this recovery.
 			checkpoint, checkpointErr := r.journal.LoadCheckpoint(ctx, owner.Owner, owner.Generation)
 			if checkpointErr == nil && len(checkpoint.Core.QueuedQueueItemIDs) > 0 && checkpoint.Core.ActiveQueueItemID == "" && retiredCheckpointHasTarget(checkpoint.Core) && r.native != nil {
-				if e := r.ingress.refreshPrivateThreadPolicy(ctx, r.native, r.processor, owner.Owner, owner.Generation); e == nil {
-					proven, proofErr := r.processor.QueuedRecoveryProven(ctx, owner.Owner, owner.Generation)
-					if proofErr == nil && proven {
-						_, _ = r.prepareRetiredRuntime(ctx, owner.Owner, owner.Generation)
-					}
+				proven, proofErr := r.processor.QueuedRecoveryProven(ctx, owner.Owner, owner.Generation)
+				if proofErr == nil && proven {
+					_, _ = r.prepareRetiredRuntime(ctx, owner.Owner, owner.Generation)
 				}
 			}
 			now := time.Now().UTC().Truncate(time.Second)

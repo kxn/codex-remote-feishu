@@ -102,6 +102,7 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 			p.poisoned = true
 			return e
 		}
+		bindNativePublicationOrder(l.surface, l.generation, ref.Incarnation, event.ThreadID, event.TurnID, events, effects)
 		core, e := p.app.Service().ExportPrivateCheckpoint(l.surface.SurfaceID)
 		if e != nil {
 			p.poisoned = true

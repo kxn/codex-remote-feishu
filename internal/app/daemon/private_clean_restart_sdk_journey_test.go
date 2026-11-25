@@ -484,7 +484,7 @@ func TestPrivateCleanRestartCodexProcess(t *testing.T) {
 			write(`{"id":%q,"result":{}}`+"\n", f.ID)
 		case "thread/start", "thread/resume":
 			cwd, _ := os.Getwd()
-			write(`{"id":%q,"result":{"thread":{"id":"session","cwd":%q}}}`+"\n", f.ID, cwd)
+			write(`{"id":%q,"result":{"model":"fixture-model","thread":{"id":"session","cwd":%q}}}`+"\n", f.ID, cwd)
 		case "turn/start":
 			turns++
 			turn := fmt.Sprintf("turn-%d", turns)

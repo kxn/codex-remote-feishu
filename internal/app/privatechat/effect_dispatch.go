@@ -73,7 +73,7 @@ func (l *NativeLease) PrepareEffectDispatch(ctx context.Context, effectID string
 			}
 		case agentproto.CommandTurnSteer, agentproto.CommandThreadShellCommand:
 			d.Lane = "input"
-		case agentproto.CommandThreadsRefresh, agentproto.CommandThreadHistoryRead, agentproto.CommandModelList, agentproto.CommandThreadRead, agentproto.CommandThreadGoalGet:
+		case agentproto.CommandThreadsRefresh, agentproto.CommandThreadHistoryRead, agentproto.CommandModelList, agentproto.CommandThreadRead, agentproto.CommandThreadGoalGet, agentproto.CommandRuntimeInspect:
 			d.Lane = "inspect"
 		}
 		if d.Lane == "input" && (inputs == nil || len(inputs.Items) == 0) {

@@ -84,6 +84,9 @@ func TestLegacyEffectReplayKeepsStoredID(t *testing.T) {
 	}
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%d", o.TenantID, o.AppID, "host-lifecycle:same", 0)))
 	legacy := "private-effect:" + hex.EncodeToString(sum[:])
+	if _, err = j.db.Exec(`DELETE FROM private_publication_order WHERE effect_id=?`, result[0].Effect.Effect.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = j.db.Exec(`UPDATE private_effect SET id=? WHERE id=?`, legacy, result[0].Effect.Effect.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +100,7 @@ func TestLegacyEffectReplayKeepsStoredID(t *testing.T) {
 	}
 	replay, err := p.ApplyHostLifecycle(context.Background(), "same", at, reducer)
 	if err != nil || len(replay) != 1 || replay[0].Effect.Effect.ID != legacy || calls != 1 {
-		t.Fatalf("legacy replay %v %v calls=%d", replay, err, calls)
+		t.Fatalf("legacy replay count=%d err=%v calls=%d", len(replay), err, calls)
 	}
 }
 

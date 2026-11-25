@@ -26,10 +26,13 @@ type Initiator struct {
 type TurnCompletionOrigin string
 
 const (
-	TurnCompletionOriginRuntime              TurnCompletionOrigin = "runtime"
-	TurnCompletionOriginTurnStartRejected    TurnCompletionOrigin = "turn_start_rejected"
-	TurnCompletionOriginThreadStartRejected  TurnCompletionOrigin = "thread_start_rejected"
-	TurnCompletionOriginThreadResumeRejected TurnCompletionOrigin = "thread_resume_rejected"
+	TurnCompletionOriginRuntime                  TurnCompletionOrigin = "runtime"
+	TurnCompletionOriginTurnStartRejected        TurnCompletionOrigin = "turn_start_rejected"
+	TurnCompletionOriginThreadStartRejected      TurnCompletionOrigin = "thread_start_rejected"
+	TurnCompletionOriginThreadStartMissingModel  TurnCompletionOrigin = "thread_start_missing_model"
+	TurnCompletionOriginThreadForkMissingModel   TurnCompletionOrigin = "thread_fork_missing_model"
+	TurnCompletionOriginThreadResumeMissingModel TurnCompletionOrigin = "thread_resume_missing_model"
+	TurnCompletionOriginThreadResumeRejected     TurnCompletionOrigin = "thread_resume_rejected"
 )
 
 type EventKind string

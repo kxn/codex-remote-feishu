@@ -151,6 +151,11 @@ func (s *Service) buildCommandConfigViewForAction(surface *state.SurfaceConsoleR
 }
 
 func (s *Service) openConfigCommandPageForAction(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
+	// A new private command opens an independent card. Only a callback from
+	// the current card continues its launcher flow and publication order.
+	if s.config.PrivateApplication && (action.Inbound == nil || !action.Inbound.CardCallback) && s.activeCommandLauncherFlow(surface) != nil {
+		s.clearSurfaceOwnerCardFlow(surface)
+	}
 	view := s.buildCommandConfigViewForAction(surface, action, control.FeishuCatalogConfigView{
 		FormCursor:       action.Cursor,
 		FormDefaultValue: actionCommandArgumentText(action),

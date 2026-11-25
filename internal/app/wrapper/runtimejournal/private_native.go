@@ -35,6 +35,8 @@ func (s *Store) BindPrivateLaunchSnapshot(snapshot agentproto.PrivateNativeLaunc
 	}
 	s.displayMu.Lock()
 	s.privateLive = true
+	owner := snapshot.Owner
+	s.privateOwner = &owner
 	s.displayMu.Unlock()
 	return nil
 }

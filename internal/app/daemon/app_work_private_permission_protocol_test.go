@@ -33,7 +33,7 @@ func TestPrivateDefaultFullReachesCodexResumedTurnAndClaudePermissionProtocol(t 
 	if resume["method"] != "thread/resume" || params["threadId"] != "existing" || params["developerInstructions"] != "updated private memory" {
 		t.Fatal("resume lost original history or new memory")
 	}
-	result, err := tr.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,"result":{"thread":{"id":"existing"}}}`, resume["id"])))
+	result, err := tr.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,"result":{"thread":{"id":"existing"},"model":"fixture-model"}}`, resume["id"])))
 	if err != nil {
 		t.Fatal(err)
 	}

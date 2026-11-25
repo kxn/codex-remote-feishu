@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -43,7 +44,7 @@ type ObservationReducer interface {
 // CardPlanner is a pure host projection. The returned response is committed
 // with the applied input before it can be returned to the platform.
 type CardPlanner interface {
-	PlanCard(*App, control.Action, []eventcontract.Event) (*CardResponse, []eventcontract.Event, error)
+	PlanCard(*App, control.Action, []eventcontract.Event, bool) (*CardResponse, []eventcontract.Event, error)
 }
 type CoreReducer struct{}
 
@@ -56,13 +57,15 @@ func (CoreReducer) ReduceObservation(a *App, action control.Action) ([]eventcont
 
 type processorOwner struct{ revision, cursor, generation int64 }
 type Processor struct {
-	mu       sync.Mutex
-	app      *App
-	journal  *Journal
-	decoder  IngressDecoder
-	reducer  Reducer
-	owners   map[Owner]processorOwner
-	poisoned bool
+	mu                          sync.Mutex
+	app                         *App
+	journal                     *Journal
+	decoder                     IngressDecoder
+	reducer                     Reducer
+	owners                      map[Owner]processorOwner
+	poisoned                    bool
+	requestInventoryRetry       map[string]time.Time
+	requestInventoryUnsupported map[Owner]bool
 }
 
 // NewProcessor takes exclusive ownership of a fresh app. No host code may call
@@ -244,9 +247,23 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 			return nil, ErrRecoveryHeld
 		}
 	}
+	requestEmitted := false
+	for _, event := range events {
+		if event.RequestView != nil {
+			requestEmitted = true
+			break
+		}
+	}
 	var card *CardResponse
 	if planner, ok := p.reducer.(CardPlanner); ok {
-		card, events, err = planner.PlanCard(p.app, action, events)
+		deferReplacement := false
+		if action.Inbound != nil && action.Inbound.CardCallback && action.Inbound.OpenMessageID != "" {
+			deferReplacement, err = p.journal.HasUnsettledCardWrite(ctx, o, generation, action.Inbound.OpenMessageID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		card, events, err = planner.PlanCard(p.app, action, events, deferReplacement)
 		if err != nil {
 			p.poisoned = true
 			return nil, fmt.Errorf("%w: card plan: %v", ErrProcessorPoisoned, err)
@@ -254,6 +271,14 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 	}
 	if card != nil {
 		p.app.Service().RecordPrivateModelCardResponse(o.SurfaceID, seq, card.TargetMessageID, card.ViewToken)
+	}
+	events, err = p.appendRequestVisibility(ctx, o, generation, events, requestEmitted)
+	if err != nil {
+		p.poisoned = true
+		return nil, fmt.Errorf("%w: request visibility: %v", ErrProcessorPoisoned, err)
+	}
+	if action.Kind == control.ActionStatus && p.requestInventoryUnsupported[o] {
+		events = append(events, eventcontract.Event{Kind: eventcontract.KindNotice, GatewayID: o.GatewayID, SurfaceSessionID: o.SurfaceID, Notice: &control.Notice{Code: "private_request_inventory_unsupported", Title: "待确认请求", Text: "当前运行器无法核验重启前的请求。请更新运行器后重连，或使用 /detach 离开旧会话；未确认的操作不会自动重发。"}})
 	}
 	effects, err := p.freezeEffects(o, generation, fmt.Sprintf("ingress:%d", seq), events)
 	if err != nil {
@@ -440,7 +465,15 @@ func (p *Processor) freezeEffects(o Owner, generation int64, key string, events 
 		if event.Command != nil || event.DaemonCommand != nil {
 			lane = "background"
 		}
-		effects = append(effects, Effect{ID: effectID, Lane: lane, Body: body, DisplayKey: explicitCardDisplayKey(o, event)})
+		var order []string
+		if lane == "interactive" {
+			order = publicationOrderKeys(o, generation, append(p.app.Service().PrivatePublicationOrderScopes(o.SurfaceID, event), publicationEpisode(event)+":"+key))
+		}
+		display := explicitCardDisplayKey(o, event)
+		if display != "" {
+			order = append(order, publicationOrderKeys(o, generation, []string{"display:" + display})...)
+		}
+		effects = append(effects, Effect{ID: effectID, Lane: lane, Body: body, DisplayKey: display, OrderKeys: order})
 	}
 	return effects, nil
 }

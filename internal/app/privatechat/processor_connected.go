@@ -140,6 +140,14 @@ func (p *Processor) applyNativeConnectedLocked(ctx context.Context, l *NativeLea
 			return nil, resumeErr
 		}
 		events = append(events, resumed...)
+		if held, ok := p.app.Service().PrivateRecoveryCheckpoint(l.surface.SurfaceID); ok {
+			for _, hold := range held.Holds {
+				if hold.Kind == "requests" && hold.InstanceID == l.native.InstanceID {
+					events = append(events, requestInventoryEvent(l))
+					break
+				}
+			}
+		}
 	}
 	effects, err := p.freezeEffects(l.surface, l.generation, "native-connect:"+l.native.CarrierIncarnation+":"+connectionID, events)
 	if err != nil {

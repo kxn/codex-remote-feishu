@@ -21,10 +21,11 @@ type privatePublicationBinding struct {
 	bindingFor func(context.Context, privatechat.Owner, int64) (ingressowner.PrivateBinding, error)
 }
 type privatePublicationProof struct {
-	Owner      privatechat.Owner `json:"owner"`
-	Generation int64             `json:"generation"`
-	EffectID   string            `json:"effect_id"`
-	Ordinal    int               `json:"ordinal"`
+	Owner              privatechat.Owner `json:"owner"`
+	Generation         int64             `json:"generation"`
+	EffectID           string            `json:"effect_id"`
+	Ordinal            int               `json:"ordinal"`
+	CallbackSettlement bool              `json:"callback_settlement,omitempty"`
 }
 
 func (p *privatePublicationBinding) CheckPrivateModelView(ctx context.Context, o privatechat.Owner, generation int64, message, token, sourceEventID string) (bool, bool, error) {
@@ -74,6 +75,10 @@ func (p *privatePublicationBinding) PrepareOperation(ctx context.Context, o priv
 	return stamped, err
 }
 func (p *privatePublicationBinding) ConfirmOperation(ctx context.Context, o privatechat.Owner, generation int64, effectID string, ordinal int) error {
+	return p.confirmOperation(ctx, o, generation, effectID, ordinal, false)
+}
+
+func (p *privatePublicationBinding) confirmOperation(ctx context.Context, o privatechat.Owner, generation int64, effectID string, ordinal int, callbackSettlement bool) error {
 	b, err := p.binding(ctx, o, generation)
 	if err != nil {
 		return err
@@ -128,7 +133,7 @@ func (p *privatePublicationBinding) ConfirmOperation(ctx context.Context, o priv
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	proof, _ := json.Marshal(privatePublicationProof{Owner: o, Generation: generation, EffectID: effectID, Ordinal: ordinal})
+	proof, _ := json.Marshal(privatePublicationProof{Owner: o, Generation: generation, EffectID: effectID, Ordinal: ordinal, CallbackSettlement: callbackSettlement})
 	return p.router.RecordPublished(ctx, message, proof, expected)
 }
 
@@ -139,6 +144,15 @@ func (p *privatePublicationBinding) VerifyPlatformReceipt(ctx context.Context, m
 	var ref privatePublicationProof
 	if json.Unmarshal(proof, &ref) != nil {
 		return ingressowner.ErrInvalid
+	}
+	if ref.CallbackSettlement {
+		eligible, err := p.journal.CallbackPublicationEligible(ctx, ref.Owner, ref.Generation, ref.EffectID, ref.Ordinal, m.MessageID)
+		if err != nil {
+			return err
+		}
+		if !eligible {
+			return ingressowner.ErrConflict
+		}
 	}
 	b, err := p.binding(ctx, ref.Owner, ref.Generation)
 	if err != nil {

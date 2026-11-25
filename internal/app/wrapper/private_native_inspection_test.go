@@ -14,6 +14,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/nativeinspection"
 )
 
 func TestPrivateNativeInspectionRealChild(t *testing.T) {
@@ -148,6 +149,17 @@ func testPrivateNativeInspectionRealChild(t *testing.T, active, background bool)
 		t.Fatalf("inspection: %s", raw)
 	}
 	value := event.RuntimeInspection
+	requestOnly := command
+	requestCopy := *command.RuntimeInspection
+	requestCopy.IncludePendingRequests = true
+	requestOnly.RuntimeInspection = &requestCopy
+	requestEvent := app.inspectNative(ctx, requestOnly, nil)
+	if requestEvent.RuntimeInspection.Problem != nil || requestEvent.RuntimeInspection.OwnerScope != nil || requestEvent.RuntimeInspection.PendingRequests == nil || !requestEvent.RuntimeInspection.PendingRequests.Complete || len(requestEvent.RuntimeInspection.PendingRequests.Requests) != 0 {
+		t.Fatalf("pending request inventory: %+v", requestEvent.RuntimeInspection)
+	}
+	if nativeinspection.VerifyPrivateOwnerStopped(owner, *requestEvent.RuntimeInspection) == nil {
+		t.Fatal("request-only inventory accepted as stopped proof")
+	}
 	if value.CarrierIncarnation != "inc" || value.LocationGeneration != 0 || value.NativeWriteWatermark <= 0 || value.OwnerScope == nil || len(value.OwnerScope.Sessions) != 1 || value.OwnerScope.Sessions[0].SessionID != "session" {
 		t.Fatalf("bad owner inventory: %+v", value)
 	}
@@ -168,6 +180,7 @@ func testPrivateNativeInspectionRealChild(t *testing.T, active, background bool)
 		stop.CommandID = "inspect-stop"
 		request := *command.RuntimeInspection
 		request.StopBackground = true
+		request.IncludePendingRequests = false
 		stop.RuntimeInspection = &request
 		if _, err = app.prepareJournalCommand(stop); err != nil {
 			t.Fatal(err)

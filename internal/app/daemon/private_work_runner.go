@@ -110,12 +110,18 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			if readErr != nil {
 				continue
 			}
-			scanSeq := int64(0)
-			if historyAliasNeedsRefresh(entry.Ingress.Payload) {
-				scanSeq = item.Sequence
-			}
-			if err = r.ingress.refreshPrivateThreadPolicy(ctx, r.native, r.processor, item.Owner, item.Generation, scanSeq); err != nil {
+			needHistory, historyErr := shouldPreparePrivateHistory(ctx, r.processor, item.Owner, item.Generation, entry.Ingress.Payload)
+			if historyErr != nil {
 				continue
+			}
+			if needHistory {
+				scanSeq := int64(0)
+				if historyAliasNeedsRefresh(entry.Ingress.Payload) {
+					scanSeq = item.Sequence
+				}
+				if err = r.ingress.preparePrivateHistory(ctx, r.native, r.processor, item.Owner, item.Generation, scanSeq); err != nil {
+					continue
+				}
 			}
 			if item.Lane == "input" {
 				recovering, recoveryErr := r.prepareRetiredRuntime(ctx, item.Owner, item.Generation)
@@ -161,7 +167,7 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			if e != nil {
 				continue
 			}
-			if e = r.ingress.refreshPrivateThreadPolicy(ctx, r.native, r.processor, rec.Surface, rec.SurfaceGeneration); e != nil {
+			if e = r.native.updateThreadCarrier(ctx, r.processor, rec); e != nil {
 				continue
 			}
 			pending, e := lease.PendingNativeEvents(ctx, 0, 128)

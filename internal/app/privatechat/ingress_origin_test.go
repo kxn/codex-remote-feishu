@@ -20,7 +20,7 @@ func TestOriginOpenExistingSchemaFixture(t *testing.T) {
 	}
 	defer j.Close()
 	var version, columns int
-	if err = j.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 8 {
+	if err = j.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
 		t.Fatalf("schema version=%d err=%v", version, err)
 	}
 	if err = j.db.QueryRow(`SELECT count(*) FROM pragma_table_info('ingress') WHERE name IN ('origin_router','origin_seq')`).Scan(&columns); err != nil || columns != 2 {

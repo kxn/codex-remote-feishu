@@ -39,6 +39,7 @@ func TestRetiredRebuildNativeHelper(t *testing.T) {
 		switch request.Method {
 		case "thread/start", "thread/resume":
 			result["thread"] = map[string]any{"id": "native-history"}
+			result["model"] = "fixture-model"
 		case "turn/start":
 			turns++
 			result["turn"] = map[string]any{"id": fmt.Sprintf("native-turn-%d", turns), "status": "completed", "text": fmt.Sprintf("native control response %d", turns)}

@@ -789,6 +789,20 @@ func (s *Service) ReplayActivePendingRequestVisibility(surfaceID string) []event
 	return s.replayActivePendingRequestVisibility(surface, "")
 }
 
+// PendingRequestVisibilityID reports a replay candidate without changing its
+// delivery counters. The private processor uses it to check durable outbox
+// evidence before creating any additional platform effect.
+func (s *Service) PendingRequestVisibilityID(surfaceID string) string {
+	if s == nil {
+		return ""
+	}
+	request := s.activePendingRequestNeedingVisibility(s.root.Surfaces[strings.TrimSpace(surfaceID)])
+	if request == nil {
+		return ""
+	}
+	return strings.TrimSpace(request.RequestID)
+}
+
 func (s *Service) requestPromptInlinePhaseEvent(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord, threadTitleHint string, phase frontstagecontract.Phase, statusText string) eventcontract.Event {
 	view := s.requestPromptView(record, threadTitleHint)
 	view.Phase = phase

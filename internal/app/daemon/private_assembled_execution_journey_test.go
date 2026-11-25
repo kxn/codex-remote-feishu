@@ -34,7 +34,7 @@ func TestPrivateAssembledSDKExecutionJourney(t *testing.T) {
 		t.Run(string(backend), func(t *testing.T) { testPrivateAssembledSDKExecutionJourney(t, backend) })
 	}
 }
-func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Backend) {
+func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Backend, brokenHistory ...bool) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture uses a POSIX executable")
 	}
@@ -222,32 +222,39 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 		t.Fatal(e)
 	}
 	if backend == agentproto.BackendCodex {
-		exerciseAssembledSDKSendFile(t, ctx, app, gateway, raw, cwd, sentFiles)
-		before := len(gateway.snapshotOperations())
-		send("model-menu", "/model")
-		foundModel := false
-		modelCardID := ""
-		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
-			for _, op := range gateway.snapshotOperations()[before:] {
-				if modelCardID == "" && op.Kind == feishu.OperationSendCard && op.MessageID != "" {
-					modelCardID = op.MessageID
+		degrade := len(brokenHistory) > 0 && brokenHistory[0]
+		if !degrade {
+			exerciseAssembledSDKSendFile(t, ctx, app, gateway, raw, cwd, sentFiles)
+			before := len(gateway.snapshotOperations())
+			send("model-menu", "/model")
+			foundModel := false
+			modelCardID := ""
+			for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+				for _, op := range gateway.snapshotOperations()[before:] {
+					if modelCardID == "" && op.Kind == feishu.OperationSendCard && op.MessageID != "" {
+						modelCardID = op.MessageID
+					}
+					body, e := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
+					if e == nil && op.Kind == feishu.OperationUpdateCard && op.MessageID == modelCardID && modelCardID != "" && strings.Contains(string(body), "Fixture Model") {
+						foundModel = true
+						break
+					}
 				}
-				body, e := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
-				if e == nil && op.Kind == feishu.OperationUpdateCard && op.MessageID == modelCardID && modelCardID != "" && strings.Contains(string(body), "Fixture Model") {
-					foundModel = true
+				if foundModel {
 					break
 				}
+				time.Sleep(10 * time.Millisecond)
 			}
-			if foundModel {
-				break
+			if !foundModel {
+				t.Logf("model picker operations: %+v", gateway.snapshotOperations()[before:])
+				t.Fatal("native model catalog missing from SDK model picker")
 			}
-			time.Sleep(10 * time.Millisecond)
+			exerciseAssembledSDKModelChoice(t, ctx, app, gateway, before)
 		}
-		if !foundModel {
-			t.Logf("model picker operations: %+v", gateway.snapshotOperations()[before:])
-			t.Fatal("native model catalog missing from SDK model picker")
+		if degrade {
+			r.native.teamHistory = nil
 		}
-		exerciseAssembledSDKModelChoice(t, ctx, app, gateway, before)
+		beforeFinal := len(gateway.snapshotOperations())
 		send("seed", "establish session")
 		for {
 			checkpoint, e := r.journal.LoadCheckpoint(ctx, o, epoch)
@@ -265,6 +272,48 @@ func testPrivateAssembledSDKExecutionJourney(t *testing.T, backend agentproto.Ba
 				t.Fatal("initial session did not finish")
 			case <-time.After(10 * time.Millisecond):
 			}
+		}
+		if degrade {
+			found := false
+			for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+				for _, op := range gateway.snapshotOperations()[beforeFinal:] {
+					body, _ := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
+					if strings.Contains(string(body), "done") {
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				t.Fatal("native final did not reach publisher while history unavailable")
+			}
+			send("continue-with-broken-history", "second message")
+			for {
+				saved, e := r.native.store.lookup(ctx, owner.InstanceID)
+				if e != nil {
+					t.Fatal(e)
+				}
+				lease, e := r.native.lease(ctx, saved, nil)
+				if e != nil {
+					t.Fatal(e)
+				}
+				turns, e := lease.ActiveAcceptedTurns(ctx)
+				if e != nil {
+					t.Fatal(e)
+				}
+				if len(turns) > 0 && turns[0].SessionID == "session" {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					t.Fatal("existing private session did not accept next input")
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+			return
 		}
 		status, e := r.processor.ReadRuntimeStatus(ctx)
 		if e != nil {
@@ -777,4 +826,8 @@ func testPrivateSDKRestart(t *testing.T, ctx context.Context, old *App, gateway 
 	if bytes.Count(traceData, []byte(`"method":"turn/start"`)) != 4 || bytes.Count(traceData, []byte(`"method":"turn/steer"`)) != 1 {
 		t.Fatal("restart replayed a native message")
 	}
+}
+
+func TestPrivateSDKNativeFinalWithUnavailableTeamHistory(t *testing.T) {
+	testPrivateAssembledSDKExecutionJourney(t, agentproto.BackendCodex, true)
 }

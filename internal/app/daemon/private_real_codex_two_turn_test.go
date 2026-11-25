@@ -20,51 +20,53 @@ import (
 func testPrivateRealCodexTwoTurns(t *testing.T, ctx context.Context, r *applicationRuntime, gateway *messageIDAssigningGateway, app *App, raw platformingress.RawIngressEnvelope) {
 	t.Helper()
 	model := os.Getenv("PRIVATE_REAL_CODEX_MODEL")
-	if model == "" {
+	if model == "" && os.Getenv("PRIVATE_REAL_CODEX_NATIVE_DEFAULT") != "1" {
 		t.Fatal("set PRIVATE_REAL_CODEX_MODEL to a model listed by the account")
 	}
 	before := len(gateway.snapshotOperations())
-	raw.EventID, raw.MessageID, raw.RawContent = "real-model-list", "real-model-list", `{"text":"/model"}`
-	if err := r.hook.Receive(ctx, raw); err != nil {
-		t.Fatal(err)
-	}
-	var card feishu.Operation
-	var value map[string]any
-	for value == nil {
-		for _, op := range gateway.snapshotOperations()[before:] {
-			body, _ := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
-			if !strings.Contains(string(body), model) {
-				continue
+	if os.Getenv("PRIVATE_REAL_CODEX_EXISTING_MODEL") != "1" && os.Getenv("PRIVATE_REAL_CODEX_NATIVE_DEFAULT") != "1" {
+		raw.EventID, raw.MessageID, raw.RawContent = "real-model-list", "real-model-list", `{"text":"/model"}`
+		if err := r.hook.Receive(ctx, raw); err != nil {
+			t.Fatal(err)
+		}
+		var card feishu.Operation
+		var value map[string]any
+		for value == nil {
+			for _, op := range gateway.snapshotOperations()[before:] {
+				body, _ := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
+				if !strings.Contains(string(body), model) {
+					continue
+				}
+				var doc any
+				if json.Unmarshal(body, &doc) == nil {
+					if hit := findPrivateModelSubmit(doc); hit != nil {
+						card, value = op, hit
+						break
+					}
+				}
 			}
-			var doc any
-			if json.Unmarshal(body, &doc) == nil {
-				if hit := findPrivateModelSubmit(doc); hit != nil {
-					card, value = op, hit
-					break
+			if value == nil {
+				select {
+				case <-ctx.Done():
+					t.Fatal("real native model catalog did not offer selected model")
+				case <-time.After(100 * time.Millisecond):
 				}
 			}
 		}
-		if value == nil {
+		click := platformingress.HumanInteractionEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", EventID: "real-model-select", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, ChatID: "private-chat", MessageID: card.MessageID, Kind: "card", Values: value, Form: map[string]any{"command_args_model_preset": model}, ReceivedAt: time.Now()}
+		if _, err := r.hook.ReceiveInteractionResponse(ctx, click); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			settings, err := app.readPrivateBotSettings("gateway", "app")
+			if err == nil && settings.Record.PromptOverride.Model == model {
+				break
+			}
 			select {
 			case <-ctx.Done():
-				t.Fatal("real native model catalog did not offer selected model")
+				t.Fatal("model selection did not persist")
 			case <-time.After(100 * time.Millisecond):
 			}
-		}
-	}
-	click := platformingress.HumanInteractionEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", EventID: "real-model-select", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, ChatID: "private-chat", MessageID: card.MessageID, Kind: "card", Values: value, Form: map[string]any{"command_args_model_preset": model}, ReceivedAt: time.Now()}
-	if _, err := r.hook.ReceiveInteractionResponse(ctx, click); err != nil {
-		t.Fatal(err)
-	}
-	for {
-		settings, err := app.readPrivateBotSettings("gateway", "app")
-		if err == nil && settings.Record.PromptOverride.Model == model {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatal("model selection did not persist")
-		case <-time.After(100 * time.Millisecond):
 		}
 	}
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?mode=ro")
@@ -73,6 +75,9 @@ func testPrivateRealCodexTwoTurns(t *testing.T, ctx context.Context, r *applicat
 	}
 	defer db.Close()
 	prompts := []string{"请只回复 BOREAL，不使用任何工具。", "上一条回复的英文单词是什么？只回复该单词，不使用任何工具。"}
+	if os.Getenv("PRIVATE_REAL_CODEX_TOOLS") == "1" {
+		prompts = append(prompts, "请使用工具在当前工作目录创建文件 uat-proof.txt，文件内容恰为 PRIVATE_UAT_OK。再实际读取这个文件核对内容。完成后只回复 BOREAL。")
+	}
 	var session, previousTurn string
 	for i, prompt := range prompts {
 		before = len(gateway.snapshotOperations())
@@ -121,6 +126,27 @@ func testPrivateRealCodexTwoTurns(t *testing.T, ctx context.Context, r *applicat
 							}
 						}
 						if confirmed > 0 && displayed {
+							if i == 2 && os.Getenv("PRIVATE_REAL_CODEX_TOOLS") == "1" {
+								var cpRaw []byte
+								if e = db.QueryRowContext(ctx, `SELECT data FROM private_checkpoint LIMIT 1`).Scan(&cpRaw); e != nil {
+									t.Fatal(e)
+								}
+								var cp struct {
+									PreparedThreadCWD  string
+									HistoricalInstance *struct{ WorkspaceRoot string }
+								}
+								if e = json.Unmarshal(cpRaw, &cp); e != nil {
+									t.Fatal(e)
+								}
+								cwd := cp.PreparedThreadCWD
+								if cwd == "" && cp.HistoricalInstance != nil {
+									cwd = cp.HistoricalInstance.WorkspaceRoot
+								}
+								proof, e := os.ReadFile(filepath.Join(cwd, "uat-proof.txt"))
+								if e != nil || strings.TrimSpace(string(proof)) != "PRIVATE_UAT_OK" {
+									t.Fatalf("native file tool proof absent: %v", e)
+								}
+							}
 							session, previousTurn = thread, turn
 							t.Logf("turn %d completed with confirmed assistant reply on same native session", i+1)
 							break

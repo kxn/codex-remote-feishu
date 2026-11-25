@@ -247,6 +247,16 @@ func (s *Service) PrivateRecoveryActionAllowed(action control.Action) bool {
 }
 
 func (s *Service) privateRecoveryLocalAction(action control.Action) bool {
+	// A restored live request can be answered while its turn remains held. The
+	// private processor only restores this record after exact carrier inventory
+	// proof; the ordinary request handler still validates the card revision.
+	if action.Kind == control.ActionRespondRequest && action.Request != nil {
+		if surface := s.root.Surfaces[action.SurfaceSessionID]; surface != nil {
+			if request := surface.PendingRequests[action.Request.RequestID]; request != nil && request.InstanceID == surface.AttachedInstanceID {
+				return true
+			}
+		}
+	}
 	if action.Kind == control.ActionAccessCommand {
 		if surface := s.root.Surfaces[action.SurfaceSessionID]; surface != nil && s.surfaceBackend(surface) != agentproto.BackendOpenCode {
 			return true

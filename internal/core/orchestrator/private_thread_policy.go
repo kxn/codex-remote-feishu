@@ -1,7 +1,10 @@
 package orchestrator
 
 import (
+	"strings"
+
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -10,6 +13,8 @@ type PrivateHistoryKey struct {
 	Namespace, Session string
 }
 type PrivateThreadPolicy struct {
+	ExactRetired       map[PrivateHistoryKey]bool
+	Unavailable        string
 	InstanceNamespaces map[string]string
 	InstanceProfiles   map[string]string
 	LegacyProfile      string
@@ -37,6 +42,62 @@ func (s *Service) SetPrivateThreadPolicy(surface string, policy PrivateThreadPol
 	}
 	s.privateThreadPolicies[surface] = policy
 }
+
+// UpdatePrivateThreadCarrier only records the exact authenticated carrier. It
+// deliberately does not establish authority to enumerate native history.
+func (s *Service) UpdatePrivateThreadCarrier(surface, instance, namespace, profile string) {
+	if s.privateThreadPolicies == nil {
+		s.privateThreadPolicies = map[string]PrivateThreadPolicy{}
+	}
+	p, ok := s.privateThreadPolicies[surface]
+	if !ok {
+		p.Unavailable = "历史目录尚未核验"
+	}
+	if p.InstanceNamespaces == nil {
+		p.InstanceNamespaces = map[string]string{}
+	}
+	if p.InstanceProfiles == nil {
+		p.InstanceProfiles = map[string]string{}
+	}
+	p.InstanceNamespaces[instance], p.InstanceProfiles[instance] = namespace, profile
+	s.privateThreadPolicies[surface] = p
+}
+
+// PrivateHistoryAction identifies operations which expose or select history.
+func PrivateHistoryAction(a control.Action) bool {
+	switch a.Kind {
+	case control.ActionListInstances, control.ActionWorkspaceRoot, control.ActionWorkspaceList, control.ActionShowAllWorkspaces, control.ActionShowRecentWorkspaces, control.ActionAttachWorkspace, control.ActionTargetPickerSelectWorkspace, control.ActionTargetPickerBack, control.ActionShowThreads, control.ActionShowAllThreads, control.ActionShowScopedThreads, control.ActionShowWorkspaceThreads, control.ActionShowAllThreadWorkspaces, control.ActionShowRecentThreadWorkspaces, control.ActionUseThread, control.ActionThreadSelectionPage, control.ActionTargetPickerSelectSession, control.ActionTargetPickerPage, control.ActionTargetPickerConfirm:
+		return true
+	case control.ActionTextMessage:
+		text := strings.TrimSpace(a.Text)
+		return text == "/list" || strings.HasPrefix(text, "/list ") || text == "/use" || strings.HasPrefix(text, "/use ")
+	}
+	return false
+}
+
+// RecordPrivateRetiredSession records an exact registry observation solely for
+// rebuilding that previously owned carrier; it does not authorize listing.
+func (s *Service) RecordPrivateRetiredSession(surface string, backend agentproto.Backend, instance, namespace, session string) {
+	if s.privateThreadPolicies == nil {
+		s.privateThreadPolicies = map[string]PrivateThreadPolicy{}
+	}
+	p, ok := s.privateThreadPolicies[surface]
+	if !ok {
+		p.Unavailable = "历史目录尚未核验"
+	}
+	if p.InstanceNamespaces == nil {
+		p.InstanceNamespaces = map[string]string{}
+	}
+	if p.ExactRetired == nil {
+		p.ExactRetired = map[PrivateHistoryKey]bool{}
+	}
+	p.InstanceNamespaces[instance] = namespace
+	if session != "" {
+		p.ExactRetired[PrivateHistoryKey{Backend: backend, Namespace: namespace, Session: session}] = true
+	}
+	s.privateThreadPolicies[surface] = p
+}
+
 func (s *Service) privateThreadVisible(surface string, backend agentproto.Backend, instance, session string) bool {
 	if !s.config.PrivateApplication {
 		return true
@@ -45,7 +106,7 @@ func (s *Service) privateThreadVisible(surface string, backend agentproto.Backen
 		return true
 	}
 	p, ok := s.privateThreadPolicies[surface]
-	if !ok {
+	if !ok || p.Unavailable != "" {
 		return false
 	}
 	backend = agentproto.NormalizeBackend(backend)

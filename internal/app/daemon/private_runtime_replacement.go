@@ -72,6 +72,19 @@ func (r *privateWorkRunner) prepareRetiredRuntime(ctx context.Context, o private
 	if _, err = r.ingress.privatePublicationBindingFor(ctx, o, generation); err != nil {
 		return true, err
 	}
+	session := cp.Core.SelectedThreadID
+	if session != "" {
+		known, allowed, e := r.native.registry.SessionAccess(ctx, string(rec.Snapshot.Owner.Backend), rec.Snapshot.Owner.HistoryNamespace, session, privateRegistration(rec.Snapshot.Owner).Owner)
+		if e != nil {
+			return true, e
+		}
+		if !known || !allowed {
+			return true, privatechat.ErrJournalConflict
+		}
+	}
+	if err = r.processor.RecordRetiredThread(ctx, o, generation, rec.Snapshot.Owner.Backend, rec.Snapshot.Owner.InstanceID, rec.Snapshot.Owner.HistoryNamespace, session); err != nil {
+		return true, err
+	}
 	contract := orchestrator.PrivateRetiredContract{Profiles: orchestrator.PrivateNativeProfiles{Codex: rec.CodexProfileID, Claude: rec.ClaudeProfileID, OpenCode: rec.OpenCodeProfileID}, CodexAdmissionRef: rec.CodexAdmissionRef, ClaudeReasoningEffort: rec.ClaudeReasoningEffort, OpenCodeAdmissionRef: rec.OpenCodeAdmissionRef, OpenCodeRuntimeAccessMode: rec.OpenCodeRuntimeAccessMode}
 	effects, err := r.processor.PrepareRetiredRuntimeReplacement(ctx, o, generation, rec.Snapshot.Owner, contract, rec.Snapshot.CWD, r.native)
 	if errors.Is(err, orchestrator.ErrPrivateRuntimeProfileChanged) {

@@ -57,6 +57,16 @@ func (p *Processor) ApplyPrivateTick(ctx context.Context, l *NativeLease, tickID
 			return ErrJournalConflict
 		}
 		events := p.app.Service().TickPrivateSurface(o.SurfaceID, now)
+		retry, e := p.requestInventoryRetryDue(ctx, l, now)
+		if e != nil {
+			return e
+		}
+		if retry {
+			events = append(events, requestInventoryEvent(l))
+			// The next attempt is eligible only if the returned inventory is
+			// explicitly incomplete. An in-flight inspection is never duplicated.
+			delete(p.requestInventoryRetry, l.native.CarrierIncarnation)
+		}
 		effects, e := p.freezeEffects(o, l.generation, "tick:"+tickID, events)
 		if e != nil {
 			p.poisoned = true
@@ -110,6 +120,13 @@ func (p *Processor) PrivateTickDue(ctx context.Context, l *NativeLease, now time
 			return ErrJournalConflict
 		}
 		due = p.app.Service().PrivateTickDue(l.surface.SurfaceID, now)
+		if !due {
+			var retryErr error
+			due, retryErr = p.requestInventoryRetryDue(ctx, l, now)
+			if retryErr != nil {
+				return retryErr
+			}
+		}
 		return nil
 	})
 	return due, err

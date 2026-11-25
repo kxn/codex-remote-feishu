@@ -247,7 +247,7 @@ func (s *privateNativeState) annotate(events []agentproto.Event) {
 		}
 		events[i].NativeBinding = nil
 		if events[i].CommandID == "" {
-			if events[i].Kind == agentproto.EventItemDelta {
+			if events[i].Kind == agentproto.EventItemDelta || events[i].Kind == agentproto.EventRequestStarted || events[i].Kind == agentproto.EventRequestResolved {
 				key := events[i].ThreadID + "\x00" + events[i].TurnID
 				s.mu.Lock()
 				cached, ok := s.liveBindings[key]

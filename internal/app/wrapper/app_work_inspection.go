@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/runtimejournal"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/nativeinspection"
 )
 
 func (a *App) markWorkBootstrap(request, response []byte) {
@@ -88,6 +90,31 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 		return fail("native_inspection_owner_mismatch", "owner-wide private inspection cannot name a subject or turn")
 	}
 	s := a.inspectionState()
+	if request.IncludePendingRequests {
+		if a.privateNative == nil || !ownerOnly || request.StopBackground {
+			return fail("native_inspection_owner_mismatch", "pending request inventory requires a private owner-only inspection")
+		}
+		s.mu.Lock()
+		ready, bootstrap := s.nativeReady, s.bootstrap
+		if !ready || !nativeinspection.ValidBootstrap(a.privateNative.snapshot.Owner.Backend, bootstrap) {
+			s.mu.Unlock()
+			return fail("native_initialization_unproven", "原生进程尚无成功初始化证据。")
+		}
+		live := make(map[string]string)
+		for key, value := range s.pendingInputs {
+			if strings.HasPrefix(key, "request:") {
+				live[strings.TrimPrefix(key, "request:")] = value
+			}
+		}
+		inventory, err := journal.PendingPrivateRequests(ctx, a.privateNative.snapshot.Owner, live)
+		s.mu.Unlock()
+		if err != nil {
+			return fail("native_inventory_unavailable", "无法核查待处理请求的持久记录。")
+		}
+		result.PendingRequests = &inventory
+		result.Bootstrap = bootstrap
+		return event
+	}
 	s.mu.Lock()
 	result.Bootstrap = s.bootstrap
 	s.mu.Unlock()

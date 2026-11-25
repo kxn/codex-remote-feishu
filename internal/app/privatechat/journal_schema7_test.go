@@ -29,7 +29,7 @@ func TestDispatchSchema7MigrationKeepsRowsReferencesAndIndexes(t *testing.T) {
 	}
 	defer j.Close()
 	var version, n int
-	if err = j.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 8 {
+	if err = j.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
 		t.Fatalf("version=%d %v", version, err)
 	}
 	if err = j.db.QueryRow(`SELECT count(*) FROM dispatch d JOIN dispatch_input i ON i.dispatch_id=d.id JOIN native_commands n ON n.dispatch_id=d.id WHERE d.id='d' AND d.command_id='cmd'`).Scan(&n); err != nil || n != 1 {

@@ -67,7 +67,7 @@ func (g *applicationIngress) recoverUnknownPrivateCard(ctx context.Context, even
 		return ingressowner.ErrConflict
 	}
 	if item.State == "confirmed" {
-		return g.host.applications.publisher.ownership.ConfirmOperation(ctx, owner, b.Owner.Epoch, issued.EffectID, issued.Ordinal)
+		return g.confirmCallbackPublication(ctx, owner, b.Owner.Epoch, issued.EffectID, issued.Ordinal)
 	}
 	if item.State != "unknown" {
 		return ingressowner.ErrUnresolved
@@ -107,7 +107,7 @@ func (g *applicationIngress) recoverUnknownPrivateCard(ctx context.Context, even
 	if err = g.host.applications.journal.CompletePublicationOperation(ctx, owner, b.Owner.Epoch, issued.EffectID, issued.Ordinal, "confirmed", rawReceipt, verifier); err != nil {
 		return err
 	}
-	if err = g.host.applications.publisher.ownership.ConfirmOperation(ctx, owner, b.Owner.Epoch, issued.EffectID, issued.Ordinal); err != nil {
+	if err = g.confirmCallbackPublication(ctx, owner, b.Owner.Epoch, issued.EffectID, issued.Ordinal); err != nil {
 		return err
 	}
 	return nil

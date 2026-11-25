@@ -30,7 +30,7 @@ func (s *Service) pageEvent(surface *state.SurfaceConsoleRecord, view control.Fe
 	)
 }
 
-func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, sourceMessageID string) eventcontract.Event {
+func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, sourceMessageID string, newEntry bool) eventcontract.Event {
 	groupID := parseCommandMenuView(raw)
 	if commandID, ok := control.ResolveFeishuCommandMenuGroupRootCommandID(s.buildCatalogContext(surface), groupID); ok {
 		switch commandID {
@@ -44,7 +44,7 @@ func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, source
 	if strings.TrimSpace(groupID) != "" {
 		phase = commandLauncherPhaseGroup
 	}
-	if flow := s.ensureCommandLauncherFlow(surface, groupID, phase); flow != nil {
+	if flow := s.ensureCommandLauncherFlow(surface, groupID, phase, newEntry); flow != nil {
 		if messageID := strings.TrimSpace(sourceMessageID); messageID != "" {
 			flow.MessageID = messageID
 		}
@@ -90,14 +90,14 @@ func (s *Service) activeCommandLauncherFlow(surface *state.SurfaceConsoleRecord)
 	return flow
 }
 
-func (s *Service) ensureCommandLauncherFlow(surface *state.SurfaceConsoleRecord, currentNode, phase string) *activeOwnerCardFlowRecord {
+func (s *Service) ensureCommandLauncherFlow(surface *state.SurfaceConsoleRecord, currentNode, phase string, newEntry bool) *activeOwnerCardFlowRecord {
 	if surface == nil {
 		return nil
 	}
 	now := s.now()
 	node := strings.TrimSpace(currentNode)
 	flow := s.activeCommandLauncherFlow(surface)
-	recreate := flow == nil || flow.Role != frontstageFlowRoleLauncher
+	recreate := newEntry || flow == nil || flow.Role != frontstageFlowRoleLauncher
 	if flow != nil && !flow.ExpiresAt.IsZero() && !flow.ExpiresAt.After(now) {
 		recreate = true
 	}

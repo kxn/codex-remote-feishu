@@ -16,7 +16,8 @@ type Effect struct {
 	Lane       string
 	ID         string
 	Body       json.RawMessage
-	DisplayKey string `json:",omitempty"`
+	DisplayKey string   `json:",omitempty"`
+	OrderKeys  []string `json:",omitempty"`
 }
 type Checkpoint struct {
 	cancelEarlierInputBefore     int64
@@ -326,6 +327,14 @@ func (j *Journal) commitCheckpointExtended(ctx context.Context, c Checkpoint, ex
 		}
 		if e.DisplayKey != "" {
 			if _, err = tx.ExecContext(ctx, `INSERT INTO private_display_chain(effect_id,chain_key) VALUES(?,?)`, e.ID, e.DisplayKey); err != nil {
+				return err
+			}
+		}
+		for _, key := range e.OrderKeys {
+			if key == "" {
+				return ErrJournalState
+			}
+			if _, err = tx.ExecContext(ctx, `INSERT INTO private_publication_order(effect_id,order_key) VALUES(?,?) ON CONFLICT DO NOTHING`, e.ID, key); err != nil {
 				return err
 			}
 		}

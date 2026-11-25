@@ -40,6 +40,7 @@ type Store struct {
 	displayMu         sync.Mutex
 	display           map[displayTurnKey]*displayEvidence
 	privateLive       bool
+	privateOwner      *agentproto.NativeOwner
 	liveNext, liveEnd uint64
 }
 

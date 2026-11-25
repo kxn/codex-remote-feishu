@@ -40,9 +40,9 @@ func (g *incidentBlockedGateway) Apply(ctx context.Context, ops []feishu.Operati
 	return nil
 }
 
-// This documents the current independent-publication ordering, not a desired UX.
+// Publications sharing an operation must complete in causal order.
 // Source events are synthetic; gateway Apply is the controlled platform port.
-func TestPrivateStartingNoticeCanArriveAfterReadyCard(t *testing.T) {
+func TestPrivateStartingNoticeCannotArriveAfterReadyCard(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	gateway := &incidentBlockedGateway{make(chan struct{}), make(chan struct{}), make(chan feishu.OperationKind, 4)}
@@ -68,7 +68,7 @@ func TestPrivateStartingNoticeCanArriveAfterReadyCard(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		if e = j.CommitCheckpoint(ctx, privatechat.Checkpoint{Owner: o, Generation: 1, Revision: int64(i + 1), Core: core}, int64(i), []privatechat.Effect{{ID: fmt.Sprintf("effect-%d", i), Lane: "interactive", Body: raw}}); e != nil {
+		if e = j.CommitCheckpoint(ctx, privatechat.Checkpoint{Owner: o, Generation: 1, Revision: int64(i + 1), Core: core}, int64(i), []privatechat.Effect{{ID: fmt.Sprintf("effect-%d", i), Lane: "interactive", Body: raw, OrderKeys: []string{"workspace-operation"}}}); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -86,14 +86,13 @@ func TestPrivateStartingNoticeCanArriveAfterReadyCard(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("notice not blocked")
 	}
-	go func() { _, e := publisher.Publish(ctx, o, 1, "effect-1"); result <- e }()
+	if _, err := publisher.Publish(ctx, o, 1, "effect-1"); err != privatechat.ErrDisplayHeld {
+		t.Fatalf("success publication bypassed earlier pending operation: %v", err)
+	}
 	select {
 	case kind := <-gateway.done:
-		if kind != feishu.OperationUpdateCard {
-			t.Fatalf("wrong overtaking operation: %s", kind)
-		}
-	case <-ctx.Done():
-		t.Fatal("ready card did not overtake")
+		t.Fatalf("publication overtook pending predecessor: %s", kind)
+	default:
 	}
 	close(gateway.release)
 	select {
@@ -104,9 +103,18 @@ func TestPrivateStartingNoticeCanArriveAfterReadyCard(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("notice did not finish")
 	}
-	for range 2 {
-		if e := <-result; e != nil {
-			t.Fatal(e)
+	if e := <-result; e != nil {
+		t.Fatal(e)
+	}
+	if _, e := publisher.Publish(ctx, o, 1, "effect-1"); e != nil {
+		t.Fatal(e)
+	}
+	select {
+	case kind := <-gateway.done:
+		if kind != feishu.OperationUpdateCard {
+			t.Fatalf("wrong final publication: %s", kind)
 		}
+	case <-ctx.Done():
+		t.Fatal("ready card missing after predecessor completed")
 	}
 }

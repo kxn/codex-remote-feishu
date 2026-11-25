@@ -207,7 +207,7 @@ func (r privateHostReducer) ReduceObservation(app *privatechat.App, action contr
 	return app.Observe(action)
 }
 
-func (r privateHostReducer) PlanCard(app *privatechat.App, action control.Action, events []eventcontract.Event) (*privatechat.CardResponse, []eventcontract.Event, error) {
+func (r privateHostReducer) PlanCard(app *privatechat.App, action control.Action, events []eventcontract.Event, deferReplacement bool) (*privatechat.CardResponse, []eventcontract.Event, error) {
 	if err := r.check(app); err != nil {
 		return nil, nil, err
 	}
@@ -224,7 +224,7 @@ func (r privateHostReducer) PlanCard(app *privatechat.App, action control.Action
 	if contract.CurrentCardMode == control.FeishuFrontstageCurrentCardInlineView && inlineFallbackReplacementBlockedByActivePicker(events) {
 		return nil, events, nil
 	}
-	return r.planLocalCard(action, contract, events)
+	return r.planLocalCard(action, contract, events, deferReplacement)
 }
 
 func (r privateHostReducer) classify(action control.Action) control.Action {

@@ -78,7 +78,7 @@ func (s *Service) PreparePrivateRuntimeReplacement(req PrivateUpgradeResume) ([]
 		return nil, fmt.Errorf("private upgrade recovery no longer owns selected carrier")
 	}
 	policy, ok := s.privateThreadPolicies[req.SurfaceID]
-	if !ok || policy.InstanceNamespaces[req.OldInstanceID] != req.HistoryNamespace || (req.ThreadID != "" && !s.privateThreadVisible(req.SurfaceID, req.Backend, req.OldInstanceID, req.ThreadID)) {
+	if !ok || policy.InstanceNamespaces[req.OldInstanceID] != req.HistoryNamespace || (req.ThreadID != "" && !policy.ExactRetired[PrivateHistoryKey{Backend: req.Backend, Namespace: req.HistoryNamespace, Session: req.ThreadID}] && !s.privateThreadVisible(req.SurfaceID, req.Backend, req.OldInstanceID, req.ThreadID)) {
 		return nil, fmt.Errorf("private upgrade history namespace changed")
 	}
 	contract := s.headlessLaunchContract(v)

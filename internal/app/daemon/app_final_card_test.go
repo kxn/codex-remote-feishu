@@ -30,7 +30,16 @@ func (g *messageIDAssigningGateway) Apply(_ context.Context, operations []feishu
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for i := range operations {
-		if operations[i].Kind != feishu.OperationSendCard || operations[i].MessageID != "" {
+		if operations[i].Kind == feishu.OperationAddReaction && operations[i].ReactionID == "" {
+			g.next++
+			operations[i].ReactionID = fmt.Sprintf("reaction-%d", g.next)
+		}
+		if operations[i].MessageID != "" {
+			continue
+		}
+		switch operations[i].Kind {
+		case feishu.OperationSendCard, feishu.OperationSendText, feishu.OperationSendImage:
+		default:
 			continue
 		}
 		g.next++

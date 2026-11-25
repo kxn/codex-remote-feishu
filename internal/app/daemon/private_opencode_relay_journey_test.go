@@ -59,6 +59,7 @@ func TestPrivateOpenCodeRelayFixtureProcess(t *testing.T) {
 	case "codex":
 		scanner := bufio.NewScanner(os.Stdin)
 		turns := 0
+		requestFixture := os.Getenv("PRIVATE_REQUEST_FIXTURE") == "1"
 		for scanner.Scan() {
 			line := append([]byte(nil), scanner.Bytes()...)
 			var f struct {
@@ -66,6 +67,12 @@ func TestPrivateOpenCodeRelayFixtureProcess(t *testing.T) {
 				Method string `json:"method"`
 			}
 			if json.Unmarshal(line, &f) != nil {
+				continue
+			}
+			if requestFixture && f.Method == "" && f.ID == "request-1" {
+				fmt.Println(`{"method":"serverRequest/resolved","params":{"requestId":"request-1","threadId":"session","turnId":"turn-1"}}`)
+				fmt.Println(`{"method":"item/completed","params":{"threadId":"session","turnId":"turn-1","item":{"id":"answer","type":"agentMessage","text":"approval complete"}}}`)
+				fmt.Println(`{"method":"turn/completed","params":{"threadId":"session","turn":{"id":"turn-1","status":"completed"}}}`)
 				continue
 			}
 			if f.Method == "turn/steer" || f.Method == "turn/start" || f.Method == "turn/interrupt" || f.Method == "thread/shellCommand" || f.Method == "thread/read" {
@@ -82,14 +89,18 @@ func TestPrivateOpenCodeRelayFixtureProcess(t *testing.T) {
 				fmt.Printf(`{"id":%q,"result":{}}`+"\n", f.ID)
 			case "thread/start", "thread/resume":
 				cwd, _ := os.Getwd()
-				fmt.Printf(`{"id":%q,"result":{"thread":{"id":"session","cwd":%q}}}`+"\n", f.ID, cwd)
+				fmt.Printf(`{"id":%q,"result":{"model":"fixture-model","thread":{"id":"session","cwd":%q}}}`+"\n", f.ID, cwd)
 			case "turn/start":
 				turns++
 				turn := fmt.Sprintf("turn-%d", turns)
 				fmt.Printf(`{"id":%q,"result":{"turn":{"id":%q}}}`+"\n", f.ID, turn)
 				fmt.Printf(`{"method":"turn/started","params":{"threadId":"session","turn":{"id":%q}}}`+"\n", turn)
 				fmt.Printf(`{"method":"thread/tokenUsage/updated","params":{"threadId":"session","turnId":%q,"tokenUsage":{"last":{"totalTokens":200},"total":{"totalTokens":500},"modelContextWindow":1000}}}`+"\n", turn)
-				if turns == 1 || turns > 2 {
+				if requestFixture && turns == 1 {
+					fmt.Println(`{"id":"request-1","method":"item/commandExecution/requestApproval","params":{"threadId":"session","turnId":"turn-1","itemId":"cmd-1","reason":"fixture approval","command":"true","availableDecisions":["accept","decline","cancel"]}}`)
+					continue
+				}
+				if turns == 1 || turns > 2 || requestFixture {
 					fmt.Printf(`{"method":"item/completed","params":{"threadId":"session","turnId":%q,"item":{"id":"answer","type":"agentMessage","text":"done"}}}`+"\n", turn)
 					fmt.Printf(`{"method":"turn/completed","params":{"threadId":"session","turn":{"id":%q,"status":"completed"}}}`+"\n", turn)
 				}

@@ -224,6 +224,19 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 					t.internalThreadIDs[threadID] = true
 				}
 			}
+			if model := strings.TrimSpace(lookupString(message, "result", "model")); model != "" {
+				t.knownThreadModel[threadID] = model
+			} else {
+				delete(t.knownThreadModel, threadID)
+			}
+			if privatePlanNeedsObservedModel(pending.Command) && t.knownThreadModel[threadID] == "" {
+				action := choose(strings.TrimSpace(pending.Action), "thread/start")
+				origin := agentproto.TurnCompletionOriginThreadStartMissingModel
+				if action == "thread/fork" {
+					origin = agentproto.TurnCompletionOriginThreadForkMissingModel
+				}
+				return Result{Events: []agentproto.Event{nativePromptRejectedEvent(pending.Command.CommandID, requestID, threadID, origin, "Codex "+action+" 响应未提供模型，无法应用计划模式；请更新 Codex 或选择明确模型后重试。", commandFailureInitiator(pending.Command))}}, nil
+			}
 			t.currentThreadID = threadID
 			if pending.Command.Target.CWD != "" {
 				t.knownThreadCWD[threadID] = pathcanon.Native(pending.Command.Target.CWD)
@@ -272,6 +285,14 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 					pending.Command.CommandID, requestID, pending.ThreadID,
 					agentproto.TurnCompletionOriginThreadResumeRejected, errMsg, commandFailureInitiator(pending.Command),
 				)}}, nil
+			}
+			if model := strings.TrimSpace(lookupString(message, "result", "model")); model != "" {
+				t.knownThreadModel[pending.ThreadID] = model
+			} else {
+				delete(t.knownThreadModel, pending.ThreadID)
+			}
+			if privatePlanNeedsObservedModel(pending.Command) && t.knownThreadModel[pending.ThreadID] == "" {
+				return Result{Events: []agentproto.Event{nativePromptRejectedEvent(pending.Command.CommandID, requestID, pending.ThreadID, agentproto.TurnCompletionOriginThreadResumeMissingModel, "Codex thread/resume 响应未提供模型，无法应用计划模式；请更新 Codex 或选择明确模型后重试。", commandFailureInitiator(pending.Command))}}, nil
 			}
 			t.currentThreadID = pending.ThreadID
 			if pending.Command.Target.CWD != "" {

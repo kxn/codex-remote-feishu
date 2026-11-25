@@ -82,6 +82,18 @@ func nativeEventOutcome(command agentproto.Command, event agentproto.Event) (out
 	case agentproto.CommandPromptSend:
 		if command.NativeBinding.Owner.Backend == agentproto.BackendCodex && event.Kind == agentproto.EventTurnCompleted && event.Status == "failed" && event.TurnID == "" {
 			switch event.TurnCompletionOrigin {
+			case agentproto.TurnCompletionOriginThreadStartMissingModel:
+				if command.Target.EffectivePromptExecutionMode() == agentproto.PromptExecutionModeStartNew && command.Overrides.Model == "" && command.Overrides.PlanMode != "" {
+					return "failed", "thread/start", true
+				}
+			case agentproto.TurnCompletionOriginThreadForkMissingModel:
+				if command.Target.EffectivePromptExecutionMode() == agentproto.PromptExecutionModeForkEphemeral && command.Overrides.Model == "" && command.Overrides.PlanMode != "" {
+					return "failed", "thread/fork", true
+				}
+			case agentproto.TurnCompletionOriginThreadResumeMissingModel:
+				if command.Target.EffectivePromptExecutionMode() == agentproto.PromptExecutionModeResumeExisting && event.ThreadID == command.Target.ThreadID && command.Overrides.Model == "" && command.Overrides.PlanMode != "" {
+					return "failed", "thread/resume", true
+				}
 			case agentproto.TurnCompletionOriginThreadStartRejected:
 				if command.Target.ExecutionMode == agentproto.PromptExecutionModeStartNew {
 					return "failed", "thread/start", true

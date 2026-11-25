@@ -4,7 +4,7 @@
 > Updated: `2026-11-25`
 > Summary: 按团队功能加入前的版本重建单聊使用场景、入口调用图和逐项验收，明确尚未验证的流程。
 
-本次以 `edffb35f` 为旧版基线，审查对象为 `42159c64`。保留用户已明确取消 Cron、VS Code 接管和历史改写的决定；其余单聊差异均需逐项证明，不能自行称作产品取舍。单聊与群团队继续独立。
+本次以 `edffb35f` 为旧版基线，初始审查对象为 `42159c64`，后续在同一分支统一修复。初始缺口和整改后的实测结果分别保存；当前结论见末尾“本轮整体验收”。保留用户已明确取消 Cron、VS Code 接管和历史改写的决定；其余单聊差异均需逐项证明，不能自行称作产品取舍。单聊与群团队继续独立。
 
 ## 验收如何判定
 
@@ -12,24 +12,24 @@
 
 每项记录前置状态、入口和完整操作序列、旧版预期、实际平台输出、原生行为、异常分支和验证证据。验证状态分为“已执行通过”“已执行失败”“仅有局部测试”“未执行”；静态代码审查不能写成已通过。受控飞书端可验证生产 SDK 与发布协议，不能代替客户端视觉验收。真实原生后端、受控原生后端和真实平台分别记录，不相互替代。
 
-本轮整体状态：**尚未通过，禁止据此宣称单聊已恢复。** 下面既有测试名称只是覆盖盘点，除另行记录日志和结果外，不代表本轮已重新执行。
+初始审计结论：当时尚未通过。下文初始盘点里的测试名称只代表覆盖线索，不是整改后的通过声明；整改后的新鲜执行证据见末尾。
 
-## 现场已确认的事实
+## 初始审计的现场事实
 
-服务目前是用户手工停止状态，调查不启动线上服务、不修改线上数据库。系统记录 1 小时 22 分钟累计 CPU 时间，这是该进程生命周期的总量，不能直接用来证明截图时的即时占用率。
+初始调查时服务由用户手工停止；调查阶段未启动线上服务、未修改线上数据库。用户随后授权修复完成后启动服务，当前部署结果另行登记。系统记录 1 小时 22 分钟累计 CPU 时间，这是该进程生命周期的总量，不能直接用来证明截图时的即时占用率。
 
 私人 journal 的序号 18 为工作区选择确认，序号 19 为 `hi`。该消息的已应用结果只有 `headless_starting` 提示，没有原生 prompt 或排队项；wrapper 随后完成初始化并接入。该 SDK 消息时间为新加坡时间 2026-11-24 15:45:29，不能未经核对称为 11 月 25 日新接收消息。仍需把成功卡发布、hello、启动回执与首条输入按精确记录对应。
 
 之前的真实 Codex 新建测试明确不发送业务 prompt，只验证新会话准备态；隔离 HOME 仅复制登录资料且手工设置环境。这项证据不覆盖真实配置下的首条执行、完整结果发布或连续对话。原“完整流程已通过”的结论不成立。
 
-## 本轮已经执行的检查
+## 初始审计已经执行的检查
 
 - 已在临时目录分别构建旧版和当前版本的命令目录及解析器，用旧版 canonical slash、菜单 key、选项和别名组成 241 个输入实际对照。解析差异只有已明确删除的 `patch`／`bendtomywill` 三个入口；新加项目入口单独验收。因此不能把问题笼统归因于 Slash parser 全部重写，重点在后续接线和生命周期。
 - 现有飞书 adapter、control、orchestrator、privatechat 与 daemon 测试重新运行通过，日志 `/tmp/private-nov25-baseline-current-suite.log`。该结果只说明原有测试仍通过，不能证明下列使用场景已验收。
 - 首条实际消息的现场记录显示：15:45:25.691 工作区卡处于处理中，15:45:29.908 `hi` 到达，15:45:30.784 成功卡确认送达，15:45:30.874 较旧的“启动中”提示才确认送达。后两者倒序是新版独立发布链的真实现象。工作区卡自身有 display chain，独立提示未关联该链；interactive effects 可并行发布。需按同一业务阶段定义发布顺序及过期状态处理，而不是一律全局串行或吞提示。
 - 真实 Codex 0.171.0 的两轮测试已通过，日志 `/tmp/private-real-codex-two-turn-final.log`。从 SDK picker 新建，实际原生模型目录选择账号支持的模型，经精确 input→dispatch→native binding 关联，核对同一 thread 的两次不同 turn、assistant 文本、成功终态及对应 revision 的已确认平台发布。原生后端真实，飞书端受控，原 HOME 配置只读复制隔离；这不等于所有场景通过。首次试跑因隔离测试默认模型不被账号支持而失败，保留该证据，不作为线上同一故障根因。
 
-## 入口调用图与已核行为
+## 入口调用图与初始缺口
 
 | 场景 | 旧版调用链（均指 edffb35f） | 新版生产调用链（均指 42159c64） | 可确认结果 / 缺口 |
 |---|---|---|---|
@@ -40,11 +40,11 @@
 | 纯文件及带文件文本 | 旧 SDK `parseAction` 下载文件，旧 daemon 通过 workspace 上下文路径/附件预处理后 core | `privateHostReducer.Reduce` 使用 `BeginPrivateStage` 冻结原 queue 目标和占位 → `runPrivateStageInput` 真实工作区文件暂存 → durable receipt → `CompletePrivateStage` / `FailPrivateStage`，再 dispatch | `private_host_media_test.go` 覆盖文件暂存、symlink、取消、源缺失、迟到 receipt；`private_reconnect_staging_journey_test.go` 覆盖旧 stage 重连。应补 SDK 文件+文本多文件 FIFO 真 native 读文件→平台 final、下载/暂存失败后下一消息仍可用，以及中断/重启原源 cleanup。 |
 | 入站持久与顺序 | 旧 surface lane / 内存排序，core 队列为业务事实 | neutral 事件先于 private journal；`Journal.Admit` 记录 owner、generation、router origin；`processor` 序列化 reduce→checkpoint+applied+effects 原子提交；正常与控制 lane 分开；`checkpoint.go` 根据 core discard outcome 原子取消原顺序旧输入 | 最近 SDK 图片与取消两序 `private_sdk_staging_order_test.go`、`privatechat/ingress_origin_test.go`；严格说不同外部队列/未知回执/错误 epoch 的完整平台旅程仍需补。失败不应以 mock 直接确认投递。 |
 
-## 完整场景矩阵（所有入口均要核 typed slash 和菜单/按钮；非菜单项注明）
+## 使用场景矩阵与初始覆盖盘点
 
 证据缩写：旧入口统一 `edffb35f:internal/core/control/feishu_commands.go`、同目录 `feishu_commands_{goal,review,sendfile,opencode}.go` 与 `edffb35f:internal/app/daemon/app_ingress.go:203`；旧 core 分发 `edffb35f:internal/core/orchestrator/service.go:ApplySurfaceAction`。现入口统一上述新调用图。测试缩写 M=`private_assembled_menu_matrix_test.go`（只证明出现响应、部分导航）；X=`private_assembled_execution_journey_test.go`；P=`private_profile_catalog_sdk_journey_test.go`；C=`private_clean_restart_sdk_journey_test.go`。除另述外，不能把 M 的“有任意卡”当该命令全流程成功。
 
-| 命令 / 入口 | 前置 → 全操作序列 → 可见结果 / 失败出口 | 当前覆盖和缺口 |
+| 命令 / 入口 | 前置 → 全操作序列 → 可见结果 / 失败出口 | 初始覆盖和缺口（整改证据见末尾） |
 |---|---|---|
 | 普通首条 hi | 空私人 owner、无 carrier → SDK hi → 必要时选目录及新建 → 真 wrapper hello → native 首轮→final→同聊天最终回复；目录不可用/启动失败明确提示且不丢原输入 | `private_new_workspace_sdk_journey_test.go` 只到 new_thread_ready，X 先 `/list` 人工选择再发送；**完整首条 hi 到最终 Feishu 答复未证明**。 |
 | 连续第二轮 | 首轮真实 final 已投影且 receipt confirmed → 第二条 SDK 文本 → 同 session 第二轮 native command → 第二条正确最终回复，不重复首轮 | X 的 seed→hello→next 主要验证 turn/start、steer/interrupt/队列；需明确逐轮验证最终消息正文、session 及平台 receipt，不只 native turn 数。 |
@@ -118,7 +118,7 @@
 
 每次修改后先跑对应失败用例，再执行受影响的连续旅程；整体验收要求整张场景清单有结果。未验证项和环境阻塞不能被测试总数覆盖。完成后同步[应用分离记录](./private-team-application-separation.md)及对应 canonical 状态机；本文件在验收结束前保持 inprogress。
 
-## 执行、恢复和交付的逐段调用图
+## 执行、恢复和交付的调用图及初始覆盖
 
 1. **身份与 SDK 入站**：`entry.go` 的 `prepareApplicationCore/configureApplicationIngress` → `applicationIngress` neutral router → `privateApplicationAdmitter.Admit` → private journal 持久 ingress → `privateWorkRunner.pass` → `Processor.ApplyIngress` → 原 `Service.ApplySurfaceAction`。callback 同步响应和异步 effect 分开；团队仍由 `teamApplicationAdmitter` 入独立状态机。测试 `application_runtime_test.go`、`private_assembled_execution_journey_test.go`、`private_sdk_staging_order_test.go`；平台网关为可控 fixture。
 2. **配置与启动**：`headless.start` effect → `runPrivateHeadlessStart` → `launchPrivateNative`；冻结 cwd、profile、backend，`entry.go:117–132` 用 `buildDaemonHeadlessBaseEnv(os.Environ(), capturedProxyEnv)`，启动解析保留生产 profile 配置、native history namespace、executionowner 与独立 credential。wrapper 经真实 `wrapper.LoadConfig`，Codex/Claude 共用子进程启动和 MCP 注入；private bearer 验证在 daemon。常规测试只测显式 fixture 的 env/profile，无法证明所有现场 provider、配置 include、代理、custom MCP、文件访问策略组合。
@@ -132,11 +132,35 @@
 10. **明确排除项**：cron、VS Code 接管和 bendtomywill 按用户要求不恢复；不应把旧代码仍存在当成 private 漏接。
 
 
-## 本轮产物与当前阻断
+## 本轮整体验收
 
-1. 完整旧命令解析对照：`/tmp/private-command-diff-audit.md`，241 个入口；命令矩阵已用精确来源和语义结果替换旧“任意响应即通过”的断言：38 条未绑定命令、31 条受控已绑定命令的页面／拒绝语义通过，日志 `/tmp/private-menu-semantic-final-race.log`。这些是导航与明确拒绝出口，不能算每个命令实际业务完成。
-2. 现场入口／发布证据：`/tmp/private-incident-audit.md`，含时间、revision、原生无 prompt 及发布倒序；`private_start_notice_order_test.go` 为受控发布边界的已知缺陷复现，修复时须改成不允许倒序的验收断言。
-3. 执行器完整调用图与实际覆盖：`/tmp/private-runtime-audit.md`；真实双轮试验通过不覆盖其列出的工具执行、原生确认、真实模型中断和跨 daemon 重启。
-4. 本轮未修改生产代码、未部署、未启动已被用户停止的服务。整体仍有已确认时序缺陷与接线遗漏，不能报告单聊已经恢复，也不能把本轮调查测试数等同完整验收。
+### 已落地的根因修正
 
-本次最终定向复核通过：`/tmp/private-nov25-audit-focused.log`。它包括加强后的菜单矩阵、默认关闭的真实后端 opt-in 测试，以及发布倒序的缺陷证据用例。后者断言现有缺陷可复现，不是恢复验收通过；后续统一修复必须反转其断言并补完整 SDK 旅程。
+1. 私人 reduce、native event 和 receipt 仍由原 core 和同一 Processor 事务管理；外部 I/O 不持状态锁。新增的是明确的原操作发布顺序，不是另一套私人管理 Agent。启动提示不能越过成功卡；hello/PID 回执两种先后顺序、取消后的迟到连接均按精确实例归属处理。
+2. 同卡同步 callback 与异步 PATCH 共用写入顺序。通常仍同步替换原卡；已有在途写入时先提交点击，随后在原卡更新，避免旧 PATCH 把已返回的菜单覆盖。新 `/menu`、独立设置页不再复用旧未决卡的 flow。
+3. 重启后的审批根据同一 wrapper 的真实 pending inventory、原事件序号/hash 和当前 response intent 核验，更新原卡后能继续执行；未决投递不二发。暂不完整清单限频重查；旧运行器缺能力明确给 `/detach` 出口。
+4. 团队历史完整扫描改为显式历史/会话选择时读取，普通私人消息、终态和 idle 不扫描全部团队。历史不可用不会卡住当前对话，也不会错误开放未经验证的历史会话。
+5. 未手选 Codex 模型时继承原生配置；用户既有模型和固定 API 设置优先。计划模式按真实 0.171 协议补必需字段，使用准确关联的原生响应模型；缺响应字段明确失败，不猜测或伪造成功。
+6. schema 9 迁移同事务回填可证发布顺序，不改原 effect ID、内容、状态或收据。没有冻结操作/flow/display 证据的旧独立提示不能事后补造因果；它不成为无关新工作的全局屏障。
+
+### 连续旅程实测登记
+
+| 用户操作 | 执行方式与判定终点 | 当前证据 |
+|---|---|---|
+| 新建目录后的首次消息、连续对话 | 实际 SDK picker → ready 卡 → 立即输入 → 原生成功终态 → 对应平台答复确认 → 下一轮同 session | 真实 Codex 0.171；默认配置三轮含真实写读文件 `/tmp/private-native-default-final-real3.log`；原有显式模型三轮 `/tmp/private-existing-model-final-tools.log`；原生默认模型且先 `/plan on` 双轮 `/tmp/private-native-plan-final-real3.log` |
+| 启动两种顺序与取消后迟到 hello | 真 wrapper、受控 native 和 SDK；先 hello 后 PID、先 PID 后 hello，各自 ready 后双轮；取消后新工作区不受旧 hello 影响 | `/tmp/private-plan-startup-fixture-race.log`；`private_new_workspace_order_sdk_test.go` 与 `private_new_workspace_late_hello_sdk_test.go` |
+| 菜单与设置并发 | 同卡导航和等待期间返回；已在途旧更新之后最终仍是用户选中的页面；旧 unknown 卡不挡新 `/menu` | `/tmp/private-model-inflight-wait-check.log`、`/tmp/private-menu-flow-final.log`、`/tmp/private-menu-unknown-sdk-final.log` |
+| 新卡已显示、收据尚未落库即点击 | SDK 刻意阻塞真实 gateway Apply 回执，立即点新 token；slash/同卡菜单、超时同事件重投、缺 chat_id；完成同卡终态后新开 `/model` 再选；旧 token/跨用户不借机生效 | `/tmp/private-model-pending-all-race6.log`；不是先等内部 CardRef 才点击。最终 eligibility 在既有 RecordPublished owner fence 内核验，原事实先持久捕获 |
+| ready 后未发首条消息就关闭重启 | 实际形成 new_thread_ready、保存 cwd、旧 attached、空 selected/active/queue → 干净关闭并证明 retired → 同库重开 → 首条 hi final → 第二轮 final | `/tmp/private-new-ready-restart-race.log`；使用临时目录复制状态类型，不访问线上项目目录，不手工清 hold |
+| 请求期间聊天、菜单、重启审批、下一轮 | SDK 普通操作；同 wrapper 保留，重开 daemon 同库，确认原请求仍 pending → 原卡新视图 → 点击 → native final → 下一轮；unknown 变体不二发 | `/tmp/private-request-sdk-final-race6.log`；`/tmp/private-request-retry-race.log` 覆盖 incomplete 与缺能力出口 |
+| 已有会话恢复、排队及未开始输入 | 停止/重建 daemon → 精确原 session → 已证明未发输入恢复；不得重跑未知输入 | `/tmp/private-plan-daemon-fixture-race.log`；原 clean restart SDK 三条连续旅程 |
+| 历史不可用时继续开发 | 关闭团队历史读取能力，SDK 私人消息仍到 native final 和下一轮；显式历史选择给明确错误 | `/tmp/private-history-native-final3.log`、`/tmp/private-plan-daemon-fixture-race.log` |
+| 复杂媒体与错误后的下一条 | SDK → neutral/staging → wrapper/native：多文件、独立多图、post 图文及引用进入真实命令输入，连续 final；延迟图片下载失败后后续文字仍完成 | `/tmp/private-structured-uat-race2.log`；外部下载及 post/引用解析回调受控，真实 LiveGateway 解码另由 adapter/wrapper 分层用例覆盖，不能称真实飞书下载全链 |
+| 线上旧库迁移 | 仅只读备份，临时副本调用生产 OpenJournal 和 Restore | `/tmp/private-schema9-live-audit.log`：8→9，47 张原有表 rowcount 不变，全部 checkpoint 可恢复，完整性及外键通过 |
+
+测试中的平台网关受控，因此上表的“答复确认”指生产 SDK/发布协议在受控飞书端取得正确 MessageID 和持久 receipt，不冒充飞书客户端实际呈现。真实 Codex 测试隔离复制原生登录/config，并使用生产环境构造；没有向真实用户发送合成业务消息。当前未实测的真实飞书客户端视觉、所有 provider 的真实登录、真实模型中断与长期多项目运行，不用全仓测试总数代替。
+
+初次全仓检查暴露了旧模拟 native 响应缺少真实协议 model 字段，已按真实响应补齐，保留原断言；该次运行终止，不能作为成功证据。最终冻结代码的 v5 全仓检查通过（`/tmp/private-final-uat-v5.jsonl`）：7096 个测试/子测试通过，13 个显式跳过，0 失败。真实后端 opt-in 在默认全仓中跳过，其实际执行使用上表独立日志。组件整包 race 通过 `/tmp/private-final-components-race3.log`，最终 callback 与首张卡 writer 的边界 race 通过 `/tmp/private-card-boundaries-final-race.log`；Windows 全仓编译通过 `/tmp/private-final-windows-build2.log`。最终 daemon、privatechat、ingressowner、orchestrator 整包 race 通过 `/tmp/private-final-daemon-race4.log`；提交前检查通过 `/tmp/private-final-precommit3.log`。本文件记录代码行为与验证证据，实际部署版本以安装事务、进程和二进制哈希为准。
+
+
+最终回归期间曾出现模型卡“平台可见但新 token 未登记即点击”的真实漏操作，已以刻意阻塞 gateway 回执的 SDK 红测证明，不能用测试等待内部状态掩盖。实现通过先捕获、精确结算、本次 HTTP 回调内继续的方式修正；过期权限和投递未知仍按原证明规则处理。测试同时允许真实同步 HTTP 替换和异步同卡 PATCH，并按旧 UI 的模型设置终态验证后续重开入口，不要求旧终态卡新增表单。

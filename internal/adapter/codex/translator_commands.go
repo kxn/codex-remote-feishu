@@ -397,7 +397,7 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 		return t.translatePromptSendThreadStart(command, false)
 	}
 	delete(t.pendingLocalTurnByThread, command.Target.ThreadID)
-	if t.currentThreadID == "" || command.Target.ThreadID != t.currentThreadID {
+	if t.currentThreadID == "" || command.Target.ThreadID != t.currentThreadID || (privatePlanNeedsObservedModel(command) && t.knownThreadModel[command.Target.ThreadID] == "") {
 		requestID := t.NextRequest("thread-resume")
 		t.pendingThreadResume[requestID] = pendingThreadResume{
 			ThreadID: command.Target.ThreadID,
@@ -527,6 +527,23 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	setDefault(template, "attachments", []any{})
 	applyCodexResumePolicyToTurnStart(template, command.CodexResume)
 	applyPromptOverridesToTurnStart(template, command.Overrides)
+	if isPrivatePrompt(command) {
+		if normalizeOverridePlanMode(command.Overrides.PlanMode) == "" {
+			template["collaborationMode"] = nil
+		} else {
+			mode := lookupMapFromAny(template["collaborationMode"])
+			settings := lookupMapFromAny(mode["settings"])
+			if strings.TrimSpace(xutil.LookupStringFromAny(settings["model"])) == "" {
+				model := strings.TrimSpace(t.knownThreadModel[threadID])
+				if model == "" {
+					return nil, "", fmt.Errorf("native thread response omitted model required for plan mode")
+				}
+				settings["model"] = model
+			}
+			mode["settings"] = settings
+			template["collaborationMode"] = mode
+		}
+	}
 	t.recordCodexPolicyForThread(threadID, command.CodexResume)
 	requestID := t.NextRequest("turn-start")
 	payload := map[string]any{
@@ -614,4 +631,15 @@ func (t *Translator) buildInputs(inputs []agentproto.Input) []map[string]any {
 		}
 	}
 	return output
+}
+
+func isPrivatePrompt(command agentproto.Command) bool {
+	return command.NativeBinding != nil && command.NativeBinding.Owner.Application == "private"
+}
+func privatePlanNeedsObservedModel(command agentproto.Command) bool {
+	if !isPrivatePrompt(command) || normalizeOverridePlanMode(command.Overrides.PlanMode) == "" || strings.TrimSpace(command.Overrides.Model) != "" {
+		return false
+	}
+	policy := agentproto.NormalizeCodexResumePolicy(command.CodexResume)
+	return policy == nil || !shouldSendCodexPolicyValue(policy.ModelMode) || strings.TrimSpace(policy.Model) == ""
 }

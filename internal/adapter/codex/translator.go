@@ -11,6 +11,7 @@ type Translator struct {
 	currentThreadID            string
 	activeTurnByThread         map[string]string
 	knownThreadCWD             map[string]string
+	knownThreadModel           map[string]string
 	observedThreads            map[string]codexObservedThread
 	pendingRemoteTurnByThread  map[string]string
 	pendingLocalTurnByThread   map[string]bool
@@ -150,6 +151,7 @@ func NewTranslator(instanceID string) *Translator {
 	return &Translator{
 		instanceID:                 instanceID,
 		knownThreadCWD:             map[string]string{},
+		knownThreadModel:           map[string]string{},
 		activeTurnByThread:         map[string]string{},
 		observedThreads:            map[string]codexObservedThread{},
 		pendingRemoteTurnByThread:  map[string]string{},

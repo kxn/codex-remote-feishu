@@ -2,12 +2,15 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/executionowner"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 )
 
@@ -56,7 +59,7 @@ func (g *applicationIngress) refreshPrivateThreadPolicy(ctx context.Context, h *
 	}
 	denied, ambiguous, err := teamHistoryPolicySnapshot(ctx, h.teamHistory)
 	if err != nil {
-		return err
+		return fmt.Errorf("读取团队历史失败: %w", err)
 	}
 	for _, k := range denied {
 		policy.Denied[k] = true
@@ -117,4 +120,36 @@ func (g *applicationIngress) refreshPrivateThreadPolicy(ctx context.Context, h *
 		}
 	}
 	return p.SetThreadPolicy(ctx, owner, generation, policy)
+}
+
+// preparePrivateHistory snapshots history only for an explicit presentation or
+// selection. Identity errors still fail admission; source-read errors become
+// an owner-scoped, fail-closed visible history error.
+func (g *applicationIngress) preparePrivateHistory(ctx context.Context, h *privateNativeHost, p *privatechat.Processor, owner privatechat.Owner, generation, sequence int64) error {
+	if _, err := g.privatePublicationBindingFor(ctx, owner, generation); err != nil {
+		return err
+	}
+	if err := g.refreshPrivateThreadPolicy(ctx, h, p, owner, generation, sequence); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return p.SetThreadPolicy(ctx, owner, generation, orchestrator.PrivateThreadPolicy{Unavailable: err.Error()})
+	}
+	return nil
+}
+
+func (h *privateNativeHost) updateThreadCarrier(ctx context.Context, p *privatechat.Processor, rec privateCarrierRecord) error {
+	return p.UpdateThreadCarrier(ctx, rec.Surface, rec.SurfaceGeneration, rec.Snapshot.Owner.InstanceID, rec.Snapshot.Owner.HistoryNamespace, rec.CodexProfileID)
+}
+
+func shouldPreparePrivateHistory(ctx context.Context, p *privatechat.Processor, owner privatechat.Owner, generation int64, raw []byte) (bool, error) {
+	if !privateHistoryPolicyNeedsRefresh(raw) {
+		return false, nil
+	}
+	var action control.Action
+	if err := json.Unmarshal(raw, &action); err != nil {
+		return false, err
+	}
+	draft, err := p.IsHistoryDraftNavigation(ctx, owner, generation, action)
+	return !draft, err
 }

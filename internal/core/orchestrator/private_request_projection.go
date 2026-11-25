@@ -7,6 +7,24 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+// RefreshPrivateRequestVisibility is called only after an authenticated,
+// complete same-carrier inventory proved that this request is still pending.
+// Its old card belongs to the previous daemon lifecycle and cannot serve as
+// the new lifecycle's actionable projection.
+func (s *Service) RefreshPrivateRequestVisibility(surfaceID, requestID string) error {
+	if !s.config.PrivateApplication {
+		return fmt.Errorf("invalid private request visibility owner")
+	}
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil || surface.PendingRequests[requestID] == nil {
+		return fmt.Errorf("private request visibility proof mismatch")
+	}
+	request := surface.PendingRequests[requestID]
+	request.VisibilityState = requestVisibilityDeliveryDegraded
+	request.NeedsRedelivery = true
+	return nil
+}
+
 // RestorePrivateRequestProjection restores only the request identified by an
 // authenticated durable native fact; unrelated requests remain frozen.
 func (s *Service) RestorePrivateRequestProjection(surfaceID, instanceID, requestID, commandID, threadID, turnID string) error {

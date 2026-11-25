@@ -49,6 +49,11 @@ func historyAliasNeedsRefresh(raw []byte) bool {
 	return false
 }
 
+func privateHistoryPolicyNeedsRefresh(raw []byte) bool {
+	var a control.Action
+	return json.Unmarshal(raw, &a) == nil && orchestrator.PrivateHistoryAction(a)
+}
+
 // refreshLegacyHistoryAliases performs expensive root enumeration only for an
 // explicit history/list selection. Cache is presentation only: native launch
 // and command submission revalidate full evidence and source quiescence.

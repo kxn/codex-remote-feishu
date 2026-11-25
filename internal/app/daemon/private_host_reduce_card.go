@@ -3,6 +3,7 @@ package daemon
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
@@ -11,7 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
-func (r privateHostReducer) planLocalCard(action control.Action, contract control.FeishuFrontstageActionContract, events []eventcontract.Event) (*privatechat.CardResponse, []eventcontract.Event, error) {
+func (r privateHostReducer) planLocalCard(action control.Action, contract control.FeishuFrontstageActionContract, events []eventcontract.Event, deferReplacement bool) (*privatechat.CardResponse, []eventcontract.Event, error) {
 	for i, event := range events {
 		if contract.CurrentCardMode == control.FeishuFrontstageCurrentCardInlineView && i == 0 && !event.InlineReplaceCurrentCard && inlineFallbackReplacementBlockedByActivePicker(events) {
 			return nil, events, nil
@@ -79,6 +80,17 @@ func (r privateHostReducer) planLocalCard(action control.Action, contract contro
 		remaining := removeUIEventAt(events, i)
 		if !contract.FollowupPolicy.Empty() {
 			remaining = filterUIEventsByFollowupPolicy(remaining, contract.FollowupPolicy)
+		}
+		if deferReplacement {
+			// The action is committed now, but its card has a previous external
+			// writer. Publish this replacement after that writer's receipt instead
+			// of racing the HTTP callback response against the pending PATCH.
+			event.InlineReplaceCurrentCard = true
+			event.SourceMessageID = messageID
+			event.Meta.MessageDelivery.TargetMessageID = messageID
+			event.Payload = nil
+			remaining = append([]eventcontract.Event{event.Normalized()}, remaining...)
+			return &privatechat.CardResponse{Version: 1, TargetMessageID: messageID, Response: json.RawMessage(`{"toast":{"type":"info","content":"已收到，正在更新这张卡片。"}}`)}, remaining, nil
 		}
 		return &privatechat.CardResponse{Version: 1, TargetMessageID: action.Inbound.OpenMessageID, ViewToken: token, Response: raw}, remaining, nil
 	}

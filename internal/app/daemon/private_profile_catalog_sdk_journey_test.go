@@ -179,12 +179,17 @@ func testPrivateModelCatalogSDKLastGood(t *testing.T, delayed, leave bool) {
 		t.Fatal(err)
 	}
 	var leaveClick platformingress.HumanInteractionEnvelope
+	var priorPageTitle string
 	if leave {
 		ops := gateway.waitForOperationCount(1, 5*time.Second)
 		if len(ops) == 0 || ops[0].MessageID == "" {
 			t.Fatal("settings card missing")
 		}
 		card := ops[0]
+		priorPageTitle = card.CardTitle
+		if priorPageTitle == "" {
+			t.Fatal("initial settings page has no title")
+		}
 		for deadline := time.Now().Add(5 * time.Second); ; {
 			if _, e := r.router.PublishedMessage(t.Context(), "tenant", "app", "private-chat", card.MessageID); e == nil {
 				break
@@ -253,6 +258,11 @@ func testPrivateModelCatalogSDKLastGood(t *testing.T, delayed, leave bool) {
 				close(blocked.release)
 				t.Fatal(e)
 			}
+			cp, e := r.journal.LoadCheckpoint(t.Context(), o, 1)
+			if e != nil || cp.Core.UI == nil || cp.Core.UI.ModelWait != nil {
+				close(blocked.release)
+				t.Fatalf("accepted back must immediately invalidate the persisted model wait: %v", e)
+			}
 		}
 		close(blocked.release)
 		if leave {
@@ -273,11 +283,20 @@ func testPrivateModelCatalogSDKLastGood(t *testing.T, delayed, leave bool) {
 								t.Fatalf("suppressed operation sent: %s", op.State)
 							}
 						}
-						return
+						actualTitle := ""
+						for _, sent := range gateway.snapshotOperations() {
+							if sent.Kind == feishu.OperationUpdateCard && sent.MessageID == leaveClick.MessageID {
+								actualTitle = sent.CardTitle
+							}
+						}
+						if actualTitle == priorPageTitle {
+							t.Logf("same-card final platform write restored %q", actualTitle)
+							return
+						}
 					}
 				}
 				if time.Now().After(deadline) {
-					t.Fatal("stale model publication was not durably suppressed")
+					t.Fatal("stale model publication was not suppressed or last platform write did not restore the navigated page")
 				}
 				time.Sleep(10 * time.Millisecond)
 			}

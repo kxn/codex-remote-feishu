@@ -363,6 +363,11 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
 	action = s.resolveCatalogActionFromSurfaceContext(surface, action)
+	if s.config.PrivateApplication && PrivateHistoryAction(action) {
+		if p, ok := s.privateThreadPolicies[surface.SurfaceSessionID]; ok && p.Unavailable != "" {
+			return s.filterEventsForSurfaceVisibility(notice(surface, "history_unavailable", "历史目录暂不可用："+p.Unavailable))
+		}
+	}
 	if blocked := s.rejectExpiredCommandEntry(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
@@ -418,10 +423,12 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if blocked := s.commandSupportBlocked(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
-	if replay := s.replayActivePendingRequestVisibility(surface, ""); len(replay) != 0 && action.Kind == control.ActionStatus {
-		events := []eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
-		events = append(events, replay...)
-		return s.filterEventsForSurfaceVisibility(events)
+	if action.Kind == control.ActionStatus && !s.config.PrivateApplication {
+		if replay := s.replayActivePendingRequestVisibility(surface, ""); len(replay) != 0 {
+			events := []eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
+			events = append(events, replay...)
+			return s.filterEventsForSurfaceVisibility(events)
+		}
 	}
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, action, *intent))

@@ -44,3 +44,24 @@ func TestPrivateRecoveryGateRequiresAllOtherFactsClear(t *testing.T) {
 		t.Fatal("auto continuation still requires recovery")
 	}
 }
+
+func TestPrivateRecoveryGateAllowsOnlyTheProvenLiveRequest(t *testing.T) {
+	s := NewService(nil, Config{PrivateApplication: true}, nil)
+	s.MaterializeSurface("s", "g", "chat", "user")
+	surface := s.root.Surfaces["s"]
+	surface.AttachedInstanceID = "instance"
+	surface.PendingRequests = map[string]*state.RequestPromptRecord{"request": {RequestID: "request", InstanceID: "instance"}, "foreign": {RequestID: "foreign", InstanceID: "other"}}
+	s.privateRecoveryHolds["s"] = PrivateCheckpoint{Holds: []PrivateRecoveryHold{{Kind: "active_remote"}}}
+	for _, tc := range []struct {
+		id    string
+		allow bool
+	}{{"request", true}, {"foreign", false}, {"missing", false}} {
+		got := s.PrivateRecoveryActionAllowed(control.Action{SurfaceSessionID: "s", Kind: control.ActionRespondRequest, Request: &control.ActionRequestResponse{RequestID: tc.id}})
+		if got != tc.allow {
+			t.Fatalf("request %q allowed=%v", tc.id, got)
+		}
+	}
+	if s.PrivateRecoveryActionAllowed(control.Action{SurfaceSessionID: "s", Kind: control.ActionTextMessage}) {
+		t.Fatal("ordinary input escaped recovery hold")
+	}
+}

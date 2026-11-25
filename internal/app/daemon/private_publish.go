@@ -35,6 +35,9 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 	if p == nil || p.host == nil || p.processor == nil || p.journal == nil || p.host.gateway == nil {
 		return nil, fmt.Errorf("private publisher not configured")
 	}
+	if err := p.journal.PublicationOrderReady(ctx, o, generation, id); err != nil {
+		return nil, err
+	}
 	publication, err := p.journal.LoadPublication(ctx, o, generation, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		if err = p.prepare(ctx, o, generation, id); err != nil {
@@ -114,6 +117,11 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 		}
 		if operation.GatewayID != o.GatewayID || operation.SurfaceSessionID != o.SurfaceID || operation.ChatID != o.ChatID {
 			return nil, privatechat.ErrJournalConflict
+		}
+		if operation.Kind == feishu.OperationUpdateCard {
+			if err = p.journal.CardPublicationOrderReady(ctx, o, generation, id, operation.MessageID); err != nil {
+				return nil, err
+			}
 		}
 		if operation.Kind == feishu.OperationAddReaction || operation.Kind == feishu.OperationRemoveReaction {
 			held, e := p.journal.HasUncertainMigratedReaction(ctx, o, generation, operation.MessageID)

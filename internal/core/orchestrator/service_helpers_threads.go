@@ -485,6 +485,9 @@ func formatOverrideNotice(summary control.PromptRouteSummary, prefix string) str
 }
 
 func displayConfigValue(value, source string) string {
+	if strings.TrimSpace(value) == "" && source == "native_default" {
+		return "跟随原生配置"
+	}
 	if strings.TrimSpace(value) == "" {
 		return "未知"
 	}

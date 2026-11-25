@@ -289,9 +289,13 @@ func formatSnapshotEffectivePromptPlain(summary control.PromptRouteSummary) stri
 	if summary.UsesLocalRequestedOverrides {
 		return formatSnapshotLocalRequestedPromptPlain(summary)
 	}
+	model := displaySnapshotValue(summary.EffectiveModel)
+	if strings.TrimSpace(summary.EffectiveModel) == "" && summary.EffectiveModelSource == "native_default" {
+		model = "跟随原生配置"
+	}
 	return strings.Join([]string{
 		"Plan " + displaySnapshotPlanMode(summary.EffectivePlanMode),
-		"模型 " + displaySnapshotValue(summary.EffectiveModel),
+		"模型 " + model,
 		"推理 " + displaySnapshotValue(summary.EffectiveReasoningEffort),
 		"权限 " + displaySnapshotAccessMode(summary.EffectiveAccessMode),
 	}, "，")
