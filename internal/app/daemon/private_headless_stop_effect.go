@@ -172,9 +172,9 @@ func (h *privateNativeHost) advanceCarrierStop(ctx context.Context, rec privateC
 		if e != nil {
 			return e
 		}
-		e = nativeinspection.VerifyPrivateOwnerStoppedWithTerminalProof(rec.Snapshot.Owner, inspection, func(event agentproto.Event) bool {
+		e = nativeinspection.VerifyPrivateOwnerStoppedWithProofs(rec.Snapshot.Owner, inspection, func(event agentproto.Event) bool {
 			return h.journal.ProveCommittedNativeTerminal(ctx, rec.Snapshot.Owner, rec.Surface, rec.SurfaceGeneration, event) == nil
-		})
+		}, h.ephemeralReviewVerifier(ctx, rec))
 		if e != nil {
 			_, _ = h.store.inspectionIntent(ctx, instance, stopID, true)
 			return privatechat.ErrDeferred

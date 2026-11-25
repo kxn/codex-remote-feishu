@@ -13,7 +13,7 @@ func TestTranslateReviewStartBuildsDetachedPayload(t *testing.T) {
 	commands, err := tr.TranslateCommand(agentproto.Command{
 		Kind:   agentproto.CommandReviewStart,
 		Origin: agentproto.Origin{Surface: "surface-1"},
-		Target: agentproto.Target{ThreadID: "thread-main"},
+		Target: agentproto.Target{ThreadID: "thread-main", CWD: "/tmp/project"},
 		Review: agentproto.ReviewRequest{
 			Delivery: agentproto.ReviewDeliveryDetached,
 			Target: agentproto.ReviewTarget{
@@ -32,19 +32,27 @@ func TestTranslateReviewStartBuildsDetachedPayload(t *testing.T) {
 	if err := json.Unmarshal(commands[0], &payload); err != nil {
 		t.Fatalf("unmarshal review/start payload: %v", err)
 	}
-	if payload["method"] != "review/start" {
-		t.Fatalf("expected review/start payload, got %#v", payload)
+	if payload["method"] != "thread/start" {
+		t.Fatalf("expected independent thread/start payload, got %#v", payload)
 	}
-	if payload["id"] != "relay-review-start-0" {
+	if payload["id"] != "relay-review-thread-start-0" {
 		t.Fatalf("unexpected request id: %#v", payload["id"])
 	}
 	params, _ := payload["params"].(map[string]any)
-	if params["threadId"] != "thread-main" || params["delivery"] != "detached" {
+	if params["cwd"] != "/tmp/project" || params["ephemeral"] != true {
 		t.Fatalf("unexpected review/start params: %#v", params)
 	}
+	result, err := tr.ObserveServer([]byte(`{"id":"relay-review-thread-start-0","result":{"thread":{"id":"thread-review"}}}`))
+	if err != nil || len(result.OutboundToCodex) != 1 {
+		t.Fatalf("review thread result: %+v %v", result, err)
+	}
+	if err = json.Unmarshal(result.OutboundToCodex[0], &payload); err != nil {
+		t.Fatal(err)
+	}
+	params, _ = payload["params"].(map[string]any)
 	target, _ := params["target"].(map[string]any)
-	if target["type"] != "uncommittedChanges" {
-		t.Fatalf("unexpected review target payload: %#v", target)
+	if payload["method"] != "review/start" || params["threadId"] != "thread-review" || params["delivery"] != "inline" || target["type"] != "uncommittedChanges" {
+		t.Fatalf("unexpected review frame: %#v", payload)
 	}
 }
 
@@ -53,7 +61,7 @@ func TestObserveReviewStartResultMarksDetachedReviewThreadAndTurnInitiator(t *te
 	if _, err := tr.TranslateCommand(agentproto.Command{
 		Kind:   agentproto.CommandReviewStart,
 		Origin: agentproto.Origin{Surface: "surface-1"},
-		Target: agentproto.Target{ThreadID: "thread-main"},
+		Target: agentproto.Target{ThreadID: "thread-main", CWD: "/tmp/project"},
 		Review: agentproto.ReviewRequest{
 			Delivery: agentproto.ReviewDeliveryDetached,
 			Target:   agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
@@ -62,7 +70,10 @@ func TestObserveReviewStartResultMarksDetachedReviewThreadAndTurnInitiator(t *te
 		t.Fatalf("translate review start: %v", err)
 	}
 
-	result, err := tr.ObserveServer([]byte(`{"id":"relay-review-start-0","result":{"turn":{"id":"turn-review-1"},"reviewThreadId":"thread-review"}}`))
+	if _, err := tr.ObserveServer([]byte(`{"id":"relay-review-thread-start-0","result":{"thread":{"id":"thread-review"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	result, err := tr.ObserveServer([]byte(`{"id":"relay-review-start-1","result":{"turn":{"id":"turn-review-1"},"reviewThreadId":"thread-review"}}`))
 	if err != nil {
 		t.Fatalf("observe review/start result: %v", err)
 	}
@@ -73,7 +84,7 @@ func TestObserveReviewStartResultMarksDetachedReviewThreadAndTurnInitiator(t *te
 		t.Fatalf("unexpected review metadata event: %#v", result.Events[0])
 	}
 
-	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-review","cwd":"/tmp/project"}}}`))
+	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-review","cwd":"/tmp/project","source":"vscode"}}}`))
 	if err != nil {
 		t.Fatalf("observe review thread started: %v", err)
 	}
@@ -84,8 +95,8 @@ func TestObserveReviewStartResultMarksDetachedReviewThreadAndTurnInitiator(t *te
 	if event.Kind != agentproto.EventThreadDiscovered || event.ThreadID != "thread-review" {
 		t.Fatalf("unexpected thread discovered event: %#v", event)
 	}
-	if event.Metadata["forkedFromId"] != "thread-main" {
-		t.Fatalf("expected fork parent metadata, got %#v", event.Metadata)
+	if event.Metadata["forkedFromId"] != nil {
+		t.Fatalf("independent review falsely claims a fork: %#v", event.Metadata)
 	}
 	source, ok := event.Metadata["threadSource"].(*agentproto.ThreadSourceRecord)
 	if !ok || source == nil || source.Kind != agentproto.ThreadSourceKindReview || source.ParentThreadID != "thread-main" {
@@ -109,7 +120,7 @@ func TestObserveReviewStartResultBackfillsDetachedReviewThreadWhenThreadStartedA
 	if _, err := tr.TranslateCommand(agentproto.Command{
 		Kind:   agentproto.CommandReviewStart,
 		Origin: agentproto.Origin{Surface: "surface-1"},
-		Target: agentproto.Target{ThreadID: "thread-main"},
+		Target: agentproto.Target{ThreadID: "thread-main", CWD: "/tmp/project"},
 		Review: agentproto.ReviewRequest{
 			Delivery: agentproto.ReviewDeliveryDetached,
 			Target:   agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindCommit, CommitSHA: "ca015951cc1b21ab351c7a941923af7ae03b39c5"},
@@ -118,18 +129,19 @@ func TestObserveReviewStartResultBackfillsDetachedReviewThreadWhenThreadStartedA
 		t.Fatalf("translate review start: %v", err)
 	}
 
-	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-review","cwd":"/tmp/project","forkedFromId":"thread-main","source":null}}}`))
+	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-review","cwd":"/tmp/project","source":"vscode"}}}`))
 	if err != nil {
 		t.Fatalf("observe early review thread started: %v", err)
 	}
 	if len(started.Events) != 1 {
 		t.Fatalf("expected one early thread discovered event, got %#v", started.Events)
 	}
-	if _, ok := started.Events[0].Metadata["threadSource"]; ok {
-		t.Fatalf("did not expect review source before review/start result, got %#v", started.Events[0].Metadata)
-	}
+	// The pre-response event cannot yet be attributed to the pending request.
 
-	result, err := tr.ObserveServer([]byte(`{"id":"relay-review-start-0","result":{"turn":{"id":"turn-review-1"},"reviewThreadId":"thread-review"}}`))
+	if _, err := tr.ObserveServer([]byte(`{"id":"relay-review-thread-start-0","result":{"thread":{"id":"thread-review"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	result, err := tr.ObserveServer([]byte(`{"id":"relay-review-start-1","result":{"turn":{"id":"turn-review-1"},"reviewThreadId":"thread-review"}}`))
 	if err != nil {
 		t.Fatalf("observe late review/start result: %v", err)
 	}
@@ -146,8 +158,8 @@ func TestObserveReviewStartResultBackfillsDetachedReviewThreadWhenThreadStartedA
 	if event.Initiator.Kind != agentproto.InitiatorRemoteSurface || event.Initiator.SurfaceSessionID != "surface-1" {
 		t.Fatalf("unexpected late review metadata initiator: %#v", event.Initiator)
 	}
-	if event.Metadata["forkedFromId"] != "thread-main" {
-		t.Fatalf("expected parent fork metadata, got %#v", event.Metadata)
+	if event.Metadata["forkedFromId"] != nil {
+		t.Fatalf("independent review falsely claims a fork: %#v", event.Metadata)
 	}
 	source, ok := event.Metadata["threadSource"].(*agentproto.ThreadSourceRecord)
 	if !ok || source == nil || source.Kind != agentproto.ThreadSourceKindReview || source.ParentThreadID != "thread-main" {

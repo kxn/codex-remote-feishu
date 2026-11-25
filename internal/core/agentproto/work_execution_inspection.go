@@ -91,9 +91,19 @@ type RuntimeOwnerInspection struct {
 }
 
 type RuntimeSessionInspection struct {
-	SessionID             string   `json:"sessionId"`
-	Native                RPCProbe `json:"native"`
-	Continuation          RPCProbe `json:"continuation"`
-	StreamTerminal        *Event   `json:"streamTerminal,omitempty"`
-	NoNativeInputObserved bool     `json:"noNativeInputObserved,omitempty"`
+	SessionID             string                       `json:"sessionId"`
+	Native                RPCProbe                     `json:"native"`
+	Continuation          RPCProbe                     `json:"continuation"`
+	StreamTerminal        *Event                       `json:"streamTerminal,omitempty"`
+	NoNativeInputObserved bool                         `json:"noNativeInputObserved,omitempty"`
+	EphemeralReview       *RuntimeEphemeralReviewProof `json:"ephemeralReview,omitempty"`
+}
+
+type RuntimeEphemeralReviewProof struct {
+	CommandID        string `json:"commandId"`
+	FrameID          int64  `json:"frameId"`
+	FrameHash        string `json:"frameHash"`
+	CreatedSequence  uint64 `json:"createdSequence"`
+	AcceptedSequence uint64 `json:"acceptedSequence"`
+	TerminalSequence uint64 `json:"terminalSequence"`
 }

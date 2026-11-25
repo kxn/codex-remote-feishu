@@ -187,6 +187,33 @@ func (a retiredProjectionAuthority) WithNativeLease(ctx context.Context, n agent
 	return a.host.WithRetiredRuntime(ctx, o, generation, n, fn)
 }
 
+func (a retiredProjectionAuthority) BindNativeReviewSession(ctx context.Context, n agentproto.NativeOwner, o privatechat.Owner, generation int64, session string) error {
+	return a.host.WithRetiredRuntime(ctx, o, generation, n, func() error {
+		rec, err := a.host.store.lookup(ctx, n.InstanceID)
+		if err != nil {
+			return err
+		}
+		return a.host.registry.BindRetiredReviewSession(ctx, privateRegistration(n), privateCarrierStopEvidence(rec), session)
+	})
+}
+
+func (a retiredProjectionAuthority) WithNativeReviewProjection(ctx context.Context, n agentproto.NativeOwner, o privatechat.Owner, generation int64, session string, fn func(func(string) error) error) error {
+	return a.host.WithRetiredRuntime(ctx, o, generation, n, func() error {
+		rec, err := a.host.store.lookup(ctx, n.InstanceID)
+		if err != nil {
+			return err
+		}
+		return a.host.registry.WithRetiredReviewSession(ctx, privateRegistration(n), privateCarrierStopEvidence(rec), session, func() error {
+			return fn(func(proven string) error {
+				if proven != session {
+					return privatechat.ErrJournalConflict
+				}
+				return nil
+			})
+		})
+	})
+}
+
 func (h *privateNativeHost) projectRetiredCarrierEvents(ctx context.Context, rec privateCarrierRecord) error {
 	pending, err := h.journal.HasPendingNativeProjection(ctx, rec.Snapshot.Owner.CarrierIncarnation)
 	if err != nil || !pending {

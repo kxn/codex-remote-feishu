@@ -86,7 +86,9 @@ func (s *Service) materializeRemoteTurnThread(inst *state.InstanceRecord, thread
 		plan := remoteBindingPromptDispatchPlan(binding)
 		if plan.Purpose == agentproto.PromptPurposeReview {
 			parentThreadID := strings.TrimSpace(plan.SourceThreadID)
-			thread.ForkedFromID = parentThreadID
+			if plan.ExecutionMode == agentproto.PromptExecutionModeForkEphemeral {
+				thread.ForkedFromID = parentThreadID
+			}
 			thread.Source = &agentproto.ThreadSourceRecord{
 				Kind:           agentproto.ThreadSourceKindReview,
 				Name:           "review",

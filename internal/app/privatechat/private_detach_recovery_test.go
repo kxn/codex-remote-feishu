@@ -17,7 +17,7 @@ func TestPrivateDisconnectedDetachFreezesOldInputAndPreventsDispatch(t *testing.
 		t.Fatal(e)
 	}
 	var before int
-	if e := j.db.QueryRow(`PRAGMA user_version`).Scan(&before); e != nil || before != 9 {
+	if e := j.db.QueryRow(`PRAGMA user_version`).Scan(&before); e != nil || before != privateJournalSchemaVersion {
 		t.Fatalf("initial schema=%d err=%v", before, e)
 	}
 	text := privateAction(o, control.ActionTextMessage)
@@ -128,7 +128,7 @@ func TestPrivateDisconnectedDetachFreezesOldInputAndPreventsDispatch(t *testing.
 		t.Fatal("detached execution blocked a different owner")
 	}
 	var version int
-	if e := j.db.QueryRow(`PRAGMA user_version`).Scan(&version); e != nil || version != 9 {
+	if e := j.db.QueryRow(`PRAGMA user_version`).Scan(&version); e != nil || version != privateJournalSchemaVersion {
 		t.Fatalf("detached schema=%d err=%v", version, e)
 	}
 	// The version-5 reader's startup gate explicitly rejects every version >5.
@@ -143,7 +143,7 @@ func TestPrivateDisconnectedDetachFreezesOldInputAndPreventsDispatch(t *testing.
 		t.Fatal(e)
 	}
 	defer reopened.Close()
-	if e = reopened.db.QueryRow(`PRAGMA user_version`).Scan(&version); e != nil || version != 9 {
+	if e = reopened.db.QueryRow(`PRAGMA user_version`).Scan(&version); e != nil || version != privateJournalSchemaVersion {
 		t.Fatalf("reopen downgraded schema=%d err=%v", version, e)
 	}
 

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +51,9 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	app, gateway := newApplicationRuntimeTestApp(t)
 	r := app.applications
 	cwd := t.TempDir()
+	if os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
+		prepareRealReviewRepository(t, cwd)
+	}
 	app.service.SetPersistedThreadCatalog(newWorkspaceJourneyCatalog{cwd: cwd})
 	settings := state.BotCapabilitySettingsRecord{GatewayID: "gateway", Backend: agentproto.BackendCodex, CodexProfileID: state.OAuthCodexProfileID}
 	if os.Getenv("PRIVATE_REAL_CODEX_EXISTING_MODEL") == "1" {
@@ -60,7 +64,7 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	}
 	setTestWorkBotSettings(t, app, settings)
 	timeout := 10 * time.Second
-	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" || os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
 		timeout = 180 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -98,7 +102,7 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		if err = os.WriteFile(filepath.Join(isolatedCodex, "auth.json"), credentials, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+		if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" || os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
 			if raw, e := os.ReadFile(filepath.Join(sourceHome, "config.toml")); e == nil {
 				if e = os.WriteFile(filepath.Join(isolatedCodex, "config.toml"), raw, 0600); e != nil {
 					t.Fatal(e)
@@ -111,7 +115,7 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		t.Skip("set PRIVATE_REAL_CODEX_HOME for isolated OAuth probe")
 	}
 	app.headlessRuntime.BaseEnv = []string{"HOME=" + isolatedHome, "PATH=" + os.Getenv("PATH")}
-	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" || os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
 		app.headlessRuntime.BaseEnv = buildDaemonHeadlessBaseEnv(os.Environ(), config.CaptureProxyEnv())
 		app.headlessRuntime.BaseEnv = config.UpsertEnvValue(app.headlessRuntime.BaseEnv, "HOME", isolatedHome)
 		app.headlessRuntime.BaseEnv = config.UpsertEnvValue(app.headlessRuntime.BaseEnv, "CODEX_HOME", filepath.Join(isolatedHome, ".codex"))
@@ -121,24 +125,71 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	server := httptest.NewServer(app.relay)
 	defer server.Close()
 	relayURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	var child *exec.Cmd
+	var reviewStderr *os.File
+	var reviewStackPath string
+	if os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
+		dir, e := os.MkdirTemp("/tmp", "private-review-stack-")
+		if e != nil {
+			t.Fatal(e)
+		}
+		reviewStderr, e = os.OpenFile(filepath.Join(dir, "wrapper-stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		reviewStackPath = filepath.Join(dir, "daemon-goroutines.log")
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer reviewStderr.Close()
+		t.Logf("isolated review wrapper stderr artifact directory=%s", dir)
+	}
+	var childMu sync.Mutex
+	var children []*exec.Cmd
+	var childWait sync.WaitGroup
 	r.native.startHeadless = func(v relayruntime.HeadlessLaunchOptions) (int, error) {
-		child = exec.Command(exe, "-test.run=^TestPrivateRealCodexWrapperProcess$")
+		child := exec.Command(exe, "-test.run=^TestPrivateRealCodexWrapperProcess$")
 		child.Env = append(v.Env, "PRIVATE_REAL_CODEX_WRAPPER=1", "FIXTURE_RELAY_URL="+relayURL, "FIXTURE_STATE_DIR="+root, "FIXTURE_CODEX_BIN="+codex)
 		child.Dir = v.WorkDir
 		child.Stdout = io.Discard
 		child.Stderr = os.Stderr
+		if reviewStderr != nil {
+			child.Stderr = reviewStderr
+			child.Env = append(child.Env, "GOTRACEBACK=all")
+		}
 		if e := child.Start(); e != nil {
 			return 0, e
 		}
+		if os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
+			t.Logf("isolated review wrapper pid=%d state=%s", child.Process.Pid, root)
+		}
+		childMu.Lock()
+		children = append(children, child)
+		childWait.Add(1)
+		childMu.Unlock()
+		go func() {
+			defer childWait.Done()
+			err := child.Wait()
+			if reviewStderr != nil {
+				fmt.Fprintf(reviewStderr, "fixture wrapper exit utc=%s pid=%d error=%v\n", time.Now().UTC().Format(time.RFC3339Nano), child.Process.Pid, err)
+			}
+		}()
 		return child.Process.Pid, nil
 	}
-	defer func() {
-		if child != nil {
+	killChildren := func() {
+		childMu.Lock()
+		defer childMu.Unlock()
+		for _, child := range children {
 			_ = child.Process.Kill()
-			_ = child.Wait()
 		}
-	}()
+	}
+	ownsChild := func(pid int) bool {
+		childMu.Lock()
+		defer childMu.Unlock()
+		for _, child := range children {
+			if child.Process.Pid == pid {
+				return true
+			}
+		}
+		return false
+	}
+	defer func() { killChildren(); childWait.Wait() }()
 	errorsCh := make(chan error, 8)
 	if err = r.startWorkers(ctx, errorsCh); err != nil {
 		t.Fatal(err)
@@ -147,10 +198,7 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		stop, c := context.WithTimeout(context.Background(), 5*time.Second)
 		defer c()
 		_ = r.stopWorkers(stop)
-		if child != nil {
-			_ = child.Process.Kill()
-			_ = child.Wait()
-		}
+		killChildren()
 		_ = r.drainNativeDeliveries(stop)
 	}()
 	raw := platformingress.RawIngressEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", SenderTenant: "tenant", EventID: "list", MessageID: "source", ChatID: "private-chat", ChatType: "p2p", SenderType: "user", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, MessageType: "text", RawContent: `{"text":"/list"}`, ReceivedAt: time.Now()}
@@ -289,12 +337,18 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
 		testPrivateRealCodexTwoTurns(t, ctx, r, gateway, app, raw)
 	}
+	if os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
+		testPrivateRealCodexReview(t, ctx, r, gateway, app, raw)
+	}
 	final, e := r.processor.ReadRuntimeStatus(ctx)
 	if e != nil {
 		t.Fatal(e)
 	}
 	for _, inst := range final.Instances {
 		if inst.Online && inst.WorkspaceRoot == cwd && inst.CodexProfileID == state.OAuthCodexProfileID {
+			if os.Getenv("PRIVATE_REAL_CODEX_REVIEW") == "1" {
+				verifyRealReviewShutdown(t, app, ownsChild, reviewStderr, reviewStackPath)
+			}
 			return
 		}
 	}

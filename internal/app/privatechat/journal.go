@@ -17,6 +17,10 @@ import (
 var ErrJournalConflict = errors.New("private journal conflict")
 var ErrJournalState = errors.New("invalid private journal state")
 
+// Schema 10 fences readers that cannot validate control-action prompt sources.
+// The v9 upgrade preserves existing records; the new contract lives in JSON.
+const privateJournalSchemaVersion = 10
+
 // Ingress is an already authenticated private event. Payload and source IDs
 // are immutable, including attachment references. Lane is "input" or "control".
 type Ingress struct {
@@ -89,12 +93,12 @@ func OpenJournal(path string) (*Journal, error) {
 	db.SetMaxOpenConns(1)
 	j := &Journal{db: db, lock: lock}
 	var version int
-	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version < 0 || version > 9 {
+	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version < 0 || version > privateJournalSchemaVersion {
 		j.Close()
 		if err != nil {
 			return nil, err
 		}
-		return nil, errors.New("unsupported private journal schema")
+		return nil, fmt.Errorf("unsupported private journal schema %d (maximum %d)", version, privateJournalSchemaVersion)
 	}
 	if version == 0 {
 		var existing int
@@ -161,7 +165,7 @@ func OpenJournal(path string) (*Journal, error) {
 	if appliedTable != 0 && discardColumn == 0 {
 		originMigration += `ALTER TABLE private_applied ADD COLUMN route_discard INTEGER NOT NULL DEFAULT 0;`
 	}
-	versionPragma := "PRAGMA user_version=9;"
+	versionPragma := fmt.Sprintf("PRAGMA user_version=%d;", privateJournalSchemaVersion)
 	if _, err = db.Exec(`PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE;
  CREATE TABLE IF NOT EXISTS ingress (seq INTEGER PRIMARY KEY AUTOINCREMENT, gateway TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, event_id TEXT NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('input','control','inspect')), payload BLOB NOT NULL, sources BLOB NOT NULL, origin_router TEXT NOT NULL DEFAULT '', origin_seq INTEGER NOT NULL DEFAULT 0, UNIQUE(tenant,app_id,event_id));
  CREATE TABLE IF NOT EXISTS dispatch (id TEXT PRIMARY KEY, gateway TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('input','control','inspect')), mode TEXT NOT NULL, backend TEXT NOT NULL, namespace TEXT NOT NULL, session TEXT NOT NULL, carrier TEXT NOT NULL, carrier_generation INTEGER NOT NULL, command_id TEXT NOT NULL UNIQUE, state TEXT NOT NULL CHECK(state IN ('prepared','sending','sent','resolved','accepted','unknown','failed')), evidence BLOB, request_id TEXT NOT NULL DEFAULT '', event_sequence INTEGER NOT NULL DEFAULT 0);

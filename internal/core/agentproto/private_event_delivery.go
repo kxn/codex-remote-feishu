@@ -22,8 +22,10 @@ func PrivateDeliveryForEvent(kind EventKind) PrivateEventDelivery {
 // Zero means the original wrapper has the necessary evidence.
 func PrivateDeliveryRequirement(kind CommandKind) int {
 	switch kind {
-	case CommandRequestRespond, CommandReviewStart, CommandThreadCompactStart, CommandThreadRead:
-		return PrivateDeliveryVersion
+	case CommandReviewStart:
+		return PrivateDeliveryVersionIsolatedReview
+	case CommandRequestRespond, CommandThreadCompactStart, CommandThreadRead:
+		return PrivateDeliveryVersionControlReceipts
 	default:
 		return 0
 	}

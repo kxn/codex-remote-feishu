@@ -62,7 +62,7 @@ func TestSuppressedPublicationKeepsUnsentOperationsAcrossRestart(t *testing.T) {
 	}
 	defer j.Close()
 	var version int
-	if err = j.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
+	if err = j.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != privateJournalSchemaVersion {
 		t.Fatalf("version=%d err=%v", version, err)
 	}
 	pub, err := j.LoadPublication(t.Context(), o, 1, "view")

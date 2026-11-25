@@ -40,6 +40,25 @@ func (p *Processor) queuedRecoveryProvenLocked(ctx context.Context, o Owner, gen
 	proven := true
 	for _, id := range cp.QueuedQueueItemIDs {
 		item := cp.QueueItems[id]
+		if item != nil && item.SourceKind == state.QueueItemSourceControlAction {
+			if item.ActorUserID != o.UserID {
+				proven = false
+				break
+			}
+			seq, e := verifyControlInput(ctx, p.journal.db, o, generation, item.ControlIngressEventID, 0, true)
+			if e != nil {
+				return false, e
+			}
+			var n int
+			if e = p.journal.db.QueryRowContext(ctx, `SELECT count(*) FROM dispatch_input di JOIN dispatch d ON d.id=di.dispatch_id WHERE di.seq=? AND d.state<>'failed'`, seq).Scan(&n); e != nil {
+				return false, e
+			}
+			if n != 0 {
+				proven = false
+				break
+			}
+			continue
+		}
 		if item == nil || item.SourceKind != state.QueueItemSourceUser || item.ActorUserID != o.UserID || item.SourceMessageID == "" || len(item.SourceMessageIDs) == 0 {
 			proven = false
 			break

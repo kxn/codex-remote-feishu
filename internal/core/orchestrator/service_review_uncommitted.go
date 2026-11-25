@@ -129,15 +129,20 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
 	}
 	frozenAccessMode := ""
+	var reviewOverrides agentproto.PromptOverrides
+	var reviewPolicy *agentproto.CodexResumePolicy
 	if backend == agentproto.BackendCodex {
 		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
-		frozenAccessMode = agentproto.NormalizeAccessMode(s.resolveFrozenPromptOverride(
+		frozen := s.resolveFrozenPromptOverride(
 			inst,
 			surface,
 			strings.TrimSpace(start.ParentThreadID),
 			strings.TrimSpace(start.ThreadCWD),
 			surface.PromptOverride,
-		).AccessMode)
+		)
+		frozenAccessMode = agentproto.NormalizeAccessMode(frozen.AccessMode)
+		reviewOverrides = agentproto.PromptOverrides{Model: frozen.Model, ReasoningEffort: frozen.ReasoningEffort, AccessMode: frozenAccessMode}
+		reviewPolicy = CodexResumePolicyForThread(surface.CodexConnectionContract, surface.CodexThreadPolicy, codexResumeThreadByID(inst, start.ParentThreadID))
 	}
 	s.clearReviewCommitPickerRuntime(surface)
 	surface.ReviewSession = &state.ReviewSessionRecord{
@@ -197,7 +202,10 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 				},
 				Target: agentproto.Target{
 					ThreadID: strings.TrimSpace(start.ParentThreadID),
+					CWD:      strings.TrimSpace(start.ThreadCWD),
 				},
+				Overrides:   reviewOverrides,
+				CodexResume: reviewPolicy,
 				Review: agentproto.ReviewRequest{
 					Delivery: agentproto.ReviewDeliveryDetached,
 					Target:   start.Target.Normalized(),

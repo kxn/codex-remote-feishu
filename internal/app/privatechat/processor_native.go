@@ -163,7 +163,23 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 	if l == nil || l.journal != p.journal || reducer == nil || ref.Incarnation != l.native.CarrierIncarnation || ref.Sequence == 0 || ref.PayloadHash == "" {
 		return nil, ErrJournalState
 	}
-	err = l.with(ctx, func() error {
+	// Commit proven child ownership before the private checkpoint. A later
+	// checkpoint failure may leave a real native child registered; the reverse
+	// ordering could publish a checkpoint whose registry transaction rolled back.
+	reviewSession, e := p.journal.reviewProjectionSession(ctx, l, ref)
+	if e != nil {
+		return nil, e
+	}
+	if reviewSession != "" {
+		authority, ok := l.authority.(NativeReviewProjectionAuthority)
+		if !ok {
+			return nil, ErrJournalConflict
+		}
+		if e = authority.BindNativeReviewSession(ctx, l.native, l.surface, l.generation, reviewSession); e != nil {
+			return nil, e
+		}
+	}
+	project := func(bindReview func(string) error) error {
 		ctx, projectionErr := beginProjection(ctx)
 		if projectionErr != nil {
 			return projectionErr
@@ -268,6 +284,14 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 				kind = agentproto.CommandThreadCompactStart
 			}
 			reviewThread, _ := event.Metadata["reviewThreadID"].(string)
+			if event.Action == "review.start" && event.Status == "accepted" {
+				if bindReview == nil || reviewThread == "" || reviewThread == event.ThreadID || event.TurnID == "" {
+					return ErrJournalConflict
+				}
+				if e = bindReview(reviewThread); e != nil {
+					return e
+				}
+			}
 			if e = p.app.Service().RestorePrivateControlProjection(l.surface.SurfaceID, l.native.InstanceID, event.CommandID, kind, event.ThreadID, reviewThread, event.TurnID); e != nil {
 				return e
 			}
@@ -298,6 +322,12 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 		}
 		projectedCommand := ""
 		if reviewEvent {
+			if bindReview == nil {
+				return ErrJournalConflict
+			}
+			if e = bindReview(event.ThreadID); e != nil {
+				return e
+			}
 			var command, parent string
 			var count int
 			if e = p.journal.db.QueryRowContext(ctx, `SELECT n.command_id,json_extract(n.payload,'$.target.threadId'),count(*) OVER() FROM native_commands n JOIN dispatch d ON d.id=n.dispatch_id WHERE d.carrier=? AND json_extract(n.payload,'$.kind')=? AND json_extract(n.payload,'$.nativeBinding.executionId')=?`, l.native.CarrierIncarnation, string(agentproto.CommandReviewStart), event.NativeBinding.ExecutionID).Scan(&command, &parent, &count); e != nil {
@@ -306,7 +336,23 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 			if count != 1 {
 				return ErrJournalConflict
 			}
-			if e = p.app.Service().RestorePrivateControlProjection(l.surface.SurfaceID, l.native.InstanceID, command, agentproto.CommandReviewStart, parent, event.ThreadID, event.TurnID); e != nil {
+			proofTurn, rootErr := p.journal.reviewRootTurn(ctx, l, event)
+			if rootErr != nil {
+				return rootErr
+			}
+			if proofTurn == "" {
+				proofTurn = event.TurnID
+			}
+			if event.RootTurnID != "" && event.RootTurnID != proofTurn {
+				return ErrJournalConflict
+			}
+			if proofTurn != event.TurnID {
+				event.RootTurnID = proofTurn
+			}
+			if e = p.app.Service().RestorePrivateControlProjection(l.surface.SurfaceID, l.native.InstanceID, command, agentproto.CommandReviewStart, parent, event.ThreadID, proofTurn); e != nil {
+				return e
+			}
+			if e = p.app.Service().ProjectVerifiedPrivateReviewThread(l.surface.SurfaceID, l.native.InstanceID, parent, event.ThreadID); e != nil {
 				return e
 			}
 		}
@@ -389,7 +435,12 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 		p.owners[l.surface] = processorOwner{cp.Revision, cp.Cursor, l.generation}
 		out, e = p.journal.processorEffects(ctx, l.surface, l.generation, cp.Revision)
 		return e
-	})
+	}
+	if reviewSession != "" {
+		err = l.withProjection(ctx, reviewSession, project)
+	} else {
+		err = l.with(ctx, func() error { return project(nil) })
+	}
 	return out, err
 }
 func isNativeTurnProjection(k agentproto.EventKind) bool {
@@ -491,7 +542,11 @@ func (j *Journal) nativeBindingFromProof(ctx context.Context, l *NativeLease, ev
 	if event.ThreadID == "" || event.TurnID == "" {
 		return nil, ErrJournalState
 	}
-	rows, err := j.db.QueryContext(ctx, `SELECT payload FROM native_events WHERE incarnation=? AND (json_extract(payload,'$.threadId')=? OR (json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.metadata.reviewThreadID')=?)) AND json_extract(payload,'$.turnId')=? AND json_extract(payload,'$.commandId') IS NOT NULL`, l.native.CarrierIncarnation, event.ThreadID, event.ThreadID, event.TurnID)
+	root, err := j.reviewRootTurn(ctx, l, event)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := j.db.QueryContext(ctx, `SELECT payload FROM native_events WHERE incarnation=? AND ((json_extract(payload,'$.threadId')=? AND json_extract(payload,'$.turnId')=?) OR (json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.metadata.reviewThreadID')=? AND (json_extract(payload,'$.turnId')=? OR (?<>'' AND json_extract(payload,'$.turnId')=?)))) AND json_extract(payload,'$.commandId') IS NOT NULL`, l.native.CarrierIncarnation, event.ThreadID, event.TurnID, event.ThreadID, event.TurnID, root, root)
 	if err != nil {
 		return nil, err
 	}
@@ -550,8 +605,12 @@ func (j *Journal) isPrivateReviewTurn(ctx context.Context, l *NativeLease, event
 	if !isNativeTurnProjection(event.Kind) || event.NativeBinding == nil || event.ThreadID == "" || event.TurnID == "" {
 		return false, nil
 	}
+	root, err := j.reviewRootTurn(ctx, l, event)
+	if err != nil {
+		return false, err
+	}
 	var n int
-	err := j.db.QueryRowContext(ctx, `SELECT count(*) FROM native_events e JOIN native_commands c ON c.command_id=e.command_id JOIN dispatch d ON d.id=c.dispatch_id WHERE e.incarnation=? AND d.state='accepted' AND d.event_sequence=e.sequence AND json_extract(c.payload,'$.kind')=? AND json_extract(c.payload,'$.nativeBinding.executionId')=? AND json_extract(e.payload,'$.action')='review.start' AND json_extract(e.payload,'$.status')='accepted' AND json_extract(e.payload,'$.metadata.reviewThreadID')=? AND json_extract(e.payload,'$.turnId')=?`, l.native.CarrierIncarnation, string(agentproto.CommandReviewStart), event.NativeBinding.ExecutionID, event.ThreadID, event.TurnID).Scan(&n)
+	err = j.db.QueryRowContext(ctx, `SELECT count(*) FROM native_events e JOIN native_commands c ON c.command_id=e.command_id JOIN dispatch d ON d.id=c.dispatch_id WHERE e.incarnation=? AND d.state='accepted' AND d.event_sequence=e.sequence AND json_extract(c.payload,'$.kind')=? AND json_extract(c.payload,'$.nativeBinding.executionId')=? AND json_extract(e.payload,'$.action')='review.start' AND json_extract(e.payload,'$.status')='accepted' AND json_extract(e.payload,'$.metadata.reviewThreadID')=? AND (json_extract(e.payload,'$.turnId')=? OR (?<>'' AND json_extract(e.payload,'$.turnId')=?))`, l.native.CarrierIncarnation, string(agentproto.CommandReviewStart), event.NativeBinding.ExecutionID, event.ThreadID, event.TurnID, root, root).Scan(&n)
 	if err != nil {
 		return false, err
 	}

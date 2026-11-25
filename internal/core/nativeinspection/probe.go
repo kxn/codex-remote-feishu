@@ -54,3 +54,24 @@ func MatchRPC(probe agentproto.RPCProbe, method, sessionID string) (json.RawMess
 	}
 	return response.Result, nil
 }
+
+// ValidEphemeralReviewGoalProbe accepts only the exact Codex protocol
+// unsupported response for the same authenticated ephemeral session.
+func ValidEphemeralReviewGoalProbe(probe agentproto.RPCProbe, sessionID string) bool {
+	var req struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+		Params struct {
+			ThreadID string `json:"threadId"`
+		} `json:"params"`
+	}
+	var res struct {
+		ID    json.RawMessage `json:"id"`
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Result json.RawMessage `json:"result"`
+	}
+	return json.Unmarshal(probe.Request, &req) == nil && json.Unmarshal(probe.Response, &res) == nil && len(req.ID) > 0 && string(req.ID) == string(res.ID) && req.Method == "thread/goal/get" && req.Params.ThreadID == sessionID && res.Error.Code == -32600 && res.Error.Message == "ephemeral thread does not support goals: "+sessionID && len(res.Result) == 0
+}

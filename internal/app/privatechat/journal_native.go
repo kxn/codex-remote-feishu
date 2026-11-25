@@ -21,6 +21,13 @@ type NativeLeaseAuthority interface {
 	WithNativeLease(context.Context, agentproto.NativeOwner, Owner, int64, func() error) error
 }
 
+// NativeReviewProjectionAuthority binds a proven review child under the same
+// registry fence as its local projection. The callback does local work only.
+type NativeReviewProjectionAuthority interface {
+	BindNativeReviewSession(context.Context, agentproto.NativeOwner, Owner, int64, string) error
+	WithNativeReviewProjection(context.Context, agentproto.NativeOwner, Owner, int64, string, func(func(string) error) error) error
+}
+
 // NativeLease is bound to one authenticated private surface and carrier.
 type NativeLease struct {
 	journal    *Journal
@@ -65,6 +72,13 @@ func (l *NativeLease) with(ctx context.Context, fn func() error) error {
 		return ErrJournalState
 	}
 	return l.authority.WithNativeLease(ctx, l.native, l.surface, l.generation, fn)
+}
+
+func (l *NativeLease) withProjection(ctx context.Context, session string, fn func(func(string) error) error) error {
+	if authority, ok := l.authority.(NativeReviewProjectionAuthority); ok {
+		return authority.WithNativeReviewProjection(ctx, l.native, l.surface, l.generation, session, fn)
+	}
+	return l.with(ctx, func() error { return fn(nil) })
 }
 
 type NativeEventRef struct {
@@ -118,6 +132,11 @@ func (l *NativeLease) ReceiveNativeEvent(ctx context.Context, event agentproto.E
 			if event.NativeBinding == nil || command.NativeBinding == nil || *event.NativeBinding != *command.NativeBinding {
 				return ErrJournalConflict
 			}
+			if event.Kind == agentproto.EventReviewChildCreated {
+				if e = validateReviewChildCreatedTx(ctx, tx, command, event); e != nil {
+					return e
+				}
+			}
 		}
 		if _, e = tx.ExecContext(ctx, `INSERT INTO native_events(incarnation,sequence,payload_hash,command_id,payload) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, l.native.CarrierIncarnation, event.Seq, digest, event.CommandID, raw); e != nil {
 			return e
@@ -161,6 +180,27 @@ func (l *NativeLease) ReceiveNativeEvent(ctx context.Context, event agentproto.E
 		return nil, err
 	}
 	return receipt, nil
+}
+
+func validateReviewChildCreatedTx(ctx context.Context, tx *sql.Tx, command agentproto.Command, event agentproto.Event) error {
+	parent, _ := event.Metadata["parentThreadID"].(string)
+	if command.Kind != agentproto.CommandReviewStart || event.Action != "review.start" || event.Metadata["stage"] != "thread/start" || event.RequestID == "" || event.ThreadID == "" || event.ThreadID == parent || parent == "" || parent != command.Target.ThreadID {
+		return ErrJournalConflict
+	}
+	var raw []byte
+	if err := tx.QueryRowContext(ctx, `SELECT payload FROM native_command_receipts WHERE command_id=? AND incarnation=?`, command.CommandID, command.NativeBinding.Owner.CarrierIncarnation).Scan(&raw); err != nil {
+		return err
+	}
+	var receipt agentproto.RuntimeCommandReceipt
+	if json.Unmarshal(raw, &receipt) != nil || receipt.CommandID != command.CommandID || receipt.CarrierIncarnation != command.NativeBinding.Owner.CarrierIncarnation {
+		return ErrJournalConflict
+	}
+	for _, frame := range receipt.Frames {
+		if frame.NativeRequestID == event.RequestID && frame.NativeMethod == "thread/start" && (frame.Stage == "written" || frame.Stage == "child_write_started" || frame.Stage == "unknown") {
+			return nil
+		}
+	}
+	return ErrJournalConflict
 }
 
 // recordCommandReceipt stores the authenticated wrapper's write journal for

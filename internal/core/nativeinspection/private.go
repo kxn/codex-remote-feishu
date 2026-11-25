@@ -17,6 +17,10 @@ func VerifyPrivateOwnerStopped(owner agentproto.NativeOwner, r agentproto.Runtim
 // The optional proof resolves unbound stream terminal events from the durable
 // application journal using an accepted exact session and turn association.
 func VerifyPrivateOwnerStoppedWithTerminalProof(owner agentproto.NativeOwner, r agentproto.RuntimeInspectionResult, proof func(agentproto.Event) bool) error {
+	return VerifyPrivateOwnerStoppedWithProofs(owner, r, proof, nil)
+}
+
+func VerifyPrivateOwnerStoppedWithProofs(owner agentproto.NativeOwner, r agentproto.RuntimeInspectionResult, proof func(agentproto.Event) bool, reviewProof func(string, agentproto.RuntimeEphemeralReviewProof) bool) error {
 	fail := func() error { return fmt.Errorf("private native quiescence evidence incomplete") }
 	b := r.Background
 	if owner.Validate() != nil || r.Version != agentproto.RuntimeInspectionProtocolVersion || r.CarrierIncarnation != owner.CarrierIncarnation || r.InstanceGeneration != owner.InstanceGeneration || r.ProcessGeneration != owner.ProcessGeneration || r.LocationGeneration != 0 || r.Problem != nil || r.ObservedAt.IsZero() || r.NativeWriteWatermark < 0 || r.OwnerScope == nil || !r.OwnerScope.KnownSessionsComplete || !ValidBootstrap(owner.Backend, r.OwnerScope.Bootstrap) {
@@ -44,6 +48,19 @@ func VerifyPrivateOwnerStoppedWithTerminalProof(owner agentproto.NativeOwner, r 
 		seen[session.SessionID] = true
 		switch owner.Backend {
 		case agentproto.BackendCodex:
+			if session.EphemeralReview != nil {
+				if reviewProof == nil || !reviewProof(session.SessionID, *session.EphemeralReview) || !ValidEphemeralReviewGoalProbe(session.Continuation, session.SessionID) {
+					return fail()
+				}
+				var req struct {
+					Params struct {
+						IncludeTurns *bool `json:"includeTurns"`
+					} `json:"params"`
+				}
+				if json.Unmarshal(session.Native.Request, &req) != nil || req.Params.IncludeTurns == nil || *req.Params.IncludeTurns {
+					return fail()
+				}
+			}
 			raw, err := MatchRPC(session.Native, "thread/read", session.SessionID)
 			if err != nil {
 				return err
@@ -58,6 +75,9 @@ func VerifyPrivateOwnerStoppedWithTerminalProof(owner agentproto.NativeOwner, r 
 			}
 			if json.Unmarshal(raw, &native) != nil || native.Thread.ID != session.SessionID || native.Thread.Status.Type != "idle" {
 				return fail()
+			}
+			if session.EphemeralReview != nil {
+				continue
 			}
 			raw, err = MatchRPC(session.Continuation, "thread/goal/get", session.SessionID)
 			if err != nil {

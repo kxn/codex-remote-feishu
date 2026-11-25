@@ -19,6 +19,7 @@ type FrozenCommandInputs struct {
 type FrozenCommandInput struct {
 	QueueItemID           string
 	SourceKind            state.QueueItemSourceKind
+	ControlIngressEventID string
 	AutoContinueEpisodeID string
 	SourceMessageIDs      []string
 	DispatchPlan          agentproto.PromptDispatchPlan
@@ -63,11 +64,11 @@ func (s *Service) FrozenCommandInputs(surfaceID, commandID string) (*FrozenComma
 			if kind == "" { // Historical pre-source-kind queue records were human input.
 				kind = state.QueueItemSourceUser
 			}
-			if kind != state.QueueItemSourceUser && kind != state.QueueItemSourceAutoContinue && kind != state.QueueItemSourceAutoWhip {
+			if kind != state.QueueItemSourceUser && kind != state.QueueItemSourceControlAction && kind != state.QueueItemSourceAutoContinue && kind != state.QueueItemSourceAutoWhip {
 				selectionErr = fmt.Errorf("unknown command input source kind")
 				return
 			}
-			frozen := FrozenCommandInput{QueueItemID: id, SourceKind: kind, AutoContinueEpisodeID: item.AutoContinueEpisodeID, DispatchPlan: item.FrozenDispatchPlan}
+			frozen := FrozenCommandInput{QueueItemID: id, SourceKind: kind, ControlIngressEventID: item.ControlIngressEventID, AutoContinueEpisodeID: item.AutoContinueEpisodeID, DispatchPlan: item.FrozenDispatchPlan}
 			// The main source is first, followed by the original media/cluster
 			// sources. Neither queue identifiers nor SDK message IDs encode time.
 			messages := append([]string{item.SourceMessageID}, item.SourceMessageIDs...)

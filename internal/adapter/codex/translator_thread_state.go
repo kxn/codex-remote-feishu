@@ -16,6 +16,9 @@ func (t *Translator) observeThreadLifecycle(message map[string]any, action agent
 	if update == nil {
 		return Result{}
 	}
+	if update.Action == agentproto.ThreadLifecycleArchived || update.Action == agentproto.ThreadLifecycleDeleted || update.Action == agentproto.ThreadLifecycleClosed {
+		t.closeIndependentReviewThread(update.ThreadID)
+	}
 	return Result{Events: []agentproto.Event{{
 		Kind:            agentproto.EventThreadLifecycleUpdated,
 		ThreadID:        update.ThreadID,
@@ -98,5 +101,12 @@ func normalizeThreadLifecycleMethod(method string) agentproto.ThreadLifecycleAct
 		return agentproto.ThreadLifecycleClosed
 	default:
 		return ""
+	}
+}
+
+func (t *Translator) closeIndependentReviewThread(threadID string) {
+	if review, ok := t.pendingReviewThreads[threadID]; ok && review.Independent {
+		review.Closed = true
+		t.pendingReviewThreads[threadID] = review
 	}
 }

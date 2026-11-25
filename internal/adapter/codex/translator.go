@@ -21,6 +21,7 @@ type Translator struct {
 	pendingThreadCreate        map[string]pendingThreadCreate
 	pendingThreadResume        map[string]pendingThreadResume
 	pendingReviewStart         map[string]pendingReviewStart
+	pendingReviewThreadCreate  map[string]pendingReviewThreadCreate
 	pendingReviewThreads       map[string]pendingReviewThread
 	pendingThreadNameSet       map[string]pendingThreadNameSet
 	pendingChildRestartRestore map[string]pendingChildRestartRestore
@@ -62,15 +63,24 @@ type pendingThreadResume struct {
 }
 
 type pendingReviewStart struct {
-	CommandID     string
-	PrivateNative bool
-	ThreadID      string
-	Initiator     agentproto.Initiator
+	CommandID      string
+	PrivateNative  bool
+	ThreadID       string
+	ReviewThreadID string
+	Independent    bool
+	Initiator      agentproto.Initiator
+}
+
+type pendingReviewThreadCreate struct {
+	Command          agentproto.Command
+	PreviousThreadID string
 }
 
 type pendingReviewThread struct {
+	Closed         bool
 	ParentThreadID string
 	Initiator      agentproto.Initiator
+	Independent    bool
 }
 
 type pendingThreadNameSet struct {
@@ -161,6 +171,7 @@ func NewTranslator(instanceID string) *Translator {
 		pendingThreadCreate:        map[string]pendingThreadCreate{},
 		pendingThreadResume:        map[string]pendingThreadResume{},
 		pendingReviewStart:         map[string]pendingReviewStart{},
+		pendingReviewThreadCreate:  map[string]pendingReviewThreadCreate{},
 		pendingReviewThreads:       map[string]pendingReviewThread{},
 		pendingThreadNameSet:       map[string]pendingThreadNameSet{},
 		pendingChildRestartRestore: map[string]pendingChildRestartRestore{},

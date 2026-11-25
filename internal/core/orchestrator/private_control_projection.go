@@ -97,3 +97,20 @@ func (s *Service) RestorePrivateControlProjection(surfaceID, instanceID, command
 	s.privateRecoveryHolds[surfaceID] = held
 	return nil
 }
+
+// ProjectVerifiedPrivateReviewThread records a review relationship established
+// by the caller's exact durable review acceptance proof before projecting its
+// already-journaled native turn events.
+func (s *Service) ProjectVerifiedPrivateReviewThread(surfaceID, instanceID, parentThread, reviewThread string) error {
+	if !s.config.PrivateApplication || surfaceID == "" || instanceID == "" || parentThread == "" || reviewThread == "" || parentThread == reviewThread {
+		return fmt.Errorf("invalid private review relationship")
+	}
+	surface := s.root.Surfaces[surfaceID]
+	inst := s.root.Instances[instanceID]
+	if surface == nil || inst == nil || surface.AttachedInstanceID != instanceID || surface.ReviewSession == nil || surface.ReviewSession.ParentThreadID != parentThread || surface.ReviewSession.ReviewThreadID != "" && surface.ReviewSession.ReviewThreadID != reviewThread {
+		return fmt.Errorf("private review relationship mismatch")
+	}
+	thread := s.ensureThread(inst, reviewThread)
+	thread.Source = &agentproto.ThreadSourceRecord{Kind: "review", ParentThreadID: parentThread}
+	return nil
+}

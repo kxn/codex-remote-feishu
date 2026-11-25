@@ -41,6 +41,7 @@ const (
 	EventThreadsSnapshot                 EventKind = "threads.snapshot"
 	EventNativeQueryCompleted            EventKind = "native.query.completed"
 	EventNativeControlResult             EventKind = "native.control.result"
+	EventReviewChildCreated              EventKind = "review.child_created"
 	EventThreadHistoryRead               EventKind = "thread.history.read"
 	EventThreadDiscovered                EventKind = "thread.discovered"
 	EventThreadFocused                   EventKind = "thread.focused"
@@ -110,6 +111,7 @@ type Event struct {
 	CommandID            string                        `json:"commandId,omitempty"`
 	ThreadID             string                        `json:"threadId,omitempty"`
 	TurnID               string                        `json:"turnId,omitempty"`
+	RootTurnID           string                        `json:"rootTurnId,omitempty"`
 	TurnCompletionOrigin TurnCompletionOrigin          `json:"turnCompletionOrigin,omitempty"`
 	ItemID               string                        `json:"itemId,omitempty"`
 	RequestID            string                        `json:"requestId,omitempty"`

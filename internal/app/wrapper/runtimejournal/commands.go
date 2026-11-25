@@ -83,6 +83,21 @@ func (s *Store) PrepareFrame(commandID string, frame []byte) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if method == "thread/start" || method == "review/start" {
+		var raw []byte
+		if err = tx.QueryRow(`SELECT payload FROM commands WHERE id=?`, commandID).Scan(&raw); err != nil {
+			return 0, err
+		}
+		var command agentproto.Command
+		if json.Unmarshal(raw, &command) != nil {
+			return 0, ErrConflict
+		}
+		if command.Kind == agentproto.CommandReviewStart && command.NativeBinding != nil {
+			if _, err = tx.Exec(`INSERT INTO private_review_frames(frame_id,payload) VALUES(?,?)`, id, frame); err != nil {
+				return 0, err
+			}
+		}
+	}
 	if _, err := tx.Exec(`UPDATE commands SET stage=? WHERE id=? AND stage='written'`, StagePartiallyWritten, commandID); err != nil {
 		return 0, err
 	}

@@ -162,7 +162,7 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 		}
 	}
 	probe := func(session, method string) (agentproto.RPCProbe, error) {
-		return a.nativeInspectionProbe(ctx, command, session, method, writeCh)
+		return a.nativeInspectionProbe(ctx, command, session, method, writeCh, false)
 	}
 	if ownerOnly && command.Target.TurnID == "" {
 		s.mu.Lock()
@@ -185,7 +185,13 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 			record := agentproto.RuntimeSessionInspection{SessionID: session}
 			if a.runtime.Backend() == agentproto.BackendCodex {
 				var err error
-				record.Native, err = probe(session, "thread/read")
+				if a.privateNative != nil {
+					record.EphemeralReview, err = journal.PrivateEphemeralReviewProof(a.privateNative.snapshot.Owner, session)
+					if err != nil {
+						return fail("native_review_proof_unavailable", err.Error())
+					}
+				}
+				record.Native, err = a.nativeInspectionProbe(ctx, command, session, "thread/read", writeCh, record.EphemeralReview != nil)
 				if err != nil {
 					return fail("native_read_probe_failed", err.Error())
 				}
@@ -260,6 +266,44 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 		}
 	}
 	result.Background = s.inspectInventoryIdentity(incarnation, processGeneration, locationGeneration)
+	if a.privateNative != nil {
+		if result.OwnerScope != nil && !result.Background.ContinuationInventoryKnown {
+			s.mu.Lock()
+			known := make(map[string]bool, len(s.goalKnown))
+			for id, value := range s.goalKnown {
+				known[id] = value
+			}
+			s.mu.Unlock()
+			for _, observed := range result.OwnerScope.Sessions {
+				if observed.EphemeralReview != nil && nativeinspection.ValidEphemeralReviewGoalProbe(observed.Continuation, observed.SessionID) {
+					known[observed.SessionID] = true
+				}
+			}
+			complete := true
+			for _, value := range known {
+				if !value {
+					complete = false
+					break
+				}
+			}
+			result.Background.ContinuationInventoryKnown = complete
+		}
+		active := result.Background.ActiveNativeTurnIDs[:0]
+		for _, id := range result.Background.ActiveNativeTurnIDs {
+			parts := strings.SplitN(id, "\x00", 2)
+			if len(parts) == 2 {
+				closed, err := journal.PrivateReviewSubturnClosed(parts[0], parts[1])
+				if err != nil {
+					return fail("native_review_inventory_unavailable", err.Error())
+				}
+				if closed {
+					continue
+				}
+			}
+			active = append(active, id)
+		}
+		result.Background.ActiveNativeTurnIDs = active
+	}
 	var pending int
 	var pendingErr error
 	if a.work != nil {
@@ -281,13 +325,13 @@ func (a *App) inspectNative(ctx context.Context, command agentproto.Command, wri
 	return event
 }
 
-func (a *App) nativeInspectionProbe(ctx context.Context, command agentproto.Command, session, method string, writeCh chan<- []byte) (agentproto.RPCProbe, error) {
+func (a *App) nativeInspectionProbe(ctx context.Context, command agentproto.Command, session, method string, writeCh chan<- []byte, ephemeralReview bool) (agentproto.RPCProbe, error) {
 	if session == "" || (method != "thread/read" && method != "thread/goal/get") {
 		return agentproto.RPCProbe{}, fmt.Errorf("unsupported fixed native inspection probe")
 	}
 	params := map[string]any{"threadId": session}
 	if method == "thread/read" {
-		params["includeTurns"] = true
+		params["includeTurns"] = !ephemeralReview
 	}
 	requestID := command.CommandID + ":" + method + ":" + session
 	raw, err := json.Marshal(map[string]any{"id": requestID, "method": method, "params": params})

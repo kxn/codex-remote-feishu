@@ -191,6 +191,7 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 		agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
 		"",
 		true,
+		action.PrivateControlIngressEventID,
 	)...)
 }
 

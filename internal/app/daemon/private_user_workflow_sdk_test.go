@@ -41,6 +41,7 @@ func TestPrivateUserWorkflowNativeProcess(t *testing.T) {
 	}
 	cwd, _ := os.Getwd()
 	session := "graph-a"
+	threadStarts := 0
 	turn := 0
 	var goal any
 	scan := bufio.NewScanner(os.Stdin)
@@ -66,17 +67,34 @@ func TestPrivateUserWorkflowNativeProcess(t *testing.T) {
 		switch f.Method {
 		case "initialize":
 			respond(map[string]any{})
-		case "thread/start", "thread/resume":
-			respond(map[string]any{"model": "fixture-model", "thread": map[string]any{"id": session, "cwd": cwd}})
+		case "thread/start":
+			threadStarts++
+			id := session
+			if threadStarts > 1 {
+				if f.Params["ephemeral"] != true || f.Params["cwd"] != cwd {
+					fmt.Printf(`{"id":%q,"error":{"code":-32602,"message":"review child must be ephemeral with exact cwd"}}`+"\n", f.ID)
+					continue
+				}
+				id = fmt.Sprintf("review-thread-%d", threadStarts)
+			}
+			respond(map[string]any{"model": "fixture-model", "thread": map[string]any{"id": id, "cwd": cwd}})
+		case "thread/resume":
+			id, _ := f.Params["threadId"].(string)
+			if id != session {
+				fmt.Printf(`{"id":%q,"error":{"code":-32000,"message":"no rollout found"}}`+"\n", f.ID)
+				continue
+			}
+			respond(map[string]any{"model": "fixture-model", "thread": map[string]any{"id": id, "cwd": cwd}})
 		case "turn/start":
+			thread, _ := f.Params["threadId"].(string)
 			turn++
 			tid := fmt.Sprintf("turn-%d", turn)
 			respond(map[string]any{"turn": map[string]any{"id": tid}})
-			fmt.Printf(`{"method":"turn/started","params":{"threadId":%q,"turn":{"id":%q}}}`+"\n", session, tid)
-			fmt.Printf(`{"method":"turn/diff/updated","params":{"threadId":%q,"turnId":%q,"diff":"diff --git a/review.txt b/review.txt\n@@ -1 +1 @@\n-old\n+new\n"}}`+"\n", session, tid)
-			fmt.Printf(`{"method":"item/completed","params":{"threadId":%q,"turnId":%q,"item":{"id":"file-1","type":"fileChange","status":"completed","changes":[{"path":"review.txt","kind":{"type":"update"},"diff":"@@ -1 +1 @@\n-old\n+new"}]}}}`+"\n", session, tid)
-			fmt.Printf(`{"method":"item/completed","params":{"threadId":%q,"turnId":%q,"item":{"id":"answer","type":"agentMessage","text":"workflow final"}}}`+"\n", session, tid)
-			fmt.Printf(`{"method":"turn/completed","params":{"threadId":%q,"turn":{"id":%q,"status":"completed"}}}`+"\n", session, tid)
+			fmt.Printf(`{"method":"turn/started","params":{"threadId":%q,"turn":{"id":%q}}}`+"\n", thread, tid)
+			fmt.Printf(`{"method":"turn/diff/updated","params":{"threadId":%q,"turnId":%q,"diff":"diff --git a/review.txt b/review.txt\n@@ -1 +1 @@\n-old\n+new\n"}}`+"\n", thread, tid)
+			fmt.Printf(`{"method":"item/completed","params":{"threadId":%q,"turnId":%q,"item":{"id":"file-1","type":"fileChange","status":"completed","changes":[{"path":"review.txt","kind":{"type":"update"},"diff":"@@ -1 +1 @@\n-old\n+new"}]}}}`+"\n", thread, tid)
+			fmt.Printf(`{"method":"item/completed","params":{"threadId":%q,"turnId":%q,"item":{"id":"answer","type":"agentMessage","text":"workflow final"}}}`+"\n", thread, tid)
+			fmt.Printf(`{"method":"turn/completed","params":{"threadId":%q,"turn":{"id":%q,"status":"completed"}}}`+"\n", thread, tid)
 		case "thread/goal/get":
 			respond(map[string]any{"goal": goal})
 		case "thread/goal/set":
@@ -99,10 +117,15 @@ func TestPrivateUserWorkflowNativeProcess(t *testing.T) {
 			fmt.Printf(`{"method":"item/completed","params":{"threadId":%q,"turnId":"compact-turn","item":{"id":"compact","type":"contextCompaction","status":"completed"}}}`+"\n", session)
 			fmt.Printf(`{"method":"turn/completed","params":{"threadId":%q,"turn":{"id":"compact-turn","status":"completed"}}}`+"\n", session)
 		case "review/start":
-			respond(map[string]any{"turn": map[string]any{"id": "review-turn"}, "reviewThreadId": "review-thread"})
-			fmt.Printf(`{"method":"turn/started","params":{"threadId":"review-thread","turn":{"id":"review-turn"}}}` + "\n")
-			fmt.Printf(`{"method":"item/completed","params":{"threadId":"review-thread","turnId":"review-turn","item":{"id":"review","type":"agentMessage","text":"review complete"}}}` + "\n")
-			fmt.Printf(`{"method":"turn/completed","params":{"threadId":"review-thread","turn":{"id":"review-turn","status":"completed"}}}` + "\n")
+			child, _ := f.Params["threadId"].(string)
+			if f.Params["delivery"] != "inline" || !strings.HasPrefix(child, "review-thread-") {
+				fmt.Printf(`{"id":%q,"error":{"code":-32602,"message":"review requires inline child"}}`+"\n", f.ID)
+				continue
+			}
+			respond(map[string]any{"turn": map[string]any{"id": "review-turn"}, "reviewThreadId": child})
+			fmt.Printf(`{"method":"turn/started","params":{"threadId":%q,"turn":{"id":"review-turn"}}}`+"\n", child)
+			fmt.Printf(`{"method":"item/completed","params":{"threadId":%q,"turnId":"review-turn","item":{"id":"review","type":"agentMessage","text":"review complete"}}}`+"\n", child)
+			fmt.Printf(`{"method":"turn/completed","params":{"threadId":%q,"turn":{"id":"review-turn","status":"completed"}}}`+"\n", child)
 		case "mcpServer/oauth/login":
 			fmt.Printf(`{"id":%q,"error":{"code":-32000,"message":"fixture oauth unavailable"}}`+"\n", f.ID)
 		}

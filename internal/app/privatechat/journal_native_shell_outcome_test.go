@@ -25,6 +25,21 @@ func TestShellOutcomeRequiresExactNativeRPC(t *testing.T) {
 	}
 }
 
+func TestReviewFailureRequiresExactStageFrame(t *testing.T) {
+	c := agentproto.Command{CommandID: "review", Kind: agentproto.CommandReviewStart, NativeBinding: &agentproto.NativeTurnBinding{Owner: agentproto.NativeOwner{Backend: agentproto.BackendCodex}}, Target: agentproto.Target{ThreadID: "parent"}}
+	for _, stage := range []string{"thread/start", "review/start", "invalid"} {
+		e := agentproto.Event{Kind: agentproto.EventNativeControlResult, CommandID: "review", RequestID: "rpc", ThreadID: "parent", Action: "review.start", Status: "failed", Metadata: map[string]any{"stage": stage}}
+		outcome, method, ok := nativeEventOutcome(c, e)
+		if stage == "invalid" {
+			if ok {
+				t.Fatal("unknown stage accepted")
+			}
+		} else if !ok || outcome != "failed" || method != stage {
+			t.Fatalf("stage %q: %q %q %v", stage, outcome, method, ok)
+		}
+	}
+}
+
 func TestReviewAndCompactOutcomeRequiresExactNativeResponse(t *testing.T) {
 	for _, tc := range []struct {
 		kind           agentproto.CommandKind

@@ -14,8 +14,8 @@ import (
 
 const (
 	defaultPlanProposalTTL       = 30 * time.Minute
-	planProposalActionExecute    = "execute"
-	planProposalActionExecuteNew = "execute_new"
+	planProposalActionExecute    = control.PlanProposalExecute
+	planProposalActionExecuteNew = control.PlanProposalExecuteNew
 	planProposalActionCancel     = "cancel"
 )
 
@@ -368,6 +368,7 @@ func (s *Service) handlePlanProposalDecision(surface *state.SurfaceConsoleRecord
 			surface.RouteMode,
 			surface.PromptOverride,
 			false,
+			action.PrivateControlIngressEventID,
 		)...)
 	case planProposalActionExecuteNew:
 		cwd := strings.TrimSpace(proposal.ThreadCWD)
@@ -395,6 +396,7 @@ func (s *Service) handlePlanProposalDecision(surface *state.SurfaceConsoleRecord
 			state.RouteModeNewThreadReady,
 			surface.PromptOverride,
 			false,
+			action.PrivateControlIngressEventID,
 		)...)
 	case planProposalActionCancel:
 		return s.sealPlanProposal(surface, action.MessageID, "已取消这张提案计划卡片。", "info", commandCardOwnsInlineResult(action))

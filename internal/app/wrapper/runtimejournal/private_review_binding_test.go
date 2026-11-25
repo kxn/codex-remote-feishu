@@ -27,13 +27,28 @@ func TestReviewTurnBindingRequiresExactNativeReviewResult(t *testing.T) {
 	if _, err = s.PersistEvents([]agentproto.Event{event}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = s.PersistEvents([]agentproto.Event{{Kind: agentproto.EventTurnStarted, ThreadID: "review-thread", TurnID: "subturn", RootTurnID: "review-turn"}, {Kind: agentproto.EventTurnStarted, ThreadID: "review-thread", TurnID: "foreign-subturn", RootTurnID: "other-root"}}); err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		thread, turn string
 		want         bool
-	}{{"review-thread", "review-turn", true}, {"parent", "review-turn", false}, {"review-thread", "wrong", false}} {
+	}{{"review-thread", "review-turn", true}, {"review-thread", "subturn", true}, {"review-thread", "foreign-subturn", false}, {"parent", "review-turn", false}, {"review-thread", "wrong", false}} {
 		got, e := s.PrivateBindingForTurn(tc.thread, tc.turn)
 		if e != nil || (got != nil) != tc.want {
 			t.Fatalf("thread=%s turn=%s binding=%+v err=%v", tc.thread, tc.turn, got, e)
 		}
+	}
+	if closed, err := s.PrivateReviewSubturnClosed("review-thread", "subturn"); err != nil || closed {
+		t.Fatalf("premature close=%v err=%v", closed, err)
+	}
+	if _, err = s.PersistEvents([]agentproto.Event{{Kind: agentproto.EventTurnCompleted, ThreadID: "review-thread", TurnID: "review-turn"}}); err != nil {
+		t.Fatal(err)
+	}
+	if closed, err := s.PrivateReviewSubturnClosed("review-thread", "subturn"); err != nil || !closed {
+		t.Fatalf("proven root close=%v err=%v", closed, err)
+	}
+	if closed, err := s.PrivateReviewSubturnClosed("review-thread", "foreign-subturn"); err != nil || closed {
+		t.Fatalf("foreign root close=%v err=%v", closed, err)
 	}
 }

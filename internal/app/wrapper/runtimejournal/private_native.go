@@ -397,7 +397,29 @@ func (s *Store) PrivateBindingForTurn(session, turn string) (*agentproto.NativeT
 	}
 	// Review start returns its own exact native turn and may name a separate
 	// review thread. This is independent of the originating prompt turn.
-	reviewRows, err := s.db.Query(`SELECT e.payload,c.payload FROM events e JOIN commands c ON c.id=json_extract(e.payload,'$.commandId') AND c.incarnation=e.incarnation WHERE e.incarnation=? AND json_extract(e.payload,'$.kind')='native.control.result' AND json_extract(e.payload,'$.action')='review.start' AND json_extract(e.payload,'$.status')='accepted' AND json_extract(e.payload,'$.turnId')=? AND json_extract(e.payload,'$.metadata.reviewThreadID')=?`, s.incarnation, turn, session)
+	var root string
+	rootRows, err := s.db.Query(`SELECT json_extract(payload,'$.rootTurnId') FROM events WHERE incarnation=? AND json_extract(payload,'$.kind')=? AND json_extract(payload,'$.threadId')=? AND json_extract(payload,'$.turnId')=? AND coalesce(json_extract(payload,'$.rootTurnId'),'')<>''`, s.incarnation, string(agentproto.EventTurnStarted), session, turn)
+	if err != nil {
+		return nil, err
+	}
+	for rootRows.Next() {
+		var v string
+		if err = rootRows.Scan(&v); err != nil {
+			rootRows.Close()
+			return nil, err
+		}
+		if root != "" && root != v {
+			rootRows.Close()
+			return nil, ErrConflict
+		}
+		root = v
+	}
+	err = rootRows.Err()
+	rootRows.Close()
+	if err != nil {
+		return nil, err
+	}
+	reviewRows, err := s.db.Query(`SELECT e.payload,c.payload FROM events e JOIN commands c ON c.id=json_extract(e.payload,'$.commandId') AND c.incarnation=e.incarnation WHERE e.incarnation=? AND json_extract(e.payload,'$.kind')='native.control.result' AND json_extract(e.payload,'$.action')='review.start' AND json_extract(e.payload,'$.status')='accepted' AND (json_extract(e.payload,'$.turnId')=? OR (?<>'' AND json_extract(e.payload,'$.turnId')=?)) AND json_extract(e.payload,'$.metadata.reviewThreadID')=?`, s.incarnation, turn, root, root, session)
 	if err != nil {
 		return nil, err
 	}

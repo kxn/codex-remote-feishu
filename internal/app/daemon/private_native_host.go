@@ -91,6 +91,42 @@ func (a privateNativeAuthority) WithNativeLease(ctx context.Context, n agentprot
 	}
 	return a.host.registry.WithLease(ctx, reg, fn)
 }
+
+func (a privateNativeAuthority) WithNativeReviewProjection(ctx context.Context, n agentproto.NativeOwner, s privatechat.Owner, g int64, _ string, fn func(func(string) error) error) error {
+	if a.host == nil || n.HostID != a.host.hostID || n.Validate() != nil {
+		return executionowner.ErrConflict
+	}
+	rec, err := a.host.store.lookup(ctx, n.InstanceID)
+	if err != nil {
+		return err
+	}
+	if rec.Snapshot.Owner != n || rec.Surface != s || rec.SurfaceGeneration != g || rec.State == "retired" {
+		return executionowner.ErrConflict
+	}
+	reg := privateRegistration(n)
+	if a.scoped != nil {
+		// Projection must acquire its fence after the processor lock; an
+		// externally scoped lease cannot safely nest BindSession inside Run.
+		return executionowner.ErrConflict
+	}
+	return a.host.registry.WithScopedLease(ctx, reg, func(token *executionowner.Lease) error {
+		return fn(func(session string) error { return token.BindSession(reg, session) })
+	})
+}
+
+func (a privateNativeAuthority) BindNativeReviewSession(ctx context.Context, n agentproto.NativeOwner, s privatechat.Owner, g int64, session string) error {
+	if a.host == nil || a.scoped != nil || n.HostID != a.host.hostID || n.Validate() != nil {
+		return executionowner.ErrConflict
+	}
+	rec, err := a.host.store.lookup(ctx, n.InstanceID)
+	if err != nil {
+		return err
+	}
+	if rec.Snapshot.Owner != n || rec.Surface != s || rec.SurfaceGeneration != g || rec.State == "retired" {
+		return executionowner.ErrConflict
+	}
+	return a.host.registry.BindSession(ctx, privateRegistration(n), session)
+}
 func (h *privateNativeHost) lease(ctx context.Context, rec privateCarrierRecord, scoped *executionowner.Lease) (*privatechat.NativeLease, error) {
 	return h.journal.OpenNativeLease(ctx, privateNativeAuthority{host: h, scoped: scoped}, rec.Snapshot.Owner, rec.Surface, rec.SurfaceGeneration)
 }
@@ -249,6 +285,14 @@ func (h *privateNativeHost) receive(ctx context.Context, meta relayws.Connection
 				}
 				return token.BindSession(privateRegistration(rec.Snapshot.Owner), session)
 			}
+			if event.Kind == agentproto.EventNativeControlResult && event.Action == "review.start" && event.Status == "accepted" {
+				ref := privatechat.NativeEventRef{Incarnation: event.Journal.CarrierIncarnation, Sequence: event.Seq, PayloadHash: event.Journal.PayloadHash}
+				session, e := lease.CommittedReviewSession(ctx, ref)
+				if e != nil {
+					return e
+				}
+				return token.BindSession(privateRegistration(rec.Snapshot.Owner), session)
+			}
 			return nil
 		})
 	})
@@ -372,9 +416,9 @@ func (h *privateNativeHost) sealDrain(ctx context.Context, instance string, ref 
 	if err != nil {
 		return err
 	}
-	if err = nativeinspection.VerifyPrivateOwnerStoppedWithTerminalProof(rec.Snapshot.Owner, inspection, func(event agentproto.Event) bool {
+	if err = nativeinspection.VerifyPrivateOwnerStoppedWithProofs(rec.Snapshot.Owner, inspection, func(event agentproto.Event) bool {
 		return h.journal.ProveCommittedNativeTerminal(ctx, rec.Snapshot.Owner, rec.Surface, rec.SurfaceGeneration, event) == nil
-	}); err != nil {
+	}, h.ephemeralReviewVerifier(ctx, rec)); err != nil {
 		return err
 	}
 	if err = h.store.seal(ctx, instance, ref); err != nil {
@@ -519,9 +563,9 @@ func (h *privateNativeHost) VerifyStop(ctx context.Context, reg executionowner.R
 	if err != nil {
 		return err
 	}
-	if err = nativeinspection.VerifyPrivateOwnerStoppedWithTerminalProof(rec.Snapshot.Owner, result, func(event agentproto.Event) bool {
+	if err = nativeinspection.VerifyPrivateOwnerStoppedWithProofs(rec.Snapshot.Owner, result, func(event agentproto.Event) bool {
 		return h.journal.ProveCommittedNativeTerminal(ctx, rec.Snapshot.Owner, rec.Surface, rec.SurfaceGeneration, event) == nil
-	}); err != nil {
+	}, h.ephemeralReviewVerifier(ctx, rec)); err != nil {
 		return err
 	}
 	// Poll only the OS exit with a short budget; database projection and

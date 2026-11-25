@@ -144,6 +144,9 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 	if err != nil {
 		return nil, err
 	}
+	if (action.Kind == control.ActionReviewApply || action.Kind == control.ActionPlanProposalDecision) && entry.Ingress.Lane == "control" {
+		action.PrivateControlIngressEventID = entry.Ingress.EventID
+	}
 	observation := action.Kind == control.ActionMessageRecalled || action.Kind == control.ActionReactionCreated
 	if observation {
 		if err = p.app.ValidateObservation(action); err != nil {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
+	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/runtimejournal"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
@@ -20,6 +21,33 @@ type runtimeActiveTurn struct {
 	Initiator              agentproto.Initiator
 	MaterializedOutputSeen bool
 	InterruptRequested     bool
+}
+
+// retireCompletedReviewSubturns prevents synthetic exit outcomes for native
+// review subturns whose exact root review already completed in the journal.
+func (t *runtimeTurnTracker) retireCompletedReviewSubturns(journal *runtimejournal.Store) error {
+	if t == nil || journal == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for id, turn := range t.turns {
+		if turn == nil {
+			continue
+		}
+		closed, err := journal.PrivateReviewSubturnClosed(turn.ThreadID, turn.TurnID)
+		if err != nil {
+			return err
+		}
+		if closed {
+			delete(t.turns, id)
+			delete(t.pendingInterruptByTurn, id)
+			if t.activeTurnByThread[turn.ThreadID] == id {
+				delete(t.activeTurnByThread, turn.ThreadID)
+			}
+		}
+	}
+	return nil
 }
 
 type runtimeTurnTracker struct {

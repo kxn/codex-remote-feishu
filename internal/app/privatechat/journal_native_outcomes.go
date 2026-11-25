@@ -132,6 +132,14 @@ func nativeEventOutcome(command agentproto.Command, event agentproto.Event) (out
 			return "accepted", "review/start", true
 		}
 		if event.Status == "failed" {
+			if stage, ok := event.Metadata["stage"].(string); ok {
+				switch stage {
+				case "thread/start", "review/start":
+					return "failed", stage, true
+				default:
+					return "", "", false
+				}
+			}
 			return "failed", "review/start", true
 		}
 	case agentproto.CommandThreadCompactStart:

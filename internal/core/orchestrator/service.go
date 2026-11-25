@@ -827,6 +827,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		trackActiveTurn := s.shouldTrackInstanceActiveTurn(instanceID, event)
 		if trackActiveTurn {
 			inst.ActiveTurnID = event.TurnID
+			// A proven private review child is part of the accepted root
+			// execution. Its native ID remains on the event; the root owns
+			// this instance occupancy and its eventual terminal event.
+			if s.config.PrivateApplication && event.NativeBinding != nil && threadIsReview(inst.Threads[event.ThreadID]) && strings.TrimSpace(event.RootTurnID) != "" {
+				inst.ActiveTurnID = event.RootTurnID
+			}
 			inst.ActiveThreadID = event.ThreadID
 		}
 		if event.ThreadID != "" {

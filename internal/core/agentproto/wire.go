@@ -63,7 +63,11 @@ type InstanceHello struct {
 
 // PrivateDeliveryVersion identifies additional replayable private delivery facts.
 // Zero denotes the original private-v1 wrapper.
-const PrivateDeliveryVersion = 1
+const (
+	PrivateDeliveryVersionControlReceipts = 1
+	PrivateDeliveryVersionIsolatedReview  = 2
+	PrivateDeliveryVersion                = PrivateDeliveryVersionIsolatedReview
+)
 
 type Hello struct {
 	PrivateDeliveryVersion                 int                     `json:"privateDeliveryVersion,omitempty"`

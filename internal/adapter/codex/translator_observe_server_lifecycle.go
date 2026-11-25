@@ -49,7 +49,9 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 		return Result{Events: []agentproto.Event{event}}
 	}
 	event := buildThreadDiscoveredEvent(threadRecord, threadID, cwd, name, status, loaded, runtimeStatus)
-	t.currentThreadID = threadID
+	if _, isReview := t.pendingReviewThreads[threadID]; !isReview {
+		t.currentThreadID = threadID
+	}
 	if t.pendingLocalNewThreadTurn && threadID != "" {
 		t.pendingLocalTurnByThread[threadID] = true
 		t.pendingLocalNewThreadTurn = false
@@ -111,6 +113,9 @@ func (t *Translator) observeThreadStatusChanged(message map[string]any) Result {
 	if threadID == "" || runtimeStatus == nil {
 		return Result{}
 	}
+	if runtimeStatus.Type == agentproto.ThreadRuntimeStatusTypeNotLoaded {
+		t.closeIndependentReviewThread(threadID)
+	}
 	trafficClass := agentproto.TrafficClassPrimary
 	initiator := agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface}
 	if t.internalThreadIDs[threadID] {
@@ -159,6 +164,7 @@ func (t *Translator) observeTurnStarted(message map[string]any) Result {
 		Kind:                 agentproto.EventTurnStarted,
 		ThreadID:             threadID,
 		TurnID:               turnID,
+		RootTurnID:           lookupString(message, "params", "turn", "rootTurnId"),
 		Status:               "running",
 		TrafficClass:         trafficClass,
 		Initiator:            initiator,

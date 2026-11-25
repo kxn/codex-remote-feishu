@@ -141,6 +141,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				)},
 			}, nil
 		}
+		if pending, exists := t.pendingReviewThreadCreate[requestID]; exists {
+			delete(t.pendingReviewThreadCreate, requestID)
+			return t.reviewThreadCreated(requestID, pending, message)
+		}
 		if pending, exists := t.pendingReviewStart[requestID]; exists {
 			delete(t.pendingReviewStart, requestID)
 			if pending.PrivateNative {
@@ -148,6 +152,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				if problem := jsonrpcutil.ExtractErrorMessage(message); problem != "" {
 					event.Status = "failed"
 					event.ErrorMessage = problem
+					event.Metadata = map[string]any{"stage": "review/start"}
 				} else if result, ok := message["result"].(map[string]any); !ok || result == nil {
 					event.Status = "unknown"
 				}
@@ -160,6 +165,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				return Result{
 					Suppress: true,
 					Events: []agentproto.Event{agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
+						CommandID:        pending.CommandID,
 						Code:             "review_start_failed",
 						Layer:            "server",
 						Stage:            "command_response",
@@ -174,6 +180,12 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			}
 			turnID := lookupString(message, "result", "turn", "id")
 			explicitReviewThreadID := strings.TrimSpace(lookupString(message, "result", "reviewThreadId"))
+			if pending.ReviewThreadID != "" && explicitReviewThreadID != pending.ReviewThreadID {
+				if !pending.PrivateNative {
+					return Result{Suppress: true, Events: []agentproto.Event{agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, SurfaceSessionID: pending.Initiator.SurfaceSessionID, Code: "review_start_unconfirmed", Operation: "review.start", Stage: "review/start", Message: "无法确认独立审阅会话，未自动重试。"})}}, nil
+				}
+				return Result{Suppress: true, Events: []agentproto.Event{{Kind: agentproto.EventNativeControlResult, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, Action: "review.start", Status: "unknown", Metadata: map[string]any{"stage": "review/start"}}}}, nil
+			}
 			reviewThreadID := explicitReviewThreadID
 			if reviewThreadID == "" {
 				reviewThreadID = pending.ThreadID
@@ -184,7 +196,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			if strings.TrimSpace(reviewThreadID) != "" {
 				t.pendingReviewThreads[reviewThreadID] = pendingReviewThread{
 					ParentThreadID: pending.ThreadID,
+					Closed:         t.pendingReviewThreads[reviewThreadID].Closed,
 					Initiator:      pending.Initiator,
+					Independent:    pending.Independent,
 				}
 			}
 			t.Debugf("observe server review/start result: request=%s parentThread=%s reviewThread=%s turn=%s initiator=%s", requestID, pending.ThreadID, reviewThreadID, turnID, pending.Initiator.Kind)

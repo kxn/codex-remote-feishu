@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 type Effect struct {
@@ -519,6 +520,12 @@ func verifyCheckpointSources(ctx context.Context, tx *sql.Tx, c Checkpoint) erro
 	for _, item := range c.Core.QueueItems {
 		if item == nil {
 			return ErrJournalState
+		}
+		if item.SourceKind == state.QueueItemSourceControlAction {
+			if _, err := verifyControlInput(ctx, tx, c.Owner, c.Generation, item.ControlIngressEventID, c.Cursor, false); err != nil {
+				return err
+			}
+			continue
 		}
 		add(item.SourceMessageID)
 		for _, id := range item.SourceMessageIDs {

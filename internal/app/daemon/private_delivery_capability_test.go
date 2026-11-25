@@ -24,4 +24,13 @@ func TestPrivateDeliveryCapabilityIsScopedToAuthenticatedConnection(t *testing.T
 			t.Fatalf("legacy operation blocked: %s", kind)
 		}
 	}
+	h.deliveryCapabilities["instance"] = privateDeliveryCapability{connection: 4, version: agentproto.PrivateDeliveryVersionControlReceipts}
+	if h.privateDeliverySupported("instance", 4, agentproto.CommandReviewStart) {
+		t.Fatal("v1 wrapper allowed isolated review")
+	}
+	for _, kind := range []agentproto.CommandKind{agentproto.CommandPromptSend, agentproto.CommandRequestRespond, agentproto.CommandThreadCompactStart, agentproto.CommandThreadRead} {
+		if !h.privateDeliverySupported("instance", 4, kind) {
+			t.Fatalf("v1 wrapper unexpectedly blocked %s", kind)
+		}
+	}
 }

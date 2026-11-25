@@ -396,6 +396,19 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 	if strings.TrimSpace(command.Target.ThreadID) == "" {
 		return t.translatePromptSendThreadStart(command, false)
 	}
+	if review, ok := t.pendingReviewThreads[command.Target.ThreadID]; ok && review.Independent && review.Closed {
+		return nil, fmt.Errorf("独立审阅会话已关闭，请退出审阅后重新开始")
+	}
+	if review, ok := t.pendingReviewThreads[command.Target.ThreadID]; ok && review.Independent && command.Target.Purpose == agentproto.PromptPurposeReview && command.Target.SurfaceBindingPolicy == agentproto.SurfaceBindingPolicyKeepSurfaceSelection && command.Target.SourceThreadID == review.ParentThreadID && review.Initiator.SurfaceSessionID == choose(command.Origin.Surface, command.Origin.ChatID) {
+		if privatePlanNeedsObservedModel(command) && t.knownThreadModel[command.Target.ThreadID] == "" {
+			return nil, fmt.Errorf("live review thread omitted model required for plan mode")
+		}
+		payload, _, err := t.directTurnStart(command.Target.ThreadID, command, false)
+		if err != nil {
+			return nil, err
+		}
+		return [][]byte{payload}, nil
+	}
 	delete(t.pendingLocalTurnByThread, command.Target.ThreadID)
 	if t.currentThreadID == "" || command.Target.ThreadID != t.currentThreadID || (privatePlanNeedsObservedModel(command) && t.knownThreadModel[command.Target.ThreadID] == "") {
 		requestID := t.NextRequest("thread-resume")
@@ -487,8 +500,12 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) ([][]by
 }
 
 func (t *Translator) buildThreadStartParamsWithPolicy(cwd string, overrides agentproto.PromptOverrides, policy *agentproto.CodexResumePolicy) map[string]any {
+	return t.buildThreadStartParams(cwd, overrides, policy, true)
+}
+
+func (t *Translator) buildThreadStartParams(cwd string, overrides agentproto.PromptOverrides, policy *agentproto.CodexResumePolicy, allowTemplate bool) map[string]any {
 	params := map[string]any{}
-	if agentproto.NormalizeCodexResumePolicy(policy) == nil {
+	if allowTemplate && agentproto.NormalizeCodexResumePolicy(policy) == nil {
 		params = xutil.CloneMap(t.latestThreadStartParams)
 	}
 	if len(params) == 0 {

@@ -577,6 +577,11 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		case err := <-waitErrCh:
 			waitForSessionStdoutStopped(activeChild, wrapperChildWaitTimeout)
 			closeChildSessionPipes(activeChild)
+			if a.privateNative != nil {
+				if e := turnTracker.retireCompletedReviewSubturns(a.privateNative.journal); e != nil {
+					problems.Emit(agentproto.ErrorInfo{Code: "review_subturn_inventory_unavailable", Layer: "wrapper", Stage: "runtime_exit", Message: e.Error()})
+				}
+			}
 			emitRuntimeExitReconciliation(client, turnTracker, err, problems.Emit)
 			drainAndCloseRelayClient(client, problems.Emit)
 			if !connectedOnce.Load() {

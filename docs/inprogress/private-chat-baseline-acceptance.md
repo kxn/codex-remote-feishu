@@ -325,3 +325,33 @@
 修复提交 `ec9090fd9a6428ecef446c926712a2213c450c0d` 已经 `safe-push` 推送，并按 `local-upgrade` 发布到已核实的单一 `stable`／`codex-remote.service`。升级事务 `committed`，版本 `local-abf723324f26`，实际 PID `2281905`；`/proc/2281905/exe`、安装文件和升级 artifact 的 SHA-256 同为 `abf723324f2634f3b945865c603c695437a4c3b939acb49fa371a88458e07ed1`。健康检查 `ok`，六个 gateway connected、团队运行时可用、私人读取无错误；现场原 session、pinned 导航保留，dispatch normal，无 pending launch 和队列输入。配置 SHA 与升级前相同，未手动改业务数据库；升级前留存 13 个数据库各自的一致 SQLite 快照，定位 `/tmp/private-recovery-notice-predeploy-location.json`，不作为跨库原子快照。构建产生的两份 shim 嵌入文件已仅恢复其生成改动。
 
 本次部署证据：`/tmp/private-recovery-notice-upgrade.log`、`/tmp/private-recovery-notice-deployed.json`、`/tmp/private-recovery-notice-deployed.log`。该进程启动日志未见 poison、panic、fatal 或失败。没有向实际飞书会话发送伪造的真人业务消息；新提示的来源关联和失败流程由上述 SDK 连续旅程证明。
+
+## 2026-11-25 独立审阅协议与连续操作
+
+现场 `review.start` 原生事件 seq 154 明确失败：`unknown variant detached, expected inline`，派发目标仍是原 parent。实际运行的是受管 Codex 0.171.0；PATH 上的另一版本不能作为现场协议依据。原 workflow peer 不检查 delivery、固定返回一个审阅线程，因此此前通过的受控流程没有证明原生审阅可用；本次修正原 peer 的协议形状，并新增严格独立 peer 与实际 Codex 探针，原 workflow 断言不放宽。
+
+本次修复的合同与证据边界：
+
+1. 产品独立审阅以专属 `thread/start(ephemeral=true)` 加 child 上的 `review/start(inline)` 实现。冻结 parent 的目录和有效配置，主线程选择保留；不能把非法枚举简单换成 parent 上 inline。来源仅由真实响应建立，native 默认 `source=vscode` 不掩盖派生的 review 归属，也不伪造 fork 历史。
+2. 第一帧的 `review.child_created` 只表示已创建，不表示审阅 accepted。提前到达的正文等待准确证明，accepted 后先物化已核实的 review 来源。原命令两帧分别关联真实 request／frame hash，失败、unknown 与重复投递不重建线程或重发。
+3. 真实 0.171 stdout 证实：`review/start` 返回 root A，另一个 `turn/started` 是 B 且 `rootTurnId=A`；正文和完成事件仍对应 A。保存实际 A／B，不按时间或同线程猜归属。ReviewSession、实例的逻辑执行占用和退出检查统一依据已核实 root；缺少 B terminal 不形成虚假忙碌，也不补造 B terminal。
+4. accepted child 的 session 归属先在现有 registry 幂等提交，再在投影 fence 中复核。foreign owner 冲突在 core 变更前拒绝；receiver 登记不能代替后台重放校验。退休载体只登记有精确停机证明的 inactive 归属，不发新执行 lease。
+5. 临时 child 没有可 resume 的 rollout；活跃、同 parent／surface 的追问直接 turn/start。实际 closed／deleted／archived／notLoaded 后保留身份、明确失败，不误走普通 resume。未知关闭不猜测。
+6. 审阅应用和计划执行都使用 `control_action` 来源，以本人本次已验证 callback 的 event ID 授权，平台卡片只作回复锚。计划只有 execute／execute_new 可授权，cancel 和非法 option 不可授权。checkpoint、实际 dispatch 和 queued-only 恢复分别核对来源与 applied 状态，重复 callback 不生成第二次修改。
+7. 私人 delivery v2 仅提高独立 review 的最低能力，原 v1 的答复请求、压缩和 thread.read 继续可用。聊天 journal 升到 schema 10，保留既有记录，旧 v9 reader 在打开时拒绝；宿主 carrier 数据库仍为独立 v2。
+
+reader fence 已有实际旧代码证明：从修复前 `cb7a0a45` 导出完整源码，以其原 v9 `OpenJournal` 打开非空 schema 10 的 control-action checkpoint，明确返回 unsupported schema，原 checkpoint digest 不变。当前 reader 的 v9→v10 输入／checkpoint 原文与 digest 保留、control-action 重开及 future-version 拒绝也通过 race。日志 `/tmp/private-review-v9-reader-proof.log`、`/tmp/private-review-schema10-race.log`；临时旧源码定位 `/tmp/private-review-v9-reader-location.txt`，未对线上数据库运行旧 reader。
+
+严格 SDK 旅程覆盖原始目录／新建、最终卡待提交审阅、初审后直接退出、追问后退出、提交审阅后应用、相同 callback 重投、旧卡再次点击；放行真实 response 前断言 early item 未 applied，放行后可见 final 即刻操作。分别对 thread/start、review/start 控制延迟并明确拒绝，用户能查看状态，失败后 parent 正常答复且可重试。peer 使用真实 A／B 形状，不通过额外追问碰巧清掉 B 占用来掩盖直接退出缺口。
+
+真实模型探针使用隔离 git 仓库、临时认证副本、实际 Codex 0.171.0 和受控平台，所有最终回复按原消息关联，事后核 parent／child 及 registry；不会向实际飞书群或真实用户仓库发测试工作。失败记录保留 owner-only 原始 stdout、SQLite 一致快照和所编译源码清单，区分旧编译版本与修复后的新鲜结果。真实模型完成不等于正常停机完成，inspection／shutdown 必须单独通过，最终结果另行登记。
+
+### 原生完整旅程的最终结果
+
+- 同一固定测试二进制分别通过真实 direct（39.76 秒）与 follow-up（53.19 秒）两条链：初审后直接退出／初审后追问再退出，随后均在原 parent 得到对应输入的 final，真实 inspection／shutdown 完成、carrier retired。日志 `/tmp/private-real-review-native-direct.log`、`/tmp/private-real-review-native-followup.log`。
+- 所用测试二进制 SHA-256 为 `e0ddaf8dc7ac5229b6e01250639ef25492849dcaab30dd7e2ab2915dde04f72b`，源码清单 `/tmp/private-review-direct-native-build-manifest.txt`。生产 Go 源码逐文件 hash 与清理后的代码完全一致（`/tmp/private-review-tested-production-manifest.txt` 对比 `/tmp/private-review-current-production-manifest.txt`）；之后只删除临时测试取证代码，不借旧模型运行声称新生产实现通过。
+- 严格 peer 的 ordered／early／真实 root A-B 形状、两个 native RPC 的阻塞后明确失败与重试、原 workflow 的 focused race 均通过，日志 `/tmp/private-review-cleanup-focused-race.log`；清理后的 daemon 测试代码编译通过 `/tmp/private-review-cleanup-final-build.log`。
+- 曾用于抓取 stdout 的 Python tee 改变了 native root 的进程树：真正 Codex 成为后台 descendant，StopChildren 会结束它，因而带 tee 的 shutdown 红测不构成生产关闭缺陷。已删除该取证脚本及入口，没有为它增加生产豁免。无 tee 的最终真实两条链证明正常关闭；此前采集的原始帧只用于协议事实分析。
+- 真正的 ephemeral API 差异已修复并单独验证：临时 child 的 read(true)／Goal 请求不能套用普通持久线程的成功结果；关闭检查核 read(false) 真 idle 与精确 unsupported Goal 及本地两帧证明，不把任意 error 当空闲。
+
+最终清理后的统一检查：`go test -json ./... -count=1` 通过，122 个有测试包、daemon 213.6 秒（`/tmp/private-review-final-all-v3.jsonl`）；Codex adapter、privatechat、executionowner、wrapper／hostinventory／runtimejournal 六包整包 race 通过（`/tmp/private-review-final-components-race-v3.log`）；Windows 全仓生产构建通过（`/tmp/private-review-final-windows-v3.log`）。提交前完整 pre-commit 含文件长度 gate 通过，测试路径提示为既有非阻断项。真实飞书客户端视觉效果仍不是受控平台与真实模型探针的覆盖范围。

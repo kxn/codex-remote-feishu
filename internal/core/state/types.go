@@ -120,9 +120,10 @@ const (
 type QueueItemSourceKind string
 
 const (
-	QueueItemSourceUser         QueueItemSourceKind = "user"
-	QueueItemSourceAutoWhip     QueueItemSourceKind = "auto_whip"
-	QueueItemSourceAutoContinue QueueItemSourceKind = "auto_continue"
+	QueueItemSourceUser          QueueItemSourceKind = "user"
+	QueueItemSourceControlAction QueueItemSourceKind = "control_action"
+	QueueItemSourceAutoWhip      QueueItemSourceKind = "auto_whip"
+	QueueItemSourceAutoContinue  QueueItemSourceKind = "auto_continue"
 )
 
 type ImageState string
@@ -795,6 +796,7 @@ type QueueItemRecord struct {
 	SurfaceSessionID      string
 	ActorUserID           string
 	SourceKind            QueueItemSourceKind
+	ControlIngressEventID string `json:",omitempty"`
 	AutoContinueEpisodeID string
 	SourceMessageID       string
 	SourceMessagePreview  string

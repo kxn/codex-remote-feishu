@@ -325,7 +325,13 @@ func (s *Service) activateReviewSessionRecord(surface *state.SurfaceConsoleRecor
 	if reviewThreadID := strings.TrimSpace(event.ThreadID); reviewThreadID != "" {
 		session.ReviewThreadID = reviewThreadID
 	}
-	if turnID := strings.TrimSpace(event.TurnID); turnID != "" {
+	turnID := strings.TrimSpace(event.TurnID)
+	// Private review child turns retain their native ID on the event. The
+	// accepted root identifies the logical review completed by Codex.
+	if s.config.PrivateApplication && event.NativeBinding != nil && strings.TrimSpace(event.RootTurnID) != "" {
+		turnID = strings.TrimSpace(event.RootTurnID)
+	}
+	if turnID != "" {
 		if strings.TrimSpace(session.InitialTurnID) == "" && strings.TrimSpace(session.LastReviewText) == "" {
 			session.InitialTurnID = turnID
 		}
@@ -406,7 +412,11 @@ func (s *Service) materializeReviewThreadDiscovery(instanceID string, inst *stat
 
 func (s *Service) maybeCaptureReviewSessionResultCandidate(instanceID string, event agentproto.Event, itemKind, text string) {
 	_, session := s.reviewSessionSurface(instanceID, event.ThreadID)
-	if session == nil || strings.TrimSpace(itemKind) != "agent_message" || strings.TrimSpace(event.TurnID) == "" || strings.TrimSpace(session.InitialTurnID) != strings.TrimSpace(event.TurnID) || strings.TrimSpace(session.LastReviewText) != "" {
+	resultTurnID := strings.TrimSpace(event.TurnID)
+	if s.config.PrivateApplication && event.NativeBinding != nil && strings.TrimSpace(event.RootTurnID) != "" {
+		resultTurnID = strings.TrimSpace(event.RootTurnID)
+	}
+	if session == nil || strings.TrimSpace(itemKind) != "agent_message" || resultTurnID == "" || strings.TrimSpace(session.InitialTurnID) != resultTurnID || strings.TrimSpace(session.LastReviewText) != "" {
 		return
 	}
 	if candidate := strings.TrimSpace(text); candidate != "" {

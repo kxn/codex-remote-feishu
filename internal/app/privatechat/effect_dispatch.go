@@ -142,6 +142,12 @@ func effectInputSequences(ctx context.Context, tx *sql.Tx, o Owner, generation i
 		}
 		seenItems[item.QueueItemID] = true
 		switch item.SourceKind {
+		case state.QueueItemSourceControlAction:
+			seq, err := verifyControlInput(ctx, tx, o, generation, item.ControlIngressEventID, 0, true)
+			if err != nil {
+				return nil, err
+			}
+			seqs[seq] = true
 		case state.QueueItemSourceUser:
 			if len(item.SourceMessageIDs) == 0 {
 				return nil, ErrJournalState

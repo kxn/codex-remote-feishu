@@ -59,7 +59,7 @@ func (s *Service) replyAnchorForTurn(instanceID, threadID, turnID string) (strin
 		strings.TrimSpace(xutil.FirstNonEmpty(binding.ReplyToMessagePreview, binding.SourceMessagePreview))
 }
 
-func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
+func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool, controlIngress ...string) []eventcontract.Event {
 	return s.enqueueQueueItemWithTarget(
 		surface,
 		sourceMessageID,
@@ -75,10 +75,11 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 		"",
 		"",
 		front,
+		controlIngress...,
 	)
 }
 
-func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, purpose agentproto.PromptPurpose, front bool) []eventcontract.Event {
+func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, purpose agentproto.PromptPurpose, front bool, controlIngress ...string) []eventcontract.Event {
 	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
 		return blocked
 	}
@@ -132,6 +133,10 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		OpenCodeAdmissionRef:    openCodeAdmissionRef,
 		RouteModeAtEnqueue:      routeMode,
 		Status:                  state.QueueItemQueued,
+	}
+	if len(controlIngress) == 1 && controlIngress[0] != "" {
+		item.SourceKind = state.QueueItemSourceControlAction
+		item.ControlIngressEventID = controlIngress[0]
 	}
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)

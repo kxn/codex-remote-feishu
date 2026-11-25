@@ -20,7 +20,7 @@
 - 团队历史归属的完整扫描仅由显式历史/会话选择启动；普通输入、原生终态和 idle deadline 不读取全部团队历史。现有连接与恢复按 executionowner 的精确会话注册校验。历史暂不可读时保留当前私人对话，明确拒绝未经验证的历史选择，不把未知历史冒充个人会话。
 - 私人 Codex 未显式选模型时继承原生配置；固定 API 模型及用户既有选择保持优先。没有计划覆盖时不发送 collaborationMode；计划覆盖的必填 model 取精确 thread/start、resume 或 fork 响应。缺字段是具体协议失败，不能伪造 native 接受或猜默认模型。
 - 重启恢复的 request hold 不仅凭旧 request.started 重新启用。认证 wrapper 提供只读、版本化 pending inventory；daemon 核验精确 owner/代次、原事件 hash/水位及其后没有解决/答复证据，再恢复原请求。未决 response intent/dispatch 不重发、不重复启用按钮。清单暂不完整按已有 tick 最快每 5 秒只读重查，不重跑任务；旧 wrapper 缺能力时 `/status` 说明更新运行器以及可用的 `/detach` 出口。
-- journal schema 9 在同一迁移事务中从冻结事件和原 display chain 回填可证发布顺序，保留 ID、内容、unknown 状态和实际收据。没有操作/flow/context/display 证据的旧独立提示无法补造因果关系；保留它的原始证据，不借当前 UI 猜测或让它挡住独立的新工作。
+- journal 的 schema 9 迁移在同一事务中从冻结事件和原 display chain 回填可证发布顺序，保留 ID、内容、unknown 状态和实际收据。当前 schema 10 增加 control-action JSON 来源格式的 reader fence，v9→v10 不重写既有 checkpoint、原始输入或凭据；旧 v9 二进制在打开时拒绝，不能静默读掉新来源。没有操作/flow/context/display 证据的旧独立提示无法补造因果关系；保留它的原始证据，不借当前 UI 猜测或让它挡住独立的新工作。
 
 ### 私人连续操作与停止中的载体
 
@@ -30,7 +30,7 @@
 - 有效的目录与会话归属不会因为后台载体暂时缺失而消失。已接收输入等待已有退出核验和替换流程，不进入旧 core 的 `not_attached` 消费分支；原结果未知则保留该会话的未知记录，显式退出并新建仍可工作。仅查看 `/list` 和编辑选择器不受原生替换等待阻止；确认切换仍遵守原队列和请求边界。
 - 私人 kill 效果在同一投影提交边界把对应实例排除出可接管候选；停止中投影由现有持久 stop intent 派生，重启时从未应用效果恢复，不建立第二份持久实例状态。旧实例收到退出请求后不能再次被同目录选择复用，迟到的退出结果只能移除旧实例。该规则同时覆盖显式接入和公共工作区候选，不只覆盖 `/list` 卡。
 - `draining` 且 wrapper 已退出时，可以核对物理退出，不能伪造原生 inspection。证明包括同宿主、冻结 PID 与启动身份、原生子进程组／job 已完整且为空、排他 journal 写锁、精确 launch hash、完整数据库及原生帧水位；registry 在退休写事务中再次验证。Linux 历史 scope 的裸 start ticks 必须结合冻结 carrier 的 boot identity，不能与带 boot 的进程身份直接比较而误报退出。
-- 私人宿主库迁移到 `user_version=2` 以记录独立物理退出证明。升级事务只修改版本并确保既有表存在，原 carrier JSON、credential hash 和凭据文件不重写；v1 二进制拒绝此版本，避免旧 reader 静默丢弃新证明字段。私人聊天 journal 仍为 schema 9，两者不是同一个数据库。
+- 私人宿主库使用 `user_version=2` 记录独立物理退出证明。升级事务只修改版本并确保既有表存在，原 carrier JSON、credential hash 和凭据文件不重写；v1 二进制拒绝此版本，避免旧 reader 静默丢弃新证明字段。私人聊天 journal 当前为 schema 10，两者不是同一个数据库。
 - 物理退休仅说明旧载体不再写入，不结算旧命令。真实终态先独立投影；旧业务仍未决时不自动恢复该会话或重发输入。用户退出后，旧队列与未知执行保存在 detached 记录，新会话独立执行。后台只推进已有退出意图及清理，不预先为闲置用户启动替代载体；实际输入或明确选择触发准备。
 - 新会话首轮在原生接受后由 `new_thread_ready` 变为已选中原生线程。自动继续只在同一实例、`follow_execution_thread` 且当前选中线程等于本次执行线程时，把该冻结启动计划转成同线程的 `resume_existing`；否则沿原导航校验取消。不能发出“等待自动继续”后因自身正常线程落实而马上清除，也不能再次 `thread/start` 创建另一个会话。AutoWhip 仍按原开关、真实终态和计时策略推进。
 - 私人 worker 停止信号只结束后续准入，不取消已开始的 pass 项目或外部效果的收据结算。pass、逐 owner deadline、逐 native 事件和效果领取各自检查同一停止信号；已经进入的操作沿原有 I/O／数据库期限完成核心投影与持久提交。外层关闭期限只约束等待，未排空时返回错误并保留存储，不把取消调度造成的 `context canceled` 变成内存已变、checkpoint 未提交的全应用 poison。
@@ -51,7 +51,7 @@
 
 compact 的因果边界取自 wrapper 写入该原生帧前持久保存的事件水位，不能使用 daemon 最后收到事件的序号。先前 turn 必须有精确终态，再以水位后的真实 contextCompaction 与同 turn 终态结束本次压缩；旧事件迟到不能成为新压缩的结果。没有水位与真实序号 0 不同。若 thread/resume 已写入而 compact 帧尚未写入便被拒绝，只登记该 compact 帧的未写事实，保留已写 resume，不宣称整个命令零帧发送，也不因此退出 wrapper。
 
-新增私人回执能力由认证 hello 的 `privateDeliveryVersion` 绑定到精确连接和启动身份。旧 wrapper 的现有事实仍可消费；需要新关联能力的操作在写入前明确拒绝，提示退出当前连接后重新选择目录。普通 `/new` 和 socket 重连可能复用原 wrapper，不视为能力升级。缺少的 token 或操作结果不能补造。
+新增私人回执能力由认证 hello 的 `privateDeliveryVersion` 绑定到精确连接和启动身份。请求答复、压缩和 thread.read 继续要求 v1，显式独立线程的 Codex review 要求 v2；不能因为最新版本提高便禁止 v1 载体原已支持的其他操作。旧 wrapper 的现有事实仍可消费；需要新关联能力的操作在写入前明确拒绝，提示退出当前连接后重新选择目录。普通 `/new` 和 socket 重连可能复用原 wrapper，不视为能力升级。缺少的 token 或操作结果不能补造。
 
 ### 私聊启动失败与无连接超时
 
@@ -647,7 +647,17 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 ### 3.4 审阅态 overlay
 
-review mode 第一版当前不是新的 route state，而是挂在 surface 上的一层 detached review session overlay。没有 `ReviewSession` 时不在该 overlay；session 建立后按 `pending -> active -> ready` 推进。
+review mode 不是新的 route state，而是挂在 surface 上的一层独立审阅会话 overlay。没有 `ReviewSession` 时不在该 overlay；session 建立后按 `pending -> active -> ready` 推进。
+
+Codex 0.171 的原生 `ReviewDelivery` 仅支持 `inline`。产品命令里的 `detached` 表达独立审阅体验，由专属适配流程展开为 `thread/start` 创建临时审阅线程，再在该 child 上执行 `review/start delivery=inline`，不能原样发送该产品枚举，也不能改成在 parent 上 inline。目录、模型／推理强度、权限及 Profile 策略从本次父会话冻结，不能从最近一次 thread/start 模板猜测。创建与审阅分别以真实 RequestID／响应关联同一原命令，逐帧记录；未知结果不重复创建或重发。新线程只记录 `source=review` 与逻辑 parent，不伪造实际 fork 历史；主会话选择保留，追问、退出和应用意见继续沿原 ReviewSession 交互。
+
+创建响应通过第一帧的真实 request／receipt 保存 `review.child_created`，仅用于精确识别该子线程和暂缓提前到达的事件，不表示审阅已经接受，也不授予执行归属。`review.start` accepted 的第二帧证明到达后，才登记 child 归属并按证据初始化派生的 review 来源，再消费原事件；不能把先到的正文按普通会话提前 applied 而丢失审阅结果。registry 绑定先独立提交，再持原有投影 fence 提交私人 checkpoint；没有跨库原子提交的虚假保证。退休载体只可在原停机证明下保留 inactive 的历史归属，不获取活跃 lease。
+
+原生审阅可能报告 root turn A、子 turn B。适配器保留真实 `TurnID` 与 `RootTurnID`，依据同一 child、已持久 turn.started 的明确 root 字段及 accepted A 证明归类，不按同线程或时间猜测、不把 B 改名成 A。真实 0.171 帧已验证这条关系；[上游问题](https://github.com/openai/codex/issues/18516) 记录了相同协议现象。临时审阅线程仅在本进程内有已证明的存活关系时直接发追问 turn/start；它没有可 resume 的 rollout，不能套用普通主会话的 thread/resume 路径。
+
+经证明的私人审阅工作链使用 root A 持有逻辑执行占用，并以 A 的真实终态结算；原始子 turn B 保留，不伪造其终态。inspection 与进程退出协调同样核对 accepted、明确 root 关系和 root terminal，不能让缺少独立 terminal 的 B 永久阻挡普通对话或停机，也不能因此忽略没有这些证明的其他活动 turn。收到该临时线程明确 closed／archived／deleted／notLoaded 事实后，保留来源身份但停止发送追问，给出具体关闭原因；不能尝试恢复无 rollout 的线程。
+
+临时审阅线程的关闭检查使用其实际支持的 `thread/read(includeTurns=false)`，仍须取得真实 idle 状态；对该 exact child 的 Goal 接口明确“不支持”与“无目标”不同。例外只适用于本地 journal 中可核实的两帧原文／hash、原命令的冻结目录、child-created、accepted 与 root terminal 均匹配的 ephemeral review，任意错误、错误 request／child 或 active 状态均不能证明可关闭。原帧仅保存在 owner-only wrapper journal，relay／平台只传证据引用，宿主用既有只读 reader 复核，不暴露配置原文。不能把临时线程从 owner inventory 直接删掉来回避检查。
 
 | 代号 | 条件 | 当前实现语义 |
 | --- | --- | --- |
@@ -690,7 +700,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 14. OpenCode `/review` 使用同样的 typed fork plan。ACP 必须先收到 `session/fork` 的新 session，再确认其 `configOptions.mode` 含 `review`，依次发送 `session/set_config_option mode=review`、可选 `effort`，全部成功后才发送 `session/prompt`；review intent 忽略普通 plan override，不能把 fork 切回 `plan/build`。mode 缺失、set-config RPC error 或 prompt 前其他关联 `system.error` 都按 command id 回滚 dispatching queue item、ReviewSession、remote ownership 与 room reservation，不留下半死 overlay。
 15. OpenCode profile compiler 始终生成 `agent.review(mode=primary)`；API profile 的 `ReviewModel` 仅映射到 `agent.review.model`，空值继承主模型，不生成顶层 `review_model`。review agent 的 tools/permission 均默认 deny，只显式允许 Read/Glob/Grep；translator 还会对 typed review session 的 permission request 与 `fs/write_text_file` 直接 fail closed，旧写授权也不能旁路。
 16. Claude/OpenCode 类 reviewer 不依赖 shell 读取 target。orchestrator 生成受控上下文：未提交 target 包含完整 changed-file manifest、staged/unstaged patch 与 untracked 内容；commit target 包含 manifest、元信息与 patch。超限时显式标注截断，manifest 保持完整，reviewer 可用只读工具补读文件。
-17. Codex 原生 detached review 在启动时按 parent thread、review CWD 与 surface capability settings 复用普通 prompt 的有效配置解析，并把结果写入 `FrozenAccessMode`；后续 `/access` 只改变新 prompt 的 desired state，不追溯正在执行或 ready 后追问的该次 Review。旧/人工状态缺少冻结值时 fail closed。`ReviewSession` 是 daemon 内临时 overlay，当前 surface resume store 不跨 daemon 重启恢复它，本规则不新增持久化迁移。
+17. Codex 独立 review 在启动时按 parent thread、review CWD 与 surface capability settings 复用普通 prompt 的有效配置解析，并把结果写入 `FrozenAccessMode`；后续 `/access` 只改变新 prompt 的 desired state，不追溯正在执行或 ready 后追问的该次 Review。旧/人工状态缺少冻结值时 fail closed。历史 surface resume store 不跨 daemon 重启恢复该 overlay；独立私人 checkpoint 另存审阅记录及待处理命令，恢复依据原生证明，不能把临时 child 记录当作可 resume 的普通会话。
 18. 2026-08-15 补充：API profile 的 headless launch 与 thread/resume 现在都会把 `review_model` 固定下来：显式 review 模型用 `ReviewModel`，`same_as_main` 用主模型，避免底层 Codex 回退到全局默认模型导致 review 以模型不支持失败。
 18. 只有 `Backend=codex + ExecutorKind=codex_native_detached + FrozenAccessMode=full_access`，且 instance、`ReviewThreadID`、当前非空 `ActiveTurnID` 与 request 精确匹配时，orchestrator 才可能在 request 入队前进入静默批准分支。白名单仅含 typed `approval_command`、`approval_file_change`、`approval_network`、`permissions_request_approval`，以及 request method 明确为 `execCommandApproval` / `applyPatchApproval` 的 legacy approval；typed approval 还必须实际暴露 `accept`。泛化 approval、plan confirmation、`request_user_input`、MCP elicitation、tool callback、Claude `can_use_tool` 和未知类型均按普通 request 路径展示或 fail closed。
 19. 静默批准不绕过 request lifecycle：approval 返回 `decision=accept`，permissions 返回原请求权限集合与 `scope=turn`；record 仍进入 pending/submitting 并等待 command ack 与上游 `request.resolved`，只是正常路径不生成 Feishu request card。surface 已有另一条 pending request 时不抢占，回退普通队列。若自动 response 的 command 被 translator/transport 拒绝，现有 restore 路径会把同一 request 转回可见 editing card 并追加失败 notice，因此不会形成无 UI 的永久 request gate。

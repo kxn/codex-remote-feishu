@@ -55,3 +55,59 @@ func TestPrivateControlProjectionRestoresExactHolds(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectVerifiedPrivateReviewThreadChecksOwnerAndPreservesNativeFacts(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	svc.config.PrivateApplication = true
+	surface.ReviewSession = &state.ReviewSessionRecord{Phase: state.ReviewSessionPhasePending, ParentThreadID: "thread-main"}
+	inst := svc.root.Instances["inst-1"]
+	thread := svc.ensureThread(inst, "review-child")
+	thread.Source = &agentproto.ThreadSourceRecord{Kind: "vscode"}
+	if err := svc.ProjectVerifiedPrivateReviewThread(surface.SurfaceSessionID, "inst-1", "wrong-parent", "review-child"); err == nil {
+		t.Fatal("accepted wrong parent")
+	}
+	if thread.Source.Kind != "vscode" {
+		t.Fatal("invalid proof changed source")
+	}
+	if err := svc.ProjectVerifiedPrivateReviewThread(surface.SurfaceSessionID, "inst-1", "thread-main", "review-child"); err != nil {
+		t.Fatal(err)
+	}
+	if thread.Source.Kind != "review" || thread.Source.ParentThreadID != "thread-main" || thread.ForkedFromID != "" {
+		t.Fatalf("invalid source projection: %#v", thread)
+	}
+}
+
+func TestPrivateReviewChildTurnTracksProvenRootForCompletion(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	svc.config.PrivateApplication = true
+	surface.ReviewSession = &state.ReviewSessionRecord{Phase: state.ReviewSessionPhasePending, ParentThreadID: "thread-main"}
+	inst := svc.root.Instances["inst-1"]
+	thread := svc.ensureThread(inst, "review-child")
+	thread.Source = &agentproto.ThreadSourceRecord{Kind: agentproto.ThreadSourceKindReview, ParentThreadID: "thread-main"}
+	event := agentproto.Event{ThreadID: "review-child", TurnID: "child-turn", RootTurnID: "root-turn", NativeBinding: &agentproto.NativeTurnBinding{}}
+	session := svc.activateReviewSessionRecord(surface, thread, event)
+	if session.InitialTurnID != "root-turn" || session.ActiveTurnID != "root-turn" || event.TurnID != "child-turn" {
+		t.Fatalf("wrong review identity: session=%+v native=%+v", session, event)
+	}
+}
+
+func TestPrivateReviewRootOwnsInstanceBusyUntilRootTerminal(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	svc.config.PrivateApplication = true
+	surface.ReviewSession = &state.ReviewSessionRecord{Phase: state.ReviewSessionPhasePending, ParentThreadID: "thread-main"}
+	binding := &agentproto.NativeTurnBinding{}
+	started := agentproto.Event{Kind: agentproto.EventTurnStarted, ThreadID: "thread-review", TurnID: "child", RootTurnID: "root", NativeBinding: binding, Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID}}
+	svc.ApplyAgentEvent("inst-1", started)
+	inst := svc.root.Instances["inst-1"]
+	if inst.ActiveTurnID != "root" || started.TurnID != "child" {
+		t.Fatalf("lost native/root identity: active=%q native=%q", inst.ActiveTurnID, started.TurnID)
+	}
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{Kind: agentproto.EventTurnCompleted, ThreadID: "other-thread", TurnID: "root", Status: "completed"})
+	if inst.ActiveTurnID != "root" {
+		t.Fatal("foreign thread terminal cleared occupancy")
+	}
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{Kind: agentproto.EventTurnCompleted, ThreadID: "thread-review", TurnID: "root", Status: "completed"})
+	if inst.ActiveTurnID != "" {
+		t.Fatalf("root terminal left instance busy: %q", inst.ActiveTurnID)
+	}
+}

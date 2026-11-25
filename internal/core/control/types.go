@@ -173,6 +173,9 @@ type Action struct {
 	ReactionType        string
 	TargetMessageID     string
 	Inbound             *ActionInboundMeta
+
+	// Set only by the private processor after authenticated ingress admission.
+	PrivateControlIngressEventID string `json:"-"`
 }
 
 type SelectionPromptKind string

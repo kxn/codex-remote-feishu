@@ -79,6 +79,154 @@ func (l *NativeLease) CommittedNativeSession(ctx context.Context, ref NativeEven
 	return session, err
 }
 
+// CommittedReviewSession returns the distinct child only after the exact review
+// command, native frame and accepted result have resolved the owned dispatch.
+func (l *NativeLease) CommittedReviewSession(ctx context.Context, ref NativeEventRef) (string, error) {
+	if l == nil || ref.Incarnation != l.native.CarrierIncarnation || ref.Sequence == 0 || ref.PayloadHash == "" {
+		return "", ErrJournalState
+	}
+	var session string
+	err := l.with(ctx, func() error {
+		var err error
+		session, err = l.committedReviewSession(ctx, ref)
+		return err
+	})
+	return session, err
+}
+
+// committedReviewSession is called only under a validated owner fence or
+// before binding the result using the same immutable durable proof.
+func (l *NativeLease) committedReviewSession(ctx context.Context, ref NativeEventRef) (string, error) {
+	var eventRaw, commandRaw []byte
+	var hash, state string
+	var seq int64
+	err := l.journal.db.QueryRowContext(ctx, `SELECT e.payload,e.payload_hash,c.payload,d.state,d.event_sequence FROM native_events e JOIN native_commands c ON c.command_id=e.command_id JOIN dispatch d ON d.id=c.dispatch_id WHERE e.incarnation=? AND e.sequence=? AND d.tenant=? AND d.app_id=? AND d.gateway=? AND d.surface=? AND d.chat=? AND d.user_id=? AND d.generation=? AND d.carrier=?`, ref.Incarnation, ref.Sequence, l.surface.TenantID, l.surface.AppID, l.surface.GatewayID, l.surface.SurfaceID, l.surface.ChatID, l.surface.UserID, l.generation, ref.Incarnation).Scan(&eventRaw, &hash, &commandRaw, &state, &seq)
+	if err != nil {
+		return "", err
+	}
+	var event agentproto.Event
+	var command agentproto.Command
+	if hash != ref.PayloadHash || state != "accepted" || seq != int64(ref.Sequence) || json.Unmarshal(eventRaw, &event) != nil || json.Unmarshal(commandRaw, &command) != nil {
+		return "", ErrJournalConflict
+	}
+	actual, err := agentproto.RuntimeEventPayloadHash(event)
+	if err != nil || actual != hash || command.Kind != agentproto.CommandReviewStart || command.NativeBinding == nil || event.NativeBinding == nil || *command.NativeBinding != *event.NativeBinding || event.NativeBinding.Owner != l.native || command.CommandID != event.CommandID || command.Target.ThreadID == "" || event.ThreadID != command.Target.ThreadID || event.Kind != agentproto.EventNativeControlResult || event.Action != "review.start" || event.Status != "accepted" || event.RequestID == "" || event.TurnID == "" {
+		return "", ErrJournalConflict
+	}
+	child, ok := event.Metadata["reviewThreadID"].(string)
+	if !ok || child == "" || child == command.Target.ThreadID {
+		return "", ErrJournalConflict
+	}
+	var createdRaw, receiptRaw []byte
+	var createdHash string
+	var proofCount int
+	err = l.journal.db.QueryRowContext(ctx, `SELECT payload,payload_hash,count(*) OVER() FROM native_events WHERE incarnation=? AND sequence<? AND command_id=? AND json_extract(payload,'$.kind')=? AND json_extract(payload,'$.threadId')=?`, ref.Incarnation, ref.Sequence, command.CommandID, string(agentproto.EventReviewChildCreated), child).Scan(&createdRaw, &createdHash, &proofCount)
+	if err != nil {
+		return "", err
+	}
+	if proofCount != 1 {
+		return "", ErrJournalConflict
+	}
+	var created agentproto.Event
+	if json.Unmarshal(createdRaw, &created) != nil {
+		return "", ErrJournalConflict
+	}
+	createdActual, err := agentproto.RuntimeEventPayloadHash(created)
+	if err != nil || createdActual != createdHash || created.NativeBinding == nil || *created.NativeBinding != *command.NativeBinding || created.Metadata["parentThreadID"] != command.Target.ThreadID || created.Metadata["stage"] != "thread/start" || created.Action != "review.start" || created.RequestID == "" {
+		return "", ErrJournalConflict
+	}
+	if err = l.journal.db.QueryRowContext(ctx, `SELECT payload FROM native_command_receipts WHERE command_id=? AND incarnation=?`, command.CommandID, ref.Incarnation).Scan(&receiptRaw); err != nil {
+		return "", err
+	}
+	var receipt agentproto.RuntimeCommandReceipt
+	if json.Unmarshal(receiptRaw, &receipt) != nil {
+		return "", ErrJournalConflict
+	}
+	matched := false
+	for _, frame := range receipt.Frames {
+		if frame.NativeRequestID == created.RequestID && frame.NativeMethod == "thread/start" && (frame.Stage == "written" || frame.Stage == "child_write_started" || frame.Stage == "unknown") {
+			matched = true
+		}
+	}
+	if !matched {
+		return "", ErrJournalConflict
+	}
+	return child, nil
+}
+
+// reviewProjectionSession finds only a committed accepted review proof. An
+// earlier turn notification is associated by exact child and turn identity.
+func (j *Journal) reviewProjectionSession(ctx context.Context, l *NativeLease, ref NativeEventRef) (string, error) {
+	event, _, _, err := j.processorNativeEvent(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	if event.Kind == agentproto.EventNativeControlResult && event.Action == "review.start" && event.Status == "accepted" {
+		return l.committedReviewSession(ctx, ref)
+	}
+	if !isNativeTurnProjection(event.Kind) || event.ThreadID == "" || event.TurnID == "" {
+		return "", nil
+	}
+	root, err := j.reviewRootTurn(ctx, l, event)
+	if err != nil {
+		return "", err
+	}
+	rows, err := j.db.QueryContext(ctx, `SELECT sequence,payload_hash FROM native_events WHERE incarnation=? AND json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.status')='accepted' AND json_extract(payload,'$.metadata.reviewThreadID')=? AND json_extract(payload,'$.turnId')=?`, ref.Incarnation, event.ThreadID, event.TurnID)
+	if root != "" && root != event.TurnID {
+		if err == nil {
+			rows.Close()
+		}
+		rows, err = j.db.QueryContext(ctx, `SELECT sequence,payload_hash FROM native_events WHERE incarnation=? AND json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.status')='accepted' AND json_extract(payload,'$.metadata.reviewThreadID')=? AND json_extract(payload,'$.turnId')=?`, ref.Incarnation, event.ThreadID, root)
+	}
+	if err != nil {
+		return "", err
+	}
+	var refs []NativeEventRef
+	for rows.Next() {
+		var proof NativeEventRef
+		proof.Incarnation = ref.Incarnation
+		if err = rows.Scan(&proof.Sequence, &proof.PayloadHash); err != nil {
+			rows.Close()
+			return "", err
+		}
+		refs = append(refs, proof)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return "", err
+	}
+	if len(refs) == 0 {
+		return "", nil
+	}
+	if len(refs) != 1 {
+		return "", ErrJournalConflict
+	}
+	return l.committedReviewSession(ctx, refs[0])
+}
+
+// reviewRootTurn preserves the native subturn ID while obtaining its root only
+// from the persisted turn.started event for this exact carrier/session/turn.
+func (j *Journal) reviewRootTurn(ctx context.Context, l *NativeLease, event agentproto.Event) (string, error) {
+	rows, err := j.db.QueryContext(ctx, `SELECT json_extract(payload,'$.rootTurnId') FROM native_events WHERE incarnation=? AND json_extract(payload,'$.kind')=? AND json_extract(payload,'$.threadId')=? AND json_extract(payload,'$.turnId')=? AND coalesce(json_extract(payload,'$.rootTurnId'),'')<>''`, l.native.CarrierIncarnation, string(agentproto.EventTurnStarted), event.ThreadID, event.TurnID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var root string
+	for rows.Next() {
+		var value string
+		if err = rows.Scan(&value); err != nil {
+			return "", err
+		}
+		if root != "" && root != value {
+			return "", ErrJournalConflict
+		}
+		root = value
+	}
+	return root, rows.Err()
+}
+
 // ReadCommittedNativeInspection is a read-only recovery port for the host's
 // stop verifier while the registry write transaction is already held. It checks
 // the durable carrier/owner mapping and never mutates the application journal.
