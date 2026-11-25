@@ -413,3 +413,10 @@ execution-owner registry 1→2：用部署前 HEAD `1ac41368` 的实际旧 write
 - Windows 生产交叉构建：`GOOS=windows GOARCH=amd64 go build -buildvcs=false ./...` 通过，证据 `/tmp/private-protocol-final-windows-v3.log`；关闭 VCS stamping 仅处理当前受管 checkout 的构建环境，不改变产品行为。
 - 实际受管 `codex-cli 0.171.0`，经真实 SDK 入口、生产 wrapper 和独立复制的账号配置：从冷工作区选择与原卡成功直接推进三轮对话（含实际写文件并读回），再修改仓库、点击独立审阅、追问、退出审阅、原主会话继续答复，以及真实 inspection／停止证明收尾，53.05 秒通过。网关为受控平台，模型／app-server 是实际受管二进制；未声称真实飞书客户端绘制验收。证据 `/tmp/private-protocol-real-native-v2.log`。
 - 上述实际测试程序 SHA256 为 `1659b00760d554df7cdad25eb913cd98d05bf816a5a41d5b456a027f2c503fbe`。构建冻结的 1883 个生产 Go 文件逐一 SHA 对照当前代码，无新增／缺失／变化；清单 `/tmp/private-protocol-final-production-manifest-v2.json`。后续只有测试 fixture／证据文档变化，不借旧程序结果覆盖生产修改。
+
+
+### 故障注入本身的并发约束
+
+整包 race 复核修正了两类 fixture 问题，均未放宽生产判断：prepared 注入不再跨 SDK 入站持有全局调度锁，改为短锁交换饱和的新调度槽，已有任务使用原槽正常退出；过期／重启注入不再用第二个 SQLite writer 改写活跃 journal。后者曾出现有效收据 confirmed 但未 applied、原进程 poisoned 的快照；重建 Processor 可处理该收据，首次底层错误未被捕获，不能将可能的 SQLite snapshot 竞争表述为已证唯一原因。
+
+当前所有期限通过流量前安装的 fixture-only trigger，在生产 PrepareEffectDispatch 的同一事务写入，且仅命中指定 kind 的首次 dispatch；后续重试沿原生产期限。crash 场景只在旧 app、relay 与交付回调关闭后模拟丢失 registry intent。没有新增生产 hook、缩短产品时限、重发 unknown 或跳过用户可见步骤。最新七项用户旅程 race 连续三次通过 `/tmp/private-intransaction-final-race3.log`；OAuth global／thread 两范围另有独立十次 race 旁证 `/tmp/private-oauth-isolated-independent-race.log`（首次 dispatch 限定前的等价单次登录 fixture）。最终整包结果另按当前源码登记。

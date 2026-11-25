@@ -82,6 +82,7 @@ func TestPrivateSDKReadCrashMissingRegistryIntent(t *testing.T) {
 	if err = old.applications.startWorkers(ctx, errs); err != nil {
 		t.Fatal(err)
 	}
+	installFixtureReadDeadline(t, old, "thread.goal.get", 6*time.Second)
 	user := sdkJourneyUser{t: t, ctx: ctx, gateway: gateway, errors: errs, cwd: cwd}
 	n := len(gateway.snapshotOperations())
 	user.send(old, "crash-cold", "hi")
@@ -102,9 +103,14 @@ func TestPrivateSDKReadCrashMissingRegistryIntent(t *testing.T) {
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
+	r := old.applications
+	if err = r.stopWorkers(ctx); err != nil {
+		t.Fatal(err)
+	}
 	// Crash injection: the native request may have been written, but its registry
-	// intent transaction is absent. Freeze an accelerated, still-future deadline.
-	privateDB, err := sql.Open("sqlite", filepath.Join(root, "private-chat.db"))
+	// intent transaction is absent. Its accelerated deadline was already frozen
+	// atomically by the original dispatch transaction.
+	privateDB, err := sql.Open("sqlite", "file:"+filepath.Join(root, "private-chat.db")+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,27 +118,7 @@ func TestPrivateSDKReadCrashMissingRegistryIntent(t *testing.T) {
 	if err = privateDB.QueryRow(`SELECT d.id FROM dispatch d JOIN native_commands n ON n.dispatch_id=d.id WHERE json_extract(n.payload,'$.kind')='thread.goal.get' ORDER BY d.rowid DESC LIMIT 1`).Scan(&dispatch); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second).UnixNano()
-	result, err := privateDB.Exec(`UPDATE private_read_observations SET expires_ns=? WHERE dispatch_id=?`, deadline, dispatch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count, _ := result.RowsAffected(); count != 1 {
-		t.Fatal("observation missing")
-	}
 	_ = privateDB.Close()
-	registry, err := sql.Open("sqlite", filepath.Join(root, "execution-owners.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = registry.Exec(`DELETE FROM session_read_intents WHERE operation_id=?`, dispatch); err != nil {
-		t.Fatal(err)
-	}
-	_ = registry.Close()
-	r := old.applications
-	if err = r.stopWorkers(ctx); err != nil {
-		t.Fatal(err)
-	}
 	addr := server.Listener.Addr().String()
 	if err = old.relay.Close(); err != nil {
 		t.Fatal(err)
@@ -143,6 +129,20 @@ func TestPrivateSDKReadCrashMissingRegistryIntent(t *testing.T) {
 	}
 	if err = r.close(); err != nil {
 		t.Fatal(err)
+	}
+	// Simulate a registry transaction lost across crash only after the old
+	// application and delivery callbacks have fully stopped.
+	registry, err := sql.Open("sqlite", "file:"+filepath.Join(root, "execution-owners.db")+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := registry.Exec(`DELETE FROM session_read_intents WHERE operation_id=?`, dispatch)
+	_ = registry.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := result.RowsAffected(); count != 1 {
+		t.Fatal("expected exact original registry intent")
 	}
 	snapshot, err := captureTeamLegacyFiles(root)
 	if err != nil {

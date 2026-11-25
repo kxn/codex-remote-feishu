@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +71,79 @@ func TestPrivateSDKOAuthObservationTimeoutDetachAndContinue(t *testing.T) {
 	for _, scoped := range []bool{false, true} {
 		t.Run(fmt.Sprintf("thread-scoped=%t", scoped), func(t *testing.T) {
 			f := newContinuityFixtureBare(t, nil)
+			phaseStart := time.Now()
+			phase := func(name string) {
+				deadline, _ := f.ctx.Deadline()
+				t.Logf("phase=%s elapsed=%s remaining=%s", name, time.Since(phaseStart), time.Until(deadline))
+			}
+			t.Cleanup(func() {
+				if !t.Failed() {
+					return
+				}
+				statusResult := make(chan error, 1)
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+					defer cancel()
+					_, e := f.app.applications.processor.ReadRuntimeStatus(ctx)
+					statusResult <- e
+				}()
+				select {
+				case e := <-statusResult:
+					t.Logf("processor status error=%v", e)
+				case <-time.After(time.Second):
+					t.Log("processor status lock did not return within diagnostic bound")
+				}
+				runner := f.app.applications.runner
+				if runner.effectMu.TryLock() {
+					t.Logf("runner active=%v normal=%d/%d control=%d/%d publish=%d/%d", runner.running, len(runner.normalSlots), cap(runner.normalSlots), len(runner.controlSlots), cap(runner.controlSlots), len(runner.publishSlots), cap(runner.publishSlots))
+					runner.effectMu.Unlock()
+				} else {
+					t.Log("runner effect lock busy")
+				}
+				db, e := sql.Open("sqlite", "file:"+filepath.Join(f.app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?mode=ro&_pragma=busy_timeout(5000)")
+				if e != nil {
+					t.Logf("diagnostic open: %v", e)
+					return
+				}
+				defer db.Close()
+				artifact, e := os.MkdirTemp("/tmp", "private-oauth-timeout-")
+				if e == nil {
+					_ = os.Chmod(artifact, 0700)
+					stack := make([]byte, 2<<20)
+					n := runtime.Stack(stack, true)
+					_ = os.WriteFile(filepath.Join(artifact, "goroutines.txt"), stack[:n], 0600)
+					if _, e = db.Exec(`VACUUM INTO ?`, filepath.Join(artifact, "private-chat.db")); e == nil {
+						t.Logf("consistent diagnostic snapshot: %s", artifact)
+					}
+				}
+				rows, e := db.Query(`SELECT d.id,d.state,e.state,coalesce(json_extract(e.receipt,'$.kind'),''),coalesce(r.expires_ns,0),coalesce(a.revision,0) FROM dispatch d JOIN native_commands n ON n.dispatch_id=d.id JOIN private_effect e ON e.id=substr(d.id,1,length(d.id)-7) LEFT JOIN private_read_observations r ON r.dispatch_id=d.id LEFT JOIN private_effect_applied a ON a.effect_id=e.id WHERE json_extract(n.payload,'$.kind')='mcp.oauth_login.start'`)
+				if e == nil {
+					defer rows.Close()
+					for rows.Next() {
+						var id, ds, es, kind string
+						var expiry, revision int64
+						if rows.Scan(&id, &ds, &es, &kind, &expiry, &revision) == nil {
+							t.Logf("oauth dispatch=%s state=%s effect=%s receipt=%s deadline=%d applied=%d", id, ds, es, kind, expiry, revision)
+						}
+					}
+				}
+				var cp string
+				if e = db.QueryRow(`SELECT data FROM private_checkpoint ORDER BY revision DESC LIMIT 1`).Scan(&cp); e == nil {
+					t.Logf("checkpoint=%s", cp)
+				}
+				passResult := make(chan error, 1)
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
+					passResult <- runner.pass(ctx)
+				}()
+				select {
+				case e := <-passResult:
+					t.Logf("diagnostic runner pass error=%v", e)
+				case <-time.After(3 * time.Second):
+					t.Log("diagnostic runner pass did not complete")
+				}
+			})
 			exe, err := os.Executable()
 			if err != nil {
 				t.Fatal(err)
@@ -84,11 +159,13 @@ func TestPrivateSDKOAuthObservationTimeoutDetachAndContinue(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.app.headlessRuntime.BaseEnv = append(f.app.headlessRuntime.BaseEnv, "PRIVATE_OAUTH_STARTED="+started, "PRIVATE_OAUTH_EXPECT_THREAD="+expected, "PRIVATE_OAUTH_TRACE="+trace)
+			installFixtureReadDeadline(t, f.app, "mcp.oauth_login.start", 5*time.Second)
 			u := f.user
 			n := len(f.gateway.snapshotOperations())
 			u.send(f.app, "oauth-timeout-cold", "hi")
 			u.waitVisible(f.app, n, "/list")
 			u.chooseNew(f.app, "oauth-timeout-new")
+			phase("workspace-ready")
 			if scoped {
 				n = len(f.gateway.snapshotOperations())
 				u.send(f.app, "oauth-timeout-first", "hello")
@@ -106,41 +183,13 @@ func TestPrivateSDKOAuthObservationTimeoutDetachAndContinue(t *testing.T) {
 				case <-time.After(20 * time.Millisecond):
 				}
 			}
+			phase("native-login-received")
 			conversation := len(f.gateway.snapshotOperations())
 			u.send(f.app, "oauth-timeout-during", "continue while login waits")
 			u.waitFinal(f.app, conversation, "oauth-timeout-during", "oauth timeout dialogue complete")
-			db, err := sql.Open("sqlite", "file:"+filepath.Join(f.app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?_pragma=busy_timeout(5000)")
-			if err != nil {
-				t.Fatal(err)
-			}
-			var dispatch string
-			if err = db.QueryRow(`SELECT d.id FROM dispatch d JOIN native_commands n ON n.dispatch_id=d.id WHERE json_extract(n.payload,'$.kind')='mcp.oauth_login.start' ORDER BY d.rowid DESC LIMIT 1`).Scan(&dispatch); err != nil {
-				t.Fatal(err)
-			}
-			expires := time.Now().Add(-time.Second).UnixNano()
-			result, err := db.Exec(`UPDATE private_read_observations SET expires_ns=? WHERE dispatch_id=?`, expires, dispatch)
-			_ = db.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if count, _ := result.RowsAffected(); count != 1 {
-				t.Fatal("exact OAuth observation missing")
-			}
-			if scoped {
-				registry, e := sql.Open("sqlite", "file:"+filepath.Join(f.app.headlessRuntime.Paths.StateDir, "execution-owners.db")+"?_pragma=busy_timeout(5000)")
-				if e != nil {
-					t.Fatal(e)
-				}
-				result, e = registry.Exec(`UPDATE session_read_intents SET expires_ns=? WHERE operation_id=?`, expires, dispatch)
-				_ = registry.Close()
-				if e != nil {
-					t.Fatal(e)
-				}
-				if count, _ := result.RowsAffected(); count != 1 {
-					t.Fatal("exact OAuth intent missing")
-				}
-			}
+			phase("ordinary-final")
 			u.waitVisible(f.app, n, "原请求结果尚未确认")
+			phase("timeout-visible")
 			n = len(f.gateway.snapshotOperations())
 			u.send(f.app, "oauth-timeout-detach", "/detach")
 			u.waitVisible(f.app, n, "已解除")

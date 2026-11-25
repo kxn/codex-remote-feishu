@@ -89,6 +89,7 @@ func TestPrivateSDKReadExpiryRetriesAndConsumesLateResult(t *testing.T) {
 		}
 		app.headlessRuntime.BaseEnv = append(app.headlessRuntime.BaseEnv, "READ_EXPIRY_STARTED="+started, "READ_EXPIRY_RELEASE="+release)
 	})
+	installFixtureReadDeadline(t, g.app, "thread.goal.get", 5*time.Second)
 	u := g.user
 	before := len(u.gateway.snapshotOperations())
 	u.send(g.app, "first", "hi")
@@ -109,34 +110,12 @@ func TestPrivateSDKReadExpiryRetriesAndConsumesLateResult(t *testing.T) {
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
-	db, err := sql.Open("sqlite", filepath.Join(g.app.headlessRuntime.Paths.StateDir, "execution-owners.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	deadline := time.Now().Add(-time.Second).UnixNano()
-	privateWrite, err := sql.Open("sqlite", filepath.Join(g.app.headlessRuntime.Paths.StateDir, "private-chat.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = privateWrite.Exec(`UPDATE private_read_observations SET expires_ns=?`, deadline); err != nil {
-		t.Fatal(err)
-	}
-	privateWrite.Close()
-	result, err := db.Exec(`UPDATE session_read_intents SET expires_ns=? WHERE session_id=?`, deadline, "graph-a")
-	if err != nil {
-		t.Fatal(err)
-	}
-	n, _ := result.RowsAffected()
-	if n != 1 {
-		t.Fatalf("expected one frozen read intent, got %d", n)
-	}
 	u.waitVisible(g.app, before, "等待 Goal 查询结果超时")
 	before = len(u.gateway.snapshotOperations())
 	u.send(g.app, "goal-retry", "/goal")
 	u.waitVisible(g.app, before, "当前会话没有 Goal")
 	before = len(u.gateway.snapshotOperations())
-	if err = os.WriteFile(release, []byte("release"), 0600); err != nil {
+	if err := os.WriteFile(release, []byte("release"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	privateDB, err := sql.Open("sqlite", "file:"+filepath.Join(g.app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?mode=ro")

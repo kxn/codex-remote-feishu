@@ -88,6 +88,7 @@ func runGoalProbeTimeoutJourney(t *testing.T, ackFirst bool) {
 		t.Fatal(err)
 	}
 	f.app.headlessRuntime.BaseEnv = append(f.app.headlessRuntime.BaseEnv, "PRIVATE_GOAL_PROBE_STARTED="+started, "PRIVATE_GOAL_PROBE_RELEASE="+release, "PRIVATE_GOAL_PROBE_TRACE="+trace, "PRIVATE_GOAL_PROBE_METHODS="+methods, "PRIVATE_GOAL_RESUME_STARTED="+resumeStarted, "PRIVATE_GOAL_RESUME_RELEASE="+resumeRelease, "PRIVATE_GOAL_RESUME_SENT="+resumeSent)
+	installFixtureReadDeadline(t, f.app, "thread.read", 5*time.Second)
 	u := f.user
 	n := len(f.gateway.snapshotOperations())
 	u.send(f.app, "probe-cold", "hi")
@@ -110,35 +111,6 @@ func runGoalProbeTimeoutJourney(t *testing.T, ackFirst bool) {
 			t.Fatal("goal probe did not reach native")
 		case <-time.After(20 * time.Millisecond):
 		}
-	}
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(f.app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var dispatch string
-	if err = db.QueryRow(`SELECT d.id FROM dispatch d JOIN native_commands n ON n.dispatch_id=d.id WHERE json_extract(n.payload,'$.kind')='thread.read' ORDER BY d.rowid DESC LIMIT 1`).Scan(&dispatch); err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(-time.Second).UnixNano()
-	result, err := db.Exec(`UPDATE private_read_observations SET expires_ns=? WHERE dispatch_id=?`, deadline, dispatch)
-	_ = db.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count, _ := result.RowsAffected(); count != 1 {
-		t.Fatal("probe observation absent")
-	}
-	reg, err := sql.Open("sqlite", "file:"+filepath.Join(f.app.headlessRuntime.Paths.StateDir, "execution-owners.db")+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err = reg.Exec(`UPDATE session_read_intents SET expires_ns=? WHERE operation_id=?`, deadline, dispatch)
-	_ = reg.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count, _ := result.RowsAffected(); count != 1 {
-		t.Fatal("probe intent absent")
 	}
 	u.waitVisible(f.app, n, "/goal retry")
 	before := len(f.gateway.snapshotOperations())

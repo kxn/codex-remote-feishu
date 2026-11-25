@@ -74,6 +74,9 @@ func TestPrivateSDKPreparedReadRecoversOrExpiresBeforeSend(t *testing.T) {
 				t.Fatal(err)
 			}
 			g := newGraphEnv(t, a, b)
+			if expired {
+				installFixtureReadDeadline(t, g.app, "thread.goal.get", -time.Second)
+			}
 			u := g.user
 			before := len(u.gateway.snapshotOperations())
 			u.send(g.app, "first", "hi")
@@ -87,7 +90,7 @@ func TestPrivateSDKPreparedReadRecoversOrExpiresBeforeSend(t *testing.T) {
 			defer restoreEffects()
 			before = len(u.gateway.snapshotOperations())
 			u.send(g.app, "goal", "/goal")
-			db, err := sql.Open("sqlite", filepath.Join(g.app.headlessRuntime.Paths.StateDir, "private-chat.db"))
+			db, err := sql.Open("sqlite", "file:"+filepath.Join(g.app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?_pragma=busy_timeout(5000)")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -119,11 +122,6 @@ func TestPrivateSDKPreparedReadRecoversOrExpiresBeforeSend(t *testing.T) {
 			dispatch, _, err := lease.PrepareEffectDispatch(u.ctx, id, binding)
 			if err != nil {
 				t.Fatal(err)
-			}
-			if expired {
-				if _, err = db.Exec(`UPDATE private_read_observations SET expires_ns=? WHERE dispatch_id=?`, time.Now().Add(-time.Second).UnixNano(), dispatch.ID); err != nil {
-					t.Fatal(err)
-				}
 			}
 			restoreEffects()
 			if expired {
