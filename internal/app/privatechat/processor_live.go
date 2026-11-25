@@ -38,7 +38,27 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 		return nil, ErrJournalConflict
 	}
 	ref := liveEffectRef{Incarnation: event.Live.CarrierIncarnation, Sequence: int64(event.Live.Sequence), Hash: hash}
-	err = l.with(ctx, func() error {
+	reviewSession, e := p.journal.reviewSessionForEvent(ctx, l, event)
+	if e != nil {
+		return nil, e
+	}
+	if reviewSession != "" {
+		valid, e := p.journal.isPrivateReviewTurn(ctx, l, event)
+		if e != nil {
+			return nil, e
+		}
+		if !valid {
+			return nil, ErrJournalConflict
+		}
+		authority, ok := l.authority.(NativeReviewProjectionAuthority)
+		if !ok {
+			return nil, ErrJournalConflict
+		}
+		if e = authority.BindNativeReviewSession(ctx, l.native, l.surface, l.generation, reviewSession); e != nil {
+			return nil, e
+		}
+	}
+	project := func(bindReview func(string) error) error {
 		ctx, projectionErr := beginProjection(ctx)
 		if projectionErr != nil {
 			return projectionErr
@@ -75,17 +95,42 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 		if p.app.instances[l.native.InstanceID] != l.surface.SurfaceID || inst == nil || !inst.Online {
 			return ErrJournalState
 		}
-		command, e := p.journal.nativeProjectionCommand(ctx, l, event)
-		if e != nil {
-			return e
-		}
-		// The authenticated hello and accepted command authorize restoration of
-		// an existing held binding; the live frame itself proves no new turn.
-		if e = p.app.Service().RestorePrivateNativeProjection(l.surface.SurfaceID, l.native.InstanceID, command, event.ThreadID, event.TurnID); e != nil {
-			return e
-		}
-		if !p.app.Service().PrivateLiveTurnMatches(l.surface.SurfaceID, l.native.InstanceID, event.ThreadID, event.TurnID, command) {
-			return ErrJournalState
+		if reviewSession != "" {
+			if bindReview == nil {
+				return ErrJournalConflict
+			}
+			if e = bindReview(reviewSession); e != nil {
+				return e
+			}
+			var count int
+			if e = p.journal.db.QueryRowContext(ctx, `SELECT count(*) FROM native_events WHERE incarnation=? AND applied=1 AND json_extract(payload,'$.kind')=? AND json_extract(payload,'$.threadId')=? AND json_extract(payload,'$.turnId')=?`, l.native.CarrierIncarnation, string(agentproto.EventTurnStarted), event.ThreadID, event.TurnID).Scan(&count); e != nil {
+				return e
+			}
+			if count != 1 {
+				return ErrJournalState
+			}
+			root, e := p.journal.reviewRootTurn(ctx, l, event)
+			if e != nil {
+				return e
+			}
+			if root == "" {
+				root = event.TurnID
+			}
+			if !p.app.Service().PrivateLiveReviewMatches(l.surface.SurfaceID, l.native.InstanceID, event.ThreadID, root) {
+				return ErrJournalState
+			}
+			event.RootTurnID = root
+		} else {
+			command, e := p.journal.nativeProjectionCommand(ctx, l, event)
+			if e != nil {
+				return e
+			}
+			if e = p.app.Service().RestorePrivateNativeProjection(l.surface.SurfaceID, l.native.InstanceID, command, event.ThreadID, event.TurnID); e != nil {
+				return e
+			}
+			if !p.app.Service().PrivateLiveTurnMatches(l.surface.SurfaceID, l.native.InstanceID, event.ThreadID, event.TurnID, command) {
+				return ErrJournalState
+			}
 		}
 		events, e := reducer.ReduceNative(p.app, l.native.InstanceID, event)
 		if e != nil {
@@ -121,6 +166,11 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 		p.owners[l.surface] = processorOwner{cp.Revision, cp.Cursor, l.generation}
 		out, e = p.journal.processorEffects(ctx, l.surface, l.generation, cp.Revision)
 		return e
-	})
+	}
+	if reviewSession != "" {
+		err = l.withProjection(ctx, reviewSession, project)
+	} else {
+		err = l.with(ctx, func() error { return project(nil) })
+	}
 	return out, err
 }

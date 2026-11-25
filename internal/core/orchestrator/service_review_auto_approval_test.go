@@ -183,7 +183,7 @@ func TestFullAccessCodexReviewSilentlyApprovesLegacyPermissionRequests(t *testin
 func TestFullAccessCodexReviewPermissionsRequestUsesTurnScope(t *testing.T) {
 	svc, surface, cwd := newReviewSessionService(t)
 	startCodexReviewForAutoApprovalTest(t, svc, surface, cwd)
-	permissions := []map[string]any{{"name": "network", "host": "127.0.0.1"}}
+	permissions := map[string]any{"network": map[string]any{"enabled": true}}
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventRequestStarted,
@@ -194,7 +194,7 @@ func TestFullAccessCodexReviewPermissionsRequestUsesTurnScope(t *testing.T) {
 		RequestPrompt: &agentproto.RequestPrompt{
 			Type: agentproto.RequestTypePermissionsRequestApproval,
 			Permissions: &agentproto.PermissionsRequestPrompt{
-				Permissions: permissions,
+				ProfilePresent: true, Profile: permissions,
 			},
 		},
 		Metadata: map[string]any{"requestType": "permissions_request_approval"},
@@ -204,8 +204,8 @@ func TestFullAccessCodexReviewPermissionsRequestUsesTurnScope(t *testing.T) {
 	if command.Request.Response["scope"] != "turn" {
 		t.Fatalf("permission scope = %#v, want turn", command.Request.Response["scope"])
 	}
-	granted, ok := command.Request.Response["permissions"].([]map[string]any)
-	if !ok || len(granted) != 1 || granted[0]["host"] != "127.0.0.1" {
+	granted, ok := command.Request.Response["permissions"].(map[string]any)
+	if network, _ := granted["network"].(map[string]any); !ok || network["enabled"] != true {
 		t.Fatalf("permissions = %#v, want original request permissions", command.Request.Response["permissions"])
 	}
 }

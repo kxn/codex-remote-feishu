@@ -16,6 +16,9 @@ func MCPOAuthNotice(surfaceID, code, text, serverName string) []eventcontract.Ev
 	}
 	if strings.TrimSpace(serverName) != "" {
 		notice.Sections = []control.FeishuCardTextSection{{
+			Label: "状态",
+			Lines: []string{strings.TrimSpace(text)},
+		}, {
 			Label: "服务",
 			Lines: []string{strings.TrimSpace(serverName)},
 		}}
@@ -37,6 +40,7 @@ func MCPOAuthURLReadyNotice(surfaceID string, payload *agentproto.MCPOAuthLoginE
 		Text:     "请打开授权链接完成认证。认证完成后会自动收到结果提示。",
 		ThemeKey: "info",
 		Sections: []control.FeishuCardTextSection{
+			{Label: "状态", Lines: []string{"请打开授权链接完成认证。认证完成后会自动收到结果提示。"}},
 			{Label: "服务", Lines: []string{strings.TrimSpace(payload.ServerName)}},
 			{Label: "授权链接", Lines: []string{strings.TrimSpace(payload.AuthorizationURL)}},
 		},
@@ -64,6 +68,7 @@ func MCPOAuthCompletedNotice(surfaceID string, payload *agentproto.MCPOAuthLogin
 			sections = append(sections, control.FeishuCardTextSection{Label: "原因", Lines: []string{errText}})
 		}
 	}
+	sections = append([]control.FeishuCardTextSection{{Label: "状态", Lines: []string{text}}}, sections...)
 	return []eventcontract.Event{{
 		Kind:             eventcontract.KindNotice,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
@@ -78,7 +83,7 @@ func MCPOAuthCompletedNotice(surfaceID string, payload *agentproto.MCPOAuthLogin
 }
 
 func MCPOAuthFailureNotice(surfaceID, serverName, reason string) []eventcontract.Event {
-	sections := []control.FeishuCardTextSection{}
+	sections := []control.FeishuCardTextSection{{Label: "状态", Lines: []string{"MCP 服务认证失败。"}}}
 	if serverName = strings.TrimSpace(serverName); serverName != "" {
 		sections = append(sections, control.FeishuCardTextSection{Label: "服务", Lines: []string{serverName}})
 	}

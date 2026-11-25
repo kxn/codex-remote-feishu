@@ -57,7 +57,7 @@ func (j *Journal) PendingHostEffectsPage(ctx context.Context, limit, offset int)
 	if offset < 0 {
 		return nil, ErrJournalState
 	}
-	rows, err := j.db.QueryContext(ctx, `SELECT e.tenant,e.app_id,e.gateway,e.surface,e.chat,e.user_id,e.generation,e.id,e.revision,e.ordinal,e.lane,e.body,e.state,e.receipt FROM private_effect e WHERE e.state IN ('prepared','sending','unknown','confirmed') AND NOT EXISTS(SELECT 1 FROM private_effect_applied a WHERE a.effect_id=e.id) ORDER BY e.revision,e.ordinal,e.id LIMIT ? OFFSET ?`, limit, offset)
+	rows, err := j.db.QueryContext(ctx, `SELECT e.tenant,e.app_id,e.gateway,e.surface,e.chat,e.user_id,e.generation,e.id,e.revision,e.ordinal,e.lane,e.body,e.state,e.receipt FROM private_effect e WHERE e.state IN ('prepared','sending','unknown','confirmed') AND NOT EXISTS(SELECT 1 FROM private_effect_applied a WHERE a.effect_id=e.id) AND NOT (e.state<>'confirmed' AND EXISTS(SELECT 1 FROM dispatch d WHERE d.id=e.id||':native' AND d.state IN ('accepted','failed','resolved'))) ORDER BY e.revision,e.ordinal,e.id LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
 		return nil, err
 	}

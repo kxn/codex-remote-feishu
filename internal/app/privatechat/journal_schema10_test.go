@@ -140,7 +140,7 @@ func TestJournalRejectsFutureReaderFormatWithoutDowngrading(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = j.db.Exec(`PRAGMA user_version=11`); err != nil {
+	if _, err = j.db.Exec(`PRAGMA user_version=12`); err != nil {
 		t.Fatal(err)
 	}
 	if err = j.Close(); err != nil {
@@ -158,7 +158,7 @@ func TestJournalRejectsFutureReaderFormatWithoutDowngrading(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 11 {
+	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 12 {
 		t.Fatalf("future format mutated: schema=%d error=%v", version, err)
 	}
 }

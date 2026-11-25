@@ -257,7 +257,7 @@ func (s *Service) shouldSuppressPlanProposal(surface *state.SurfaceConsoleRecord
 	if strings.TrimSpace(surface.AttachedInstanceID) != strings.TrimSpace(instanceID) {
 		return true
 	}
-	if surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+	if surface.ActiveRequestCapture != nil || blockingPendingRequest(surface) != nil {
 		return true
 	}
 	if countPendingDrafts(surface) != 0 || len(surface.QueuedQueueItemIDs) != 0 || strings.TrimSpace(surface.ActiveQueueItemID) != "" {

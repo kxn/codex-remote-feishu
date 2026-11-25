@@ -35,6 +35,9 @@ func buildPermissionsRequestSections(backend agentproto.Backend, prompt *agentpr
 	if reason := strings.TrimSpace(xutil.FirstNonEmpty(xutil.MetadataString(metadata, "reason"), promptPermissionsReason(prompt))); reason != "" && !strings.Contains(body, reason) {
 		sections = appendRequestPromptSection(sections, "", "原因："+reason)
 	}
+	if backend == agentproto.BackendCodex && prompt != nil && prompt.Permissions != nil && (prompt.Permissions.ProfilePresent || prompt.Permissions.Profile != nil) {
+		sections = appendRequestPromptSection(sections, "申请权限", codexPermissionProfileText(prompt.Permissions.Profile))
+	}
 	permissions := promptPermissionsList(prompt, metadata)
 	if len(permissions) != 0 {
 		sections = appendRequestPromptSection(sections, "申请权限", requestPermissionLines(permissions)...)
@@ -56,6 +59,30 @@ func buildPermissionsRequestResponse(request *state.RequestPromptRecord, action 
 		return nil, false, nil
 	}
 	optionID := control.NormalizeRequestOptionID(requestAction.RequestOptionID)
+	if requestPromptBackend(request) == agentproto.BackendCodex {
+		if optionID == "decline" {
+			return map[string]any{"permissions": map[string]any{}, "scope": "turn"}, true, nil
+		}
+		if request.Prompt == nil || request.Prompt.Permissions == nil {
+			return nil, false, nil
+		}
+		permission := request.Prompt.Permissions
+		if !permission.ProfilePresent && permission.Profile == nil {
+			return nil, false, nil
+		}
+		profile := permission.Profile
+		if profile == nil {
+			profile = map[string]any{}
+		}
+		if (optionID == "accept" || optionID == "acceptForSession") && !permission.ProfileInvalid && validCodexPermissionProfile(profile) {
+			scope := "turn"
+			if optionID == "acceptForSession" {
+				scope = "session"
+			}
+			return map[string]any{"permissions": xutil.CloneJSONValue(profile), "scope": scope}, true, nil
+		}
+		return nil, false, nil
+	}
 	switch optionID {
 	case "accept":
 		return map[string]any{
@@ -138,6 +165,9 @@ func mcpElicitationApprovalHintText(prompt *agentproto.RequestPrompt, metadata m
 }
 
 func buildMCPElicitationSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+	if strings.EqualFold(promptMCPElicitationMode(prompt), "openai/userVerification") {
+		return appendRequestPromptSection(nil, "设备验证", "当前飞书端不支持此设备验证，请在原生客户端完成，或拒绝/取消本次请求。")
+	}
 	mode := mcpElicitationMode(prompt, metadata)
 	sections := []state.RequestPromptTextSectionRecord(nil)
 	lines := []string{}
@@ -165,6 +195,9 @@ func buildMCPElicitationSections(backend agentproto.Backend, prompt *agentproto.
 }
 
 func buildMCPElicitationQuestions(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptQuestionRecord {
+	if strings.EqualFold(promptMCPElicitationMode(prompt), "openai/userVerification") {
+		return nil
+	}
 	if isMCPToolApprovalElicitation(prompt, metadata) {
 		return nil
 	}
@@ -194,6 +227,9 @@ func buildMCPElicitationQuestions(prompt *agentproto.RequestPrompt, metadata map
 }
 
 func buildMCPElicitationOptions(prompt *agentproto.RequestPrompt, metadata map[string]any, questions []state.RequestPromptQuestionRecord) []state.RequestPromptOptionRecord {
+	if strings.EqualFold(promptMCPElicitationMode(prompt), "openai/userVerification") {
+		return []state.RequestPromptOptionRecord{{OptionID: "decline", Label: "拒绝"}, {OptionID: "cancel", Label: "取消"}}
+	}
 	if isMCPToolApprovalElicitation(prompt, metadata) {
 		return buildMCPElicitationApprovalOptions(prompt, metadata)
 	}
@@ -220,6 +256,12 @@ func (s *Service) buildMCPElicitationResponse(surface *state.SurfaceConsoleRecor
 	}
 	requestAnswers := requestAction.Answers
 	optionID := control.NormalizeRequestOptionID(strings.TrimSpace(requestAction.RequestOptionID))
+	if strings.EqualFold(promptMCPElicitationMode(request.Prompt), "openai/userVerification") {
+		if optionID == "decline" || optionID == "cancel" {
+			return buildMCPElicitationPayload(optionID, nil, nil), true, nil
+		}
+		return nil, false, notice(surface, "request_unsupported", "当前飞书端不支持设备验证，请在原生客户端处理，或拒绝/取消本次请求。")
+	}
 	if requestPromptStepPrevious(optionID) {
 		moveRequestPromptCurrentQuestion(request, -1)
 		bumpRequestCardRevision(request)

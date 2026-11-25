@@ -139,3 +139,26 @@ func TestIndependentReviewDoesNotResumeAfterClose(t *testing.T) {
 		})
 	}
 }
+
+func TestThreadHistoryNativeFailurePreservesCommand(t *testing.T) {
+	tr := NewTranslator("instance")
+	cmd := agentproto.Command{Kind: agentproto.CommandThreadHistoryRead, CommandID: "history-command", Target: agentproto.Target{ThreadID: "thread"}}
+	frames, err := tr.TranslateCommand(cmd)
+	if err != nil || len(frames) != 1 {
+		t.Fatalf("translate: %v", err)
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err = json.Unmarshal(frames[0], &req); err != nil {
+		t.Fatal(err)
+	}
+	result, err := tr.ObserveServer([]byte(`{"id":"` + req.ID + `","error":{"code":-32602,"message":"ephemeral history unavailable"}}`))
+	if err != nil || len(result.Events) != 1 {
+		t.Fatalf("response: %+v %v", result, err)
+	}
+	e := result.Events[0]
+	if e.Status != "failed" || e.ErrorMessage != "ephemeral history unavailable" || e.CommandID != "history-command" || e.RequestID != req.ID || e.ThreadID != "thread" || e.ThreadHistory != nil {
+		t.Fatalf("failure lost: %+v", e)
+	}
+}

@@ -28,6 +28,12 @@ type NativeReviewProjectionAuthority interface {
 	WithNativeReviewProjection(context.Context, agentproto.NativeOwner, Owner, int64, string, func(func(string) error) error) error
 }
 
+// NativeReadProjectionAuthority rechecks a query's session while holding the
+// registry fence through its local projection and exact intent release.
+type NativeReadProjectionAuthority interface {
+	WithNativeReadProjection(context.Context, agentproto.NativeOwner, Owner, int64, string, string, func(bool) error) error
+}
+
 // NativeLease is bound to one authenticated private surface and carrier.
 type NativeLease struct {
 	journal    *Journal

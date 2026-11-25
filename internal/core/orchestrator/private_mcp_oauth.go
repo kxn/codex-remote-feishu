@@ -60,6 +60,10 @@ func (s *Service) applyPrivateMCPOAuthEvent(instance string, event agentproto.Ev
 			continue
 		}
 		if !mcpEvent {
+			if event.Problem != nil && event.Problem.Code == "mcp_oauth_attempt_unverified" {
+				delete(runtime.PrivateMCPOAuth, command)
+				return MCPOAuthNotice(surface.SurfaceSessionID, "mcp_oauth_unverified", event.Problem.Message, ""), true
+			}
 			reason := event.ErrorMessage
 			if reason == "" && event.Problem != nil {
 				reason = event.Problem.Message
@@ -70,6 +74,13 @@ func (s *Service) applyPrivateMCPOAuthEvent(instance string, event agentproto.Ev
 			return nil, true
 		}
 		if event.Kind == agentproto.EventMCPOAuthLoginURLReady {
+			// A newly issued URL supersedes an older attempt for this exact
+			// surface, carrier, thread and server. Retain unrelated attempts.
+			for oldCommand, old := range runtime.PrivateMCPOAuth {
+				if oldCommand != command && old == pending {
+					delete(runtime.PrivateMCPOAuth, oldCommand)
+				}
+			}
 			return MCPOAuthURLReadyNotice(surface.SurfaceSessionID, event.MCPOAuthLogin), true
 		}
 		delete(runtime.PrivateMCPOAuth, command)

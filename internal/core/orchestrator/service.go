@@ -701,7 +701,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadLifecycleUpdate(instanceID, event)...))
 	case agentproto.EventThreadGoalUpdated:
 		if update := agentproto.NormalizeThreadGoalUpdate(event.ThreadGoal); update != nil && update.ExternalMutation {
-			s.revokeGoalInterlockOnExternalMutation(instanceID, update.ThreadID)
+			preface = append(preface, s.revokeGoalInterlockOnExternalMutation(instanceID, update.ThreadID, update.Status)...)
 		}
 		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadGoalUpdate(instanceID, event)...))
 	case agentproto.EventThreadGoalCommandResult:

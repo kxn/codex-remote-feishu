@@ -57,7 +57,7 @@ func TestMCPOAuthLoginResponseEmitsURLReady(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("TranslateCommand returned error: %v", err)
 	}
-	result, err := tr.ObserveServer([]byte(`{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent"}}`))
+	result, err := tr.ObserveServer([]byte(`{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent","loginId":"login-1"}}`))
 	if err != nil {
 		t.Fatalf("ObserveServer returned error: %v", err)
 	}
@@ -114,17 +114,17 @@ func TestMCPOAuthLoginCompletedUsesProtocolCorrelation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("TranslateCommand returned error: %v", err)
 	}
-	if _, err := tr.ObserveServer([]byte(`{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent"}}`)); err != nil {
+	if _, err := tr.ObserveServer([]byte(`{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent","loginId":"login-1"}}`)); err != nil {
 		t.Fatalf("ObserveServer returned error: %v", err)
 	}
-	ignored, err := tr.ObserveServer([]byte(`{"method":"mcpServer/oauthLogin/completed","params":{"name":"other","threadId":"thread-1","success":true}}`))
+	ignored, err := tr.ObserveServer([]byte(`{"method":"mcpServer/oauthLogin/completed","params":{"name":"other","threadId":"thread-1","loginId":"login-1","success":true}}`))
 	if err != nil {
 		t.Fatalf("ObserveServer returned error: %v", err)
 	}
-	if len(ignored.Events) != 1 || ignored.Events[0].Kind != agentproto.EventCapabilityStateUpdated {
-		t.Fatalf("expected unmatched completion to remain state-only, got %#v", ignored.Events)
+	if len(ignored.Events) != 0 || !ignored.Suppress {
+		t.Fatalf("unmatched completion must not be assigned, got %#v", ignored.Events)
 	}
-	result, err := tr.ObserveServer([]byte(`{"method":"mcpServer/oauthLogin/completed","params":{"name":"docs","threadId":"thread-1","success":true}}`))
+	result, err := tr.ObserveServer([]byte(`{"method":"mcpServer/oauthLogin/completed","params":{"name":"docs","threadId":"thread-1","loginId":"login-1","success":true}}`))
 	if err != nil {
 		t.Fatalf("ObserveServer returned error: %v", err)
 	}
@@ -150,10 +150,10 @@ func TestMCPOAuthLoginCompletedFailure(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("TranslateCommand returned error: %v", err)
 	}
-	if _, err := tr.ObserveServer([]byte(`{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent"}}`)); err != nil {
+	if _, err := tr.ObserveServer([]byte(`{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent","loginId":"login-1"}}`)); err != nil {
 		t.Fatalf("ObserveServer returned error: %v", err)
 	}
-	result, err := tr.ObserveServer([]byte(`{"method":"mcpServer/oauthLogin/completed","params":{"name":"docs","success":false,"error":"callback timed out"}}`))
+	result, err := tr.ObserveServer([]byte(`{"method":"mcpServer/oauthLogin/completed","params":{"name":"docs","loginId":"login-1","success":false,"error":"callback timed out"}}`))
 	if err != nil {
 		t.Fatalf("ObserveServer returned error: %v", err)
 	}

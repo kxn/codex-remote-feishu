@@ -293,8 +293,14 @@ func (r *privateWorkRunner) scheduleEffectWithStop(ctx, stop context.Context, wo
 	event, _, err := privatechat.DecodeStoredEffect(work.Effect.Effect.Body)
 	if err == nil && event.Command != nil && work.Effect.State != "confirmed" {
 		registered, lookupErr := r.journal.HasNativeDispatch(ctx, work.Effect.Effect.ID)
-		if lookupErr != nil || registered {
+		if lookupErr != nil || (registered && (privateSessionCommandScope(event.Command.Kind) != privateSessionRead || (event.Command.Target.ThreadID == "" && event.Command.Kind != agentproto.CommandMCPOAuthLogin))) {
 			return
+		}
+		if registered {
+			state, e := r.journal.DispatchState(ctx, work.Effect.Effect.ID+":native")
+			if e != nil || (state != "prepared" && state != "sending" && state != "unknown" && state != "sent") {
+				return
+			}
 		}
 	}
 	controlLane := err == nil && event.DaemonCommand != nil && (event.DaemonCommand.Kind == control.DaemonCommandKillHeadless || event.DaemonCommand.Kind == control.DaemonCommandGitWorkspaceImportCancel || event.DaemonCommand.Kind == control.DaemonCommandGitWorkspaceWorktreeCancel)
@@ -433,6 +439,11 @@ func (r *privateWorkRunner) runEffect(ctx context.Context, work privatechat.Pend
 }
 func (r *privateWorkRunner) runNativeEffect(ctx context.Context, work privatechat.PendingEffectWork) error {
 	if work.Effect.State == "confirmed" {
+		var observation privateReadExpiryReceipt
+		if json.Unmarshal(work.Effect.Receipt, &observation) == nil && observation.Kind == "native_read_observation_expired" {
+			_, err := r.processor.ApplyLocalHostReceipt(ctx, work.Owner, work.Generation, work.Effect.Effect.ID, privateReadExpiryReducer{})
+			return err
+		}
 		var receipt privatechat.KnownUnsentReceipt
 		if json.Unmarshal(work.Effect.Receipt, &receipt) != nil || receipt.Version != 1 || receipt.EffectID != work.Effect.Effect.ID || receipt.InstanceID == "" {
 			return privatechat.ErrJournalConflict
@@ -462,14 +473,14 @@ func (r *privateWorkRunner) runNativeEffect(ctx context.Context, work privatecha
 		return r.failNoInstance(ctx, work)
 	}
 	already, err := r.journal.HasNativeDispatch(ctx, work.Effect.Effect.ID)
-	if err != nil || already {
+	if err != nil {
 		return err
 	}
 	rec, err := r.native.store.lookup(ctx, *target)
 	if err != nil {
 		return err
 	}
-	if rec.Surface != work.Owner || rec.SurfaceGeneration != work.Generation || rec.State != "running" {
+	if rec.Surface != work.Owner || rec.SurfaceGeneration != work.Generation {
 		return privatechat.ErrJournalConflict
 	}
 	event, _, _, err := privatechat.DecodeStoredEffectTarget(work.Effect.Effect.Body)
@@ -480,33 +491,48 @@ func (r *privateWorkRunner) runNativeEffect(ctx context.Context, work privatecha
 	if command == nil {
 		return privatechat.ErrJournalConflict
 	}
+	if already {
+		state, e := r.journal.DispatchState(ctx, work.Effect.Effect.ID+":native")
+		if e != nil {
+			return e
+		}
+		if state != "prepared" {
+			return r.expireNativeReadObservation(ctx, work, rec, *command)
+		}
+	}
+	if rec.State != "running" {
+		return privatechat.ErrJournalConflict
+	}
+	historicalDenied := false
 	if privateEffectTargetsSession(command.Kind) && command.Target.ThreadID != "" {
 		internal, e := r.journal.IsInternalNativeSession(ctx, string(rec.Snapshot.Owner.Backend), rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID)
 		if e != nil {
 			return e
 		}
 		if internal {
-			return privatechat.ErrJournalConflict
+			// An exact managed helper/review identity is never a user-selected
+			// session. Settle this command as locally known unsent rather than
+			// leaving its prepared effect retrying indefinitely.
+			historicalDenied = true
 		}
-		known, allowed, e := r.native.registry.SessionAccess(ctx, string(rec.Snapshot.Owner.Backend), rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID, privateRegistration(rec.Snapshot.Owner).Owner)
-		if e != nil {
-			return e
-		}
-		if known && !allowed {
-			return privatechat.ErrJournalConflict
-		}
-		if !known {
-			restricted, e := teamHistoricalSession(ctx, r.native.teamHistory, rec.Snapshot.Owner.Backend, rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID)
+		if !internal {
+			known, _, e := r.native.registry.SessionAccess(ctx, string(rec.Snapshot.Owner.Backend), rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID, privateRegistration(rec.Snapshot.Owner).Owner)
 			if e != nil {
 				return e
 			}
-			if restricted {
-				allowed, aliasErr := r.ingress.legacyHistoryAllowed(ctx, rec.Surface, rec.SurfaceGeneration, rec.Snapshot.Owner.Backend, rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID, true)
-				if aliasErr != nil {
-					return aliasErr
+			if !known {
+				restricted, e := teamHistoricalSession(ctx, r.native.teamHistory, rec.Snapshot.Owner.Backend, rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID)
+				if e != nil {
+					return e
 				}
-				if !allowed {
-					return privatechat.ErrJournalConflict
+				if restricted {
+					allowed, aliasErr := r.ingress.legacyHistoryAllowed(ctx, rec.Surface, rec.SurfaceGeneration, rec.Snapshot.Owner.Backend, rec.Snapshot.Owner.HistoryNamespace, command.Target.ThreadID, true)
+					if aliasErr != nil {
+						return aliasErr
+					}
+					if !allowed {
+						historicalDenied = true
+					}
 				}
 			}
 		}
@@ -549,13 +575,31 @@ func (r *privateWorkRunner) runNativeEffect(ctx context.Context, work privatecha
 	if privateEffectTargetsSession(command.Kind) {
 		session = command.Target.ThreadID
 	}
-	return r.native.sendEffect(ctx, relayws.ConnectionMeta{ConnectionID: connection, PrivateAuthenticated: true}, *target, work.Effect.Effect.ID, binding, session, command.Kind)
+	return r.native.sendEffect(ctx, relayws.ConnectionMeta{ConnectionID: connection, PrivateAuthenticated: true}, *target, work.Effect.Effect.ID, binding, session, command.Kind, historicalDenied)
 }
 
 func privateEffectTargetsSession(kind agentproto.CommandKind) bool {
-	switch kind {
-	case agentproto.CommandPromptSend, agentproto.CommandTurnSteer, agentproto.CommandThreadShellCommand, agentproto.CommandReviewStart:
-		return true
+	return privateSessionCommandScope(kind) != privateSessionNone
+}
+
+type privateSessionScope uint8
+
+const (
+	privateSessionNone privateSessionScope = iota
+	privateSessionRead
+	privateSessionWrite
+	privateSessionControl
+)
+
+func privateSessionCommandScope(kind agentproto.CommandKind) privateSessionScope {
+	if agentproto.PrivateSessionReadCommand(kind) {
+		return privateSessionRead
 	}
-	return false
+	switch kind {
+	case agentproto.CommandPromptSend, agentproto.CommandTurnSteer, agentproto.CommandThreadShellCommand, agentproto.CommandReviewStart, agentproto.CommandThreadCompactStart, agentproto.CommandThreadGoalSet, agentproto.CommandThreadGoalClear:
+		return privateSessionWrite
+	case agentproto.CommandTurnInterrupt, agentproto.CommandRequestRespond:
+		return privateSessionControl
+	}
+	return privateSessionNone
 }

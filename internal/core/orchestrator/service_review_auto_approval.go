@@ -62,7 +62,11 @@ func (s *Service) codexReviewRequestMayAutoApprove(surface *state.SurfaceConsole
 	if strings.TrimSpace(request.ThreadID) == "" || strings.TrimSpace(request.ThreadID) != strings.TrimSpace(session.ReviewThreadID) {
 		return false
 	}
-	if strings.TrimSpace(request.TurnID) == "" || strings.TrimSpace(request.TurnID) != strings.TrimSpace(session.ActiveTurnID) {
+	requestTurn := strings.TrimSpace(request.TurnID)
+	if s.config.PrivateApplication && strings.TrimSpace(request.RootTurnID) != "" {
+		requestTurn = strings.TrimSpace(request.RootTurnID)
+	}
+	if requestTurn == "" || requestTurn != strings.TrimSpace(session.ActiveTurnID) {
 		return false
 	}
 
@@ -70,7 +74,7 @@ func (s *Service) codexReviewRequestMayAutoApprove(surface *state.SurfaceConsole
 	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork:
 		return requestHasOption(request, "accept")
 	case control.RequestSemanticPermissionsRequestApproval:
-		return request.Prompt != nil && request.Prompt.Permissions != nil && len(promptPermissionsList(request.Prompt, nil)) != 0
+		return request.Prompt != nil && request.Prompt.Permissions != nil && !request.Prompt.Permissions.ProfileInvalid && request.Prompt.Permissions.Profile != nil && len(request.Prompt.Permissions.Profile) > 0 && validCodexPermissionProfile(request.Prompt.Permissions.Profile)
 	case control.RequestSemanticApproval:
 		switch strings.TrimSpace(request.LocalMeta["requestMethod"]) {
 		case "execCommandApproval", "applyPatchApproval":

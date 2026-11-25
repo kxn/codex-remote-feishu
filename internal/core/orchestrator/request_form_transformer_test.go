@@ -73,30 +73,23 @@ func TestPureRequestFormOptionalQuestionSkipAndNavigation(t *testing.T) {
 	}
 }
 func TestPureRequestFormPermissionsPreserveExactGrantedPayload(t *testing.T) {
-	permissions := []map[string]any{{"name": "docs.read", "scopes": []any{"one"}}}
-	for _, typed := range []bool{false, true} {
-		var prompt *agentproto.RequestPrompt
-		metadata := map[string]any{"requestType": "permissions_request_approval", "permissions": permissions}
-		if typed {
-			prompt = &agentproto.RequestPrompt{Type: agentproto.RequestTypePermissionsRequestApproval, Permissions: &agentproto.PermissionsRequestPrompt{Permissions: permissions}}
-			metadata = nil
-		}
-		form, err := NewRequestForm(agentproto.BackendCodex, prompt, metadata, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		done, err := TransformRequestForm(form, HumanRequestFormAction{OptionID: "acceptForSession"})
-		if err != nil || !done.Complete || done.Response["scope"] != "session" {
-			t.Fatalf("grant %#v %v", done, err)
-		}
-		a, _ := json.Marshal(done.Response["permissions"])
-		b, _ := json.Marshal(permissions)
-		if string(a) != string(b) {
-			t.Fatalf("permissions changed: %s %s", a, b)
-		}
-		declined, err := TransformRequestForm(form, HumanRequestFormAction{OptionID: "decline"})
-		if err != nil || !reflect.DeepEqual(declined.Response["permissions"], []any{}) {
-			t.Fatalf("decline %#v %v", declined, err)
-		}
+	permissions := map[string]any{"network": map[string]any{"enabled": true}}
+	prompt := &agentproto.RequestPrompt{Type: agentproto.RequestTypePermissionsRequestApproval, Permissions: &agentproto.PermissionsRequestPrompt{ProfilePresent: true, Profile: permissions}}
+	form, err := NewRequestForm(agentproto.BackendCodex, prompt, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done, err := TransformRequestForm(form, HumanRequestFormAction{OptionID: "acceptForSession"})
+	if err != nil || !done.Complete || done.Response["scope"] != "session" {
+		t.Fatalf("grant %#v %v", done, err)
+	}
+	a, _ := json.Marshal(done.Response["permissions"])
+	b, _ := json.Marshal(permissions)
+	if string(a) != string(b) {
+		t.Fatalf("permissions changed: %s %s", a, b)
+	}
+	denied, err := TransformRequestForm(form, HumanRequestFormAction{OptionID: "decline"})
+	if err != nil || !reflect.DeepEqual(denied.Response["permissions"], map[string]any{}) {
+		t.Fatalf("decline %#v %v", denied, err)
 	}
 }

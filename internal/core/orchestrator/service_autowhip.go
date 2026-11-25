@@ -195,7 +195,7 @@ func (s *Service) autoWhipSurfaceReady(surface *state.SurfaceConsoleRecord) bool
 	if surface.DispatchMode != state.DispatchModeNormal {
 		return false
 	}
-	if surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+	if surface.ActiveRequestCapture != nil || blockingPendingRequest(surface) != nil {
 		return false
 	}
 	if s.surfaceHasLiveRemoteWork(surface) {

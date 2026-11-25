@@ -44,7 +44,7 @@ func (s *Service) autoContinueDispatchReady(surface *state.SurfaceConsoleRecord)
 	if surface.DispatchMode != state.DispatchModeNormal {
 		return false
 	}
-	if surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+	if surface.ActiveRequestCapture != nil || blockingPendingRequest(surface) != nil {
 		return false
 	}
 	if s.progress.surfaceHasPendingCompact(surface) || s.surfaceHasPendingSteer(surface) {

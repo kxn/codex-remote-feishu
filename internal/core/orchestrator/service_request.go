@@ -128,6 +128,17 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	if unsupportedText != "" {
 		return notice(surface, "request_unsupported", unsupportedText)
 	}
+	var bootstrapEvents []eventcontract.Event
+	// A private RPC question is a durable native fact on the already accepted
+	// turn. Only that exact running bootstrap may commit its created thread.
+	if s.config.PrivateApplication && event.NativeBinding != nil && event.ThreadID != "" && event.TurnID != "" && surface.RouteMode == state.RouteModeNewThreadReady && inst != nil {
+		binding := s.activeRemoteBinding(instanceID, event.TurnID)
+		if binding != nil && binding.BootstrapNewThread && !binding.ThreadCommitted && binding.SurfaceSessionID == surface.SurfaceSessionID && binding.QueueItemID == surface.ActiveQueueItemID && binding.TurnID == event.TurnID && remoteBindingExecutionThreadID(binding) == event.ThreadID {
+			if item := surface.QueueItems[binding.QueueItemID]; item != nil && item.Status == state.QueueItemRunning {
+				bootstrapEvents = s.maybeCommitBootstrapSurfaceBinding(surface, inst, item, binding, event.ThreadID)
+			}
+		}
+	}
 	record := &state.RequestPromptRecord{
 		RequestID:    event.RequestID,
 		RequestType:  requestType,
@@ -155,6 +166,9 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		Phase:                frontstagecontract.PhaseEditing,
 		CreatedAt:            s.now(),
 	}
+	if s.config.PrivateApplication && event.NativeBinding != nil {
+		record.RootTurnID = strings.TrimSpace(event.RootTurnID)
+	}
 	adoptRequestOwner(record, surface)
 	record.SourceContextLabel = joinRequestSourceContextLabels(
 		xutil.MetadataString(event.Metadata, "sourceContextLabel"),
@@ -162,14 +176,14 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	)
 	normalizeRequestPromptRecord(record)
 	if events, handled := s.maybeAutoApproveCodexReviewRequest(surface, record); handled {
-		return events
+		return append(bootstrapEvents, events...)
 	}
 	enqueuePendingRequest(surface, record)
 	if !pendingRequestIsActive(surface, record.RequestID) {
 		markRequestQueuedInactive(record)
-		return nil
+		return bootstrapEvents
 	}
-	return s.activatePendingRequest(surface, record, threadTitle)
+	return append(bootstrapEvents, s.activatePendingRequest(surface, record, threadTitle)...)
 }
 
 func (s *Service) resolveRequestPrompt(instanceID string, event agentproto.Event) []eventcontract.Event {

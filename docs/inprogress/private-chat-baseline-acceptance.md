@@ -359,3 +359,57 @@ reader fence 已有实际旧代码证明：从修复前 `cb7a0a45` 导出完整�
 core/control、orchestrator、nativeinspection 三包整包 race 也通过（`/tmp/private-review-final-core-race.log`）。审阅修复提交 `a1ab1439` 已按 safe-push 推送，并用 local-upgrade 部署到单一 stable／codex-remote.service：事务 committed，版本 `local-06b0938e7997`，实际 PID `2560238`。进程 `/proc/2560238/exe`、安装二进制与升级 artifact 的 SHA-256 均为 `06b0938e7997752cd5891ab5516558c4256122680237af11ea2d5ccbbb27a902`。
 
 现场 healthz=ok、六 gateway connected、团队运行时可用，私人读取无错误，原 parent 的 pinned／normal 导航保留且无 active／queued／pending launch。实际聊天 journal 为 schema 10，宿主库仍为2，配置 SHA 与升级前相同；没有手改业务数据库或发送伪造真人消息。升级前保留14个数据库各自一致快照及配置，定位 `/tmp/private-review-predeploy-location.json`；它们不是跨库原子快照，旧v9二进制回退须配合对应数据快照，不能强行降低版本。现场证据 `/tmp/private-review-upgrade.log`、`/tmp/private-review-deployed-runtime.json`、`/tmp/private-review-deployed-daemon.log`，新进程日志无 poison、panic、fatal 或失败。构建产生的两份 shim 文件仅恢复生成改动。
+
+
+## 2026-11-25 Codex 协议升级与子功能状态机复核
+
+本节承接上一节已部署的独立审阅修复。审计比较实际受管 Codex 0.171.0 的 app-server schema、对应协议实现、改版前私人状态机及当前私人入口；不能以 PATH 中的 0.169.1 或历史测试中的简化消息代替协议事实。既有个人会话、原卡菜单、reaction、图文队列及群团队仍各沿自己的原有体验，协议修复不另建私人调度产品。
+
+### 已确认并纠正的根因
+
+1. 权限请求按数组读取／返回，丢失实际文件和网络权限范围。现冻结完整对象及 presence，明确同意只回传经校验的原范围，拒绝回空对象，未知范围只可拒绝。旧数组模拟不是历史 Codex 合同，已纠正测试。审阅子 turn 的 full-access 自动授权只认可持久 root proof。
+2. 历史读取收到 JSON-RPC 错误时仍生成空成功。现精确失败并允许原卡重试，错误回执不再让控制等待永久挂起。
+3. `isBlocking=false` 丢失，补充问题错误地阻止新输入；新会话首轮又因线程直到终态才落实，问题卡已经出现仍拒绝排队。现分开判断问题门禁和已证明的会话绑定，复用既有 bootstrap 提交；旗标只有实际 pinned route 成功才设置，CWD／claim 冲突不能伪装提交。非阻塞问题期间输入沿原队列，绝不提前开第二轮。
+4. OAuth 通知按服务器／线程猜当前尝试，迟到旧完成可能结算新尝试，省略可选线程又无法完成。现用原生 loginId 精确关联，处理响应前通知、明确重试、失败和无 ID；专用状态段保证真实渲染。浏览器授权等待不阻塞普通对话。
+5. 会话作用域只覆盖部分聊天命令，所选历史被其他工作接管后，压缩、Goal 和指定线程 OAuth 仍可能绕过发送核验。现统一按实际作用域检查，明确未发送仅结算自身；helper 历史拒绝也不再让 prepared 效果无限重试。
+6. 只读查询预检与网络发送／结果应用之间有归属竞态。现使用按 dispatch 的有界读意图与应用时的 registry 栅栏；失去归属只结算本地观察，不发布其他工作内容，也不改写原始成功事实。Goal 内部 probe、用户查询、恢复读取和 OAuth 各自有精确负完成，不能丢掉原输入或把查询失败当作线程空闲证明。
+7. 只读观察的超时处理原先有调度早退、退休后无法取得活跃 lease、误当归属变化和跨库丢失期限的风险。截止事实现与 dispatch 在私人 journal 同事务保存，registry 使用同值，观察收据沿原 checkpoint 提交；prepared 可证未发送与 unknown 结果未知分别处理。Goal 超时通过明确的新只读查询重试，原输入保留，旧迟到结果不能释放新等待；新认证连接仍保留旧版自动恢复观察，不把它误作业务重跑。
+8. Goal 的自动恢复确认晚于本轮可见答复时，新输入进入 `resume_pending` 队列；成功 ACK 只清 lease，没有重新调度。现从准确确认的收口重新推进队列，仍需完整 pause／idle probe；通过受控早到／晚到 ACK 验证，不以手动清理状态作为前置条件。
+9. 原生设备验证需要受信客户端生成证明，普通表单无法替代。当前明确不支持，只提供拒绝／取消，没有宣称新增设备验证能力。
+
+### 按用户顺序的新增验证
+
+下列新旅程使用真实 SDK hook、私人应用、relay 和 wrapper，原生端是严格校验 0.171 字段的受控协议 peer；它们能覆盖帧顺序、失败和回执竞态，不能冒充真实模型调用。
+
+| 连续流程 | 永久回归 |
+| --- | --- |
+| 无预设 ready，新建首轮／已有会话提出非阻塞问题→继续发消息→回答原问题→原轮结束→排队消息答复→下一轮 | `private_nonblocking_input_sdk_test.go` |
+| 阻塞问题→拒绝继续发送→停止真实原 turn→下一轮 | `private_blocking_input_sdk_test.go` |
+| 完整权限对象→单次／会话同意或拒绝→原生关闭请求→本轮答复→下一轮；审阅子 turn 自动授权 | `private_permission_strict_sdk_test.go`、`private_review_strict_sdk_test.go` |
+| 历史读取失败→同卡重试→下一条普通消息 | `private_user_workflow_sdk_test.go` |
+| OAuth URL→继续聊天→精确完成；重试 A→B→旧 A 结果不完成 B；失败、缺 ID 和无可选线程 | `private_mcp_oauth_sdk_test.go`、`translator_mcp_oauth_attempt_test.go` |
+| Goal 读空→设置→读取→清除→读空→下一轮 | `private_goal_strict_sdk_test.go` |
+| Goal probe 超时→本人 retry→原输入 final→恢复 ACK 晚到时立即新输入→重新核查→新 final | `private_goal_probe_timeout_sdk_test.go` |
+| 开计划模式→计划完成→本人明确点击执行→原生执行结果→普通下一轮 | `private_plan_strict_sdk_test.go` |
+| 两个新会话→切回首个→压缩 resume 明确失败→重试压缩→完成→下一轮 | `private_compact_retry_sdk_test.go` |
+| 只读超时→明确重试→旧回执迟到→原卡保持新结果→下一轮；app 重组、registry 意图缺失后沿原期限结算且不重发 | `private_read_expiry_sdk_test.go`、`private_read_crash_journey_test.go` |
+| 选择历史会话→归属变化→压缩／Goal 明确未发送→选择其他工作区→下一轮；审阅 live→持久终态→下一轮 | `private_session_scope_journey_test.go`、`private_review_strict_sdk_test.go` |
+
+新增组合 race 证据：`/tmp/private-state-journey-final-race.log`；权限、bootstrap 与 Goal ownership-lost 的独立 core/Feishu race：`/tmp/private-bootstrap-owner-goal-final-race.log`。shell／steer 与 0.171 的必填参数已核对，连续图文、队列、reaction、停止和后续答复沿既有 `private_queue_reaction_sdk_test.go` 纳入整体验证。
+
+Goal 的相邻终态也纳入本轮：`private_goal_verification_sdk_test.go` 验证自动暂停返回 active／明确错误后没有自动写重试，用户读取、明确暂停、再次确认后原输入与下一轮完成；resume pending 时收到 complete，重新核查后继续并且不重新激活 Goal。`/tmp/private-goal-verification-sdk-race.log` 与 `/tmp/private-goal-prior-after-verification-race.log` 均通过。新的 verification 读超时与 ownership_lost 分开，完整 core race 证据为 `/tmp/private-goal-all-final-core-race2.log`。
+
+### 数据兼容性独立验证
+
+execution-owner registry 1→2：用部署前 HEAD `1ac41368` 的实际旧 writer 写入非空 carrier、会话、写预留、转移与停止证明，再由当前 reader 迁移；11 张既有表的行逐值保持不变。实际旧 reader 打开新库明确拒绝。证据 `/tmp/private-owner-schema2-migrate.log`、`/tmp/private-owner-v1-reader-proof.log`。
+
+私人 journal 10→11：为新的“只读观察已到期”本地收据设置 reader fence；其结算不代表原生失败或未发送。以非空 schema 10 副本升级，48 张既有表的逐表行数及内容 hash 保持不变；部署前 HEAD 的真实 v10 reader 明确返回 `unsupported private journal schema 11 (maximum 10)`。证据 `/tmp/private-protocol-schema11-migrate-final.log`、`/tmp/private-protocol-v10-reader-proof-final.log`。以上均对隔离副本操作，未让旧 reader 打开线上数据库。
+
+
+### 本轮冻结代码的整体验证
+
+- `go test -json -buildvcs=false ./... -count=1`：122 个测试包通过，32 个无测试包，7323 个 test/subtest pass 事件，daemon 包耗时 267.536 秒；证据 `/tmp/private-protocol-final-all-v2.jsonl`。初次整仓发现旧附件恢复测试未提供新增读取投影 authority，随后仅将该 fixture 接入真实 registry；success／changed_route／damaged_receipt 的整条 race 通过，未给生产 fence 增加例外。之后权限提取的旧正向测试也改用真实对象，Codex adapter 整包普通及 race 再通过：`/tmp/codex-permission-fixture-full.log`、`/tmp/codex-permission-fixture-race.log`。
+- 完整组件 race：Codex／Feishu adapter、control／nativeinspection 为 `/tmp/private-protocol-final-core-race.log`；最后 Goal 修改后的完整 orchestrator 为 `/tmp/private-goal-all-final-core-race2.log`；privatechat 与 executionowner 为 `/tmp/private-protocol-final-host-race.log` 中各自的成功结果；wrapper 为 `/tmp/private-protocol-final-wrapper-race.log`（118.920 秒）。daemon 自身的整包结果单独登记，不把其初次旧 fixture 失败或整包期限当成通过。
+- Windows 生产交叉构建：`GOOS=windows GOARCH=amd64 go build -buildvcs=false ./...` 通过，证据 `/tmp/private-protocol-final-windows-v3.log`；关闭 VCS stamping 仅处理当前受管 checkout 的构建环境，不改变产品行为。
+- 实际受管 `codex-cli 0.171.0`，经真实 SDK 入口、生产 wrapper 和独立复制的账号配置：从冷工作区选择与原卡成功直接推进三轮对话（含实际写文件并读回），再修改仓库、点击独立审阅、追问、退出审阅、原主会话继续答复，以及真实 inspection／停止证明收尾，53.05 秒通过。网关为受控平台，模型／app-server 是实际受管二进制；未声称真实飞书客户端绘制验收。证据 `/tmp/private-protocol-real-native-v2.log`。
+- 上述实际测试程序 SHA256 为 `1659b00760d554df7cdad25eb913cd98d05bf816a5a41d5b456a027f2c503fbe`。构建冻结的 1883 个生产 Go 文件逐一 SHA 对照当前代码，无新增／缺失／变化；清单 `/tmp/private-protocol-final-production-manifest-v2.json`。后续只有测试 fixture／证据文档变化，不借旧程序结果覆盖生产修改。

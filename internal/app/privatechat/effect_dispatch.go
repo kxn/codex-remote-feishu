@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -75,6 +76,17 @@ func (l *NativeLease) PrepareEffectDispatch(ctx context.Context, effectID string
 			d.Lane = "input"
 		case agentproto.CommandThreadsRefresh, agentproto.CommandThreadHistoryRead, agentproto.CommandModelList, agentproto.CommandThreadRead, agentproto.CommandThreadGoalGet, agentproto.CommandRuntimeInspect:
 			d.Lane = "inspect"
+		case agentproto.CommandMCPOAuthLogin:
+			// The RPC observes configuration until the URL response; the later
+			// browser login has its own lifecycle. Preserve already frozen rows.
+			old, _, _, readErr := readDispatch(ctx, tx, d.ID)
+			if readErr == nil {
+				d.Lane = old.Lane
+			} else if errors.Is(readErr, sql.ErrNoRows) {
+				d.Lane = "inspect"
+			} else {
+				return readErr
+			}
 		}
 		if d.Lane == "input" && (inputs == nil || len(inputs.Items) == 0) {
 			return ErrJournalState
@@ -106,6 +118,11 @@ func (l *NativeLease) PrepareEffectDispatch(ctx context.Context, effectID string
 		}
 		if err = prepareDispatchWithCauseTx(ctx, tx, d, true); err != nil {
 			return err
+		}
+		if agentproto.PrivateSessionReadCommand(command.Kind) && (command.Target.ThreadID != "" || command.Kind == agentproto.CommandMCPOAuthLogin) {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO private_read_observations(dispatch_id,expires_ns) VALUES(?,?) ON CONFLICT DO NOTHING`, d.ID, time.Now().Add(2*time.Minute).UnixNano()); err != nil {
+				return err
+			}
 		}
 		raw, err := json.Marshal(command)
 		if err != nil {

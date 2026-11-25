@@ -391,6 +391,13 @@ func extractRequestUserInputPrompt(message map[string]any) *agentproto.RequestPr
 		ItemID:    extractRequestItemID(nil, params),
 		Questions: requestQuestionsFromMaps(extractRequestUserInputQuestions(nil, params)),
 	}
+	if v, ok := params["isBlocking"].(bool); ok {
+		prompt.IsBlocking = &v
+	}
+	if v, ok := params["autoResolutionMs"].(float64); ok && v >= 0 && v == float64(int64(v)) {
+		ms := int64(v)
+		prompt.AutoResolutionMs = &ms
+	}
 	if prompt.Title == "" {
 		prompt.Title = defaultRequestTitle(prompt.Type)
 	}
@@ -421,6 +428,15 @@ func extractPermissionsRequestPrompt(message map[string]any) *agentproto.Request
 			Reason:      reason,
 			Permissions: extractRequestMapList(firstNonNil(params["permissions"], lookupAny(params, "request", "permissions"))),
 		},
+	}
+	if raw, present := params["permissions"]; present {
+		if profile, ok := raw.(map[string]any); ok {
+			prompt.Permissions.Profile = xutil.CloneMap(profile)
+			prompt.Permissions.ProfilePresent = true
+		} else if _, legacy := raw.([]any); !legacy {
+			prompt.Permissions.ProfilePresent = true
+			prompt.Permissions.ProfileInvalid = true
+		}
 	}
 	if prompt.Body == "" {
 		prompt.Body = "本地 Codex 正在等待授予附加权限。"

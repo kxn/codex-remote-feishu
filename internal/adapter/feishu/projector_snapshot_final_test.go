@@ -1771,3 +1771,10 @@ func TestProjectSnapshotNeutralizesPendingHeadlessThreadTitle(t *testing.T) {
 		t.Fatalf("expected pending headless title to stay literal in plain_text, got %q", rendered)
 	}
 }
+
+func TestSnapshotNonblockingRequestExplainsMessagesCanContinue(t *testing.T) {
+	got := snapshotGateText(control.GateSummary{Kind: "nonblocking_request", PendingRequestCount: 1})
+	if got != "有补充问题待回答，也可以继续发消息。" {
+		t.Fatalf("misleading nonblocking summary: %q", got)
+	}
+}

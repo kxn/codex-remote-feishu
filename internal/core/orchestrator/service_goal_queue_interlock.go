@@ -13,11 +13,15 @@ import (
 type GoalInterlockPhase string
 
 const (
-	GoalInterlockNone          GoalInterlockPhase = "none"
-	GoalInterlockPausePending  GoalInterlockPhase = "pause_pending"
-	GoalInterlockQuiescing     GoalInterlockPhase = "quiescing"
-	GoalInterlockDraining      GoalInterlockPhase = "draining"
-	GoalInterlockResumePending GoalInterlockPhase = "resume_pending"
+	GoalInterlockNone                   GoalInterlockPhase = "none"
+	GoalInterlockPausePending           GoalInterlockPhase = "pause_pending"
+	GoalInterlockQuiescing              GoalInterlockPhase = "quiescing"
+	GoalInterlockDraining               GoalInterlockPhase = "draining"
+	GoalInterlockResumePending          GoalInterlockPhase = "resume_pending"
+	GoalInterlockOwnershipLost          GoalInterlockPhase = "ownership_lost"
+	GoalInterlockObservationTimeout     GoalInterlockPhase = "observation_timeout"
+	GoalInterlockVerificationRequired   GoalInterlockPhase = "verification_required"
+	GoalInterlockVerificationGetPending GoalInterlockPhase = "verification_get_pending"
 )
 
 type GoalInterlockLease struct {
@@ -326,6 +330,18 @@ func itoa(value int) string {
 }
 
 func (s *Service) applyGoalCommandResult(instanceID string, event agentproto.Event) []eventcontract.Event {
+	if key := s.goalGetByCommand[event.CommandID]; key != "" {
+		lease := s.goalInterlocks[key]
+		if lease == nil || lease.InstanceID != instanceID || lease.ThreadID != event.ThreadID || lease.GetCommandID != event.CommandID {
+			return nil
+		}
+	}
+	if key := s.goalInterlockByCommand[event.CommandID]; key != "" {
+		lease := s.goalInterlocks[key]
+		if lease == nil || lease.InstanceID != instanceID || lease.ThreadID != event.ThreadID || (lease.Phase == GoalInterlockResumePending && lease.ResumeCommandID != event.CommandID) || (lease.Phase == GoalInterlockPausePending && lease.PauseCommandID != event.CommandID) {
+			return nil
+		}
+	}
 	if s.goalCommandResultKnown(event.CommandID) {
 		if inst := s.root.Instances[instanceID]; inst != nil {
 			switch {
@@ -406,16 +422,26 @@ func (s *Service) applyGoalInterlockCommandResult(key string, event agentproto.E
 	}
 	lease.UpdatedAt = s.now()
 	if event.ErrorMessage != "" {
-		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_pause_failed", "Goal 暂停失败", "Codex 未能暂停当前 Goal，队列暂不派发。请稍后重试或检查 Codex 状态。")
-		if s.goalPauseBackoff == nil {
-			s.goalPauseBackoff = map[string]time.Time{}
+		if !s.config.PrivateApplication {
+			events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_pause_failed", "Goal 暂停失败", "Codex 未能暂停当前 Goal，队列暂不派发。请稍后重试或检查 Codex 状态。")
+			if s.goalPauseBackoff == nil {
+				s.goalPauseBackoff = map[string]time.Time{}
+			}
+			if s.goalPauseNoticeAt == nil {
+				s.goalPauseNoticeAt = map[string]time.Time{}
+			}
+			s.goalPauseBackoff[key] = s.now().Add(time.Minute)
+			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+			return events
 		}
-		if s.goalPauseNoticeAt == nil {
-			s.goalPauseNoticeAt = map[string]time.Time{}
+		if lease.Phase == GoalInterlockResumePending {
+			if surface := s.root.Surfaces[lease.TriggerSurfaceID]; surface == nil || len(surface.QueuedQueueItemIDs) == 0 {
+				events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 恢复未确认", "Codex 未确认恢复 Goal；可重新查询 Goal 状态。")
+				s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+				return events
+			}
 		}
-		s.goalPauseBackoff[key] = s.now().Add(time.Minute)
-		s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
-		return events
+		return s.requireGoalVerification(lease, "Goal 操作未确认，排队输入仍保留。请发送 /goal retry 只读核对状态，或使用 /detach 退出。")
 	}
 	switch lease.Phase {
 	case GoalInterlockPausePending:
@@ -424,15 +450,37 @@ func (s *Service) applyGoalInterlockCommandResult(key string, event agentproto.E
 			lease.PausedUpdatedAt = event.ThreadGoal.UpdatedAt
 			return s.probeGoalThreadIdle(lease)
 		}
-		// Goal 未停在 paused（如已被外部 complete/blocked）：无需互锁，直接放行。
-		s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
-		return nil
-	case GoalInterlockResumePending:
-		if event.ThreadGoal != nil && event.ThreadGoal.Status == "active" {
+		if !s.config.PrivateApplication {
 			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
 			return nil
 		}
-		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 恢复失败", "队列已排空，但 Codex 未确认恢复 Goal。请稍后重试或检查 Codex 状态。")
+		if event.ThreadGoal == nil || !goalStatusKnownInactive(event.ThreadGoal.Status) {
+			return s.requireGoalVerification(lease, "尚未确认 Goal 已暂停。请发送 /goal retry 只读核对状态，或使用 /detach 退出。")
+		}
+		lease.ExternalMutationSeen = true
+		return s.probeGoalThreadIdle(lease)
+	case GoalInterlockResumePending:
+		if event.ThreadGoal != nil && event.ThreadGoal.Status == "active" {
+			surface := s.root.Surfaces[lease.TriggerSurfaceID]
+			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+			if surface != nil && surface.AttachedInstanceID == lease.InstanceID && surface.SelectedThreadID == lease.ThreadID {
+				return s.dispatchNext(surface)
+			}
+			return nil
+		}
+		if !s.config.PrivateApplication {
+			events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 恢复失败", "队列已排空，但 Codex 未确认恢复 Goal。请稍后重试或检查 Codex 状态。")
+			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+			return events
+		}
+		if surface := s.root.Surfaces[lease.TriggerSurfaceID]; surface != nil && len(surface.QueuedQueueItemIDs) > 0 {
+			if event.ThreadGoal != nil && goalStatusKnownInactive(event.ThreadGoal.Status) {
+				lease.ExternalMutationSeen = true
+				return s.probeGoalThreadIdle(lease)
+			}
+			return s.requireGoalVerification(lease, "未确认 Goal 当前状态，排队输入仍保留。请发送 /goal retry 只读核对，或使用 /detach 退出。")
+		}
+		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 恢复未确认", "Codex 未确认恢复 Goal；可重新查询 Goal 状态。")
 		s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
 		return events
 	default:
@@ -441,6 +489,14 @@ func (s *Service) applyGoalInterlockCommandResult(key string, event agentproto.E
 }
 
 func (s *Service) probeGoalThreadIdle(lease *GoalInterlockLease) []eventcontract.Event {
+	// The prior goal RPC has completed; late duplicate ACKs cannot mutate the
+	// new idle barrier or overwrite a newer Goal observation.
+	delete(s.goalInterlockByCommand, lease.PauseCommandID)
+	delete(s.goalInterlockByCommand, lease.ResumeCommandID)
+	delete(s.goalGetByCommand, lease.GetCommandID)
+	lease.PauseCommandID = ""
+	lease.ResumeCommandID = ""
+	lease.GetCommandID = ""
 	commandID := s.nextAgentCommandID()
 	if s.goalProbeByCommand != nil && lease.ProbeCommandID != "" {
 		delete(s.goalProbeByCommand, lease.ProbeCommandID)
@@ -541,23 +597,65 @@ func (s *Service) maybeResumeGoalInterlock(instanceID, threadID string) []eventc
 
 func (s *Service) applyGoalGetResult(key string, event agentproto.Event) []eventcontract.Event {
 	lease := s.goalInterlocks[key]
-	if lease == nil || lease.Phase != GoalInterlockResumePending {
+	if lease == nil {
+		return nil
+	}
+	if lease.Phase == GoalInterlockVerificationGetPending {
+		delete(s.goalGetByCommand, event.CommandID)
+		lease.GetCommandID = ""
+		if event.ErrorMessage != "" || (!event.GoalMissing && event.ThreadGoal == nil) {
+			return s.requireGoalVerification(lease, "无法确认 Goal 状态，排队输入仍保留。请发送 /goal retry 再试，或使用 /detach 退出。")
+		}
+		if event.ThreadGoal != nil && event.ThreadGoal.Status == "active" {
+			return s.requireGoalVerification(lease, "Goal 仍在运行；请先明确执行 /goal pause，再发送 /goal retry。")
+		}
+		if event.ThreadGoal != nil && !goalStatusKnownInactive(event.ThreadGoal.Status) {
+			return s.requireGoalVerification(lease, "Goal 状态不完整，排队输入仍保留。请发送 /goal retry 再试。")
+		}
+		lease.ExternalMutationSeen = true
+		return s.probeGoalThreadIdle(lease)
+	}
+	if lease.Phase != GoalInterlockResumePending {
 		return nil
 	}
 	for _, command := range s.goalUserCommands {
 		if command.InstanceID == lease.InstanceID && command.ThreadID == lease.ThreadID && command.Action != "get" {
-			// A user control request is still unresolved. Do not let a delayed
-			// automatic status check send active after that user request.
+			// Never race a pending explicit control with automatic recovery.
+			if surface := s.root.Surfaces[lease.TriggerSurfaceID]; s.config.PrivateApplication && surface != nil && len(surface.QueuedQueueItemIDs) > 0 {
+				return s.requireGoalVerification(lease, "Goal 控制仍在处理；完成后请发送 /goal retry 重新确认。")
+			}
 			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
 			return nil
 		}
 	}
-	if event.ErrorMessage != "" || event.GoalMissing || event.ThreadGoal == nil {
-		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 恢复失败", "无法确认 Goal 状态，已放弃自动恢复。请稍后重试或检查 Codex 状态。")
+	if event.ErrorMessage != "" || (!event.GoalMissing && event.ThreadGoal == nil) {
+		if surface := s.root.Surfaces[lease.TriggerSurfaceID]; s.config.PrivateApplication && surface != nil && len(surface.QueuedQueueItemIDs) > 0 {
+			return s.requireGoalVerification(lease, "无法确认 Goal 状态，排队输入仍保留；请发送 /goal retry 或 /detach。")
+		}
+		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 恢复未确认", "无法确认 Goal 状态，已停止自动恢复。")
 		s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
 		return events
 	}
+	if event.GoalMissing {
+		if surface := s.root.Surfaces[lease.TriggerSurfaceID]; s.config.PrivateApplication && surface != nil && len(surface.QueuedQueueItemIDs) > 0 {
+			lease.ExternalMutationSeen = true
+			return s.probeGoalThreadIdle(lease)
+		}
+		s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+		return nil
+	}
 	if !goalInterlockFingerprintMatches(lease, event.ThreadGoal) {
+		if surface := s.root.Surfaces[lease.TriggerSurfaceID]; s.config.PrivateApplication && surface != nil && len(surface.QueuedQueueItemIDs) > 0 {
+			if goalStatusKnownInactive(event.ThreadGoal.Status) {
+				lease.ExternalMutationSeen = true
+				return s.probeGoalThreadIdle(lease)
+			}
+			if event.ThreadGoal.Status == "active" {
+				s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+				return s.dispatchNext(surface)
+			}
+			return s.requireGoalVerification(lease, "Goal 状态不完整，排队输入仍保留；请发送 /goal retry 或 /detach。")
+		}
 		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 已变化", "Goal 在队列执行期间被修改，已放弃自动恢复。")
 		s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
 		return events
@@ -603,7 +701,7 @@ func goalInterlockFingerprintMatches(lease *GoalInterlockLease, goal *agentproto
 
 func (s *Service) revokeGoalInterlockOnUserMutation(instanceID, threadID string) {
 	lease := s.goalInterlockLease(instanceID, threadID)
-	if lease != nil && (lease.Phase == GoalInterlockPausePending || lease.Phase == GoalInterlockQuiescing) {
+	if lease != nil && (lease.Phase == GoalInterlockPausePending || lease.Phase == GoalInterlockQuiescing || lease.Phase == GoalInterlockVerificationRequired || lease.Phase == GoalInterlockVerificationGetPending || lease.Phase == GoalInterlockObservationTimeout) {
 		// Explicit user control cancels automatic restoration, but does not prove
 		// that the current turn is idle. Keep its existing dispatch barrier.
 		lease.ExternalMutationSeen = true
@@ -614,16 +712,28 @@ func (s *Service) revokeGoalInterlockOnUserMutation(instanceID, threadID string)
 	s.clearGoalInterlockLease(instanceID, threadID)
 }
 
-func (s *Service) revokeGoalInterlockOnExternalMutation(instanceID, threadID string) {
+func (s *Service) revokeGoalInterlockOnExternalMutation(instanceID, threadID, status string) []eventcontract.Event {
 	lease := s.goalInterlockLease(instanceID, threadID)
 	if lease == nil {
-		return
+		return nil
 	}
 	lease.ExternalMutationSeen = true
 	if lease.Phase == GoalInterlockDraining {
-		return
+		return nil
+	}
+	if !s.config.PrivateApplication {
+		s.clearGoalInterlockLease(instanceID, threadID)
+		return nil
+	}
+	surface := s.root.Surfaces[lease.TriggerSurfaceID]
+	if s.config.PrivateApplication && surface != nil && len(surface.QueuedQueueItemIDs) > 0 {
+		if goalStatusKnownInactive(status) {
+			return s.probeGoalThreadIdle(lease)
+		}
+		return s.requireGoalVerification(lease, "Goal 已变化，排队输入仍保留；请发送 /goal retry 只读确认状态。")
 	}
 	s.clearGoalInterlockLease(instanceID, threadID)
+	return nil
 }
 
 func goalInterlockDiagnosticNotice(surfaceID, code, title, text string) []eventcontract.Event {

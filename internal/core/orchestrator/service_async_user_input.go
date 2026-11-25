@@ -238,7 +238,7 @@ func (s *Service) handleAsyncUserInput(surface *state.SurfaceConsoleRecord, acti
 }
 
 func (s *Service) asyncUserInputDispatchBlocked(surface *state.SurfaceConsoleRecord, record *asyncUserInputRecord) []eventcontract.Event {
-	if surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+	if surface.ActiveRequestCapture != nil || blockingPendingRequest(surface) != nil {
 		return notice(surface, "request_pending", "请先处理当前确认请求，再回答这个问题。")
 	}
 	inst := s.root.Instances[record.InstanceID]

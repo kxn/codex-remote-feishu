@@ -53,6 +53,8 @@ type privateDeliveryCapability struct {
 }
 
 var errLegacyPrivateDelivery = errors.New("private wrapper does not support required delivery facts")
+var errForeignPrivateSession = errors.New("private session belongs to another owner")
+var errReadPreparationExpired = errors.New("private read observation expired before send")
 
 func (h *privateNativeHost) privateDeliverySupported(instance string, connection uint64, kind agentproto.CommandKind) bool {
 	required := agentproto.PrivateDeliveryRequirement(kind)
@@ -72,6 +74,33 @@ func privateRegistration(o agentproto.NativeOwner) executionowner.Registration {
 type privateNativeAuthority struct {
 	host   *privateNativeHost
 	scoped *executionowner.Lease
+}
+
+func (a privateNativeAuthority) WithNativeReadProjection(ctx context.Context, n agentproto.NativeOwner, s privatechat.Owner, g int64, session, operation string, fn func(bool) error) error {
+	if a.host == nil || a.scoped != nil || n.HostID != a.host.hostID || n.Validate() != nil {
+		return executionowner.ErrConflict
+	}
+	rec, err := a.host.store.lookup(ctx, n.InstanceID)
+	if err != nil {
+		return err
+	}
+	if rec.Snapshot.Owner != n || rec.Surface != s || rec.SurfaceGeneration != g || rec.State == "retired" {
+		return executionowner.ErrConflict
+	}
+	reg := privateRegistration(n)
+	return a.host.registry.WithScopedLease(ctx, reg, func(token *executionowner.Lease) error {
+		if session == "" {
+			return fn(true)
+		}
+		err := token.CheckSessionRead(reg, session)
+		if err != nil && !errors.Is(err, executionowner.ErrConflict) {
+			return err
+		}
+		if err = fn(err == nil); err != nil {
+			return err
+		}
+		return token.FinishSessionRead(reg, session, operation)
+	})
 }
 
 func (a privateNativeAuthority) WithNativeLease(ctx context.Context, n agentproto.NativeOwner, s privatechat.Owner, g int64, fn func() error) error {
@@ -301,7 +330,7 @@ func (h *privateNativeHost) receive(ctx context.Context, meta relayws.Connection
 	}
 	return h.relay.SendEventReceiptToConnection(instance, meta.ConnectionID, *receipt)
 }
-func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.ConnectionMeta, instance, effect string, binding agentproto.NativeTurnBinding, targetSession string, expectedKind agentproto.CommandKind) error {
+func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.ConnectionMeta, instance, effect string, binding agentproto.NativeTurnBinding, targetSession string, expectedKind agentproto.CommandKind, historicalDenied ...bool) error {
 	if !h.validConnection(instance, meta) {
 		return fmt.Errorf("authenticated connection required")
 	}
@@ -320,11 +349,6 @@ func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.Connect
 	err = h.outbound.SendLeased(ctx, privateRegistration(binding.Owner), func(token *executionowner.Lease) error {
 		if expectedKind != agentproto.CommandTurnInterrupt && expectedKind != agentproto.CommandRuntimeInspect && expectedKind != agentproto.CommandProcessExit {
 			if e := token.CheckBusiness(privateRegistration(binding.Owner)); e != nil {
-				return e
-			}
-		}
-		if targetSession != "" {
-			if e := token.ReserveSession(privateRegistration(binding.Owner), targetSession); e != nil {
 				return e
 			}
 		}
@@ -348,6 +372,51 @@ func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.Connect
 		if privateEffectTargetsSession(command.Kind) && command.Target.ThreadID != targetSession || !privateEffectTargetsSession(command.Kind) && targetSession != "" {
 			return executionowner.ErrConflict
 		}
+		if command.Kind == agentproto.CommandMCPOAuthLogin && (command.MCP.OAuthLogin == nil || command.MCP.OAuthLogin.ThreadID != targetSession) {
+			return executionowner.ErrConflict
+		}
+		if targetSession != "" {
+			if len(historicalDenied) > 0 && historicalDenied[0] {
+				return errForeignPrivateSession
+			}
+			reg := privateRegistration(binding.Owner)
+			switch privateSessionCommandScope(command.Kind) {
+			case privateSessionRead:
+				deadline, readErr := h.journal.NativeReadDeadline(ctx, rec.Surface, rec.SurfaceGeneration, dispatch.ID)
+				if readErr != nil {
+					return readErr
+				}
+				if deadline.IsZero() {
+					return privatechat.ErrJournalConflict
+				}
+				if !deadline.After(time.Now()) {
+					return errReadPreparationExpired
+				}
+				e = token.BeginSessionRead(reg, targetSession, dispatch.ID, deadline)
+				if errors.Is(e, executionowner.ErrReadIntentExpired) {
+					state, stateErr := h.journal.DispatchState(ctx, dispatch.ID)
+					if stateErr != nil {
+						return stateErr
+					}
+					if state == "prepared" {
+						return errReadPreparationExpired
+					}
+					return e
+				}
+			case privateSessionWrite:
+				e = token.ReserveSession(reg, targetSession)
+			case privateSessionControl:
+				e = token.CheckSessionControl(reg, targetSession)
+			default:
+				return executionowner.ErrConflict
+			}
+			if errors.Is(e, executionowner.ErrConflict) {
+				return errForeignPrivateSession
+			}
+			if e != nil {
+				return e
+			}
+		}
 		if e = lease.MarkSending(ctx, dispatch.ID); e != nil {
 			return e
 		}
@@ -358,7 +427,7 @@ func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.Connect
 	}, func() error { return h.relay.SendCommandToConnection(instance, meta.ConnectionID, command) })
 	if err != nil && dispatch.ID != "" {
 		var before *executionowner.BeforeSendError
-		if errors.As(err, &before) {
+		if errors.As(err, &before) && !errors.Is(err, executionowner.ErrReadIntentExpired) {
 			saveCtx := context.WithoutCancel(ctx)
 			if e := h.registry.WithScopedLease(saveCtx, privateRegistration(binding.Owner), func(token *executionowner.Lease) error {
 				lease, e := h.lease(saveCtx, rec, token)
@@ -368,8 +437,18 @@ func (h *privateNativeHost) sendEffect(ctx context.Context, meta relayws.Connect
 				reason := "transport_not_invoked"
 				if errors.Is(err, errLegacyPrivateDelivery) {
 					reason = "legacy_private_delivery"
+				} else if errors.Is(err, errForeignPrivateSession) {
+					reason = "foreign_session"
+				} else if errors.Is(err, errReadPreparationExpired) {
+					reason = "read_preparation_expired"
 				}
-				return lease.RecordKnownUnsent(saveCtx, effect, dispatch.ID, reason)
+				if e = lease.RecordKnownUnsent(saveCtx, effect, dispatch.ID, reason); e != nil {
+					return e
+				}
+				if privateSessionCommandScope(command.Kind) == privateSessionRead && targetSession != "" {
+					return token.FinishSessionRead(privateRegistration(binding.Owner), targetSession, dispatch.ID)
+				}
+				return nil
 			}); e == nil {
 				return err
 			}

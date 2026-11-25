@@ -183,6 +183,16 @@ func retiredCheckpointHasTarget(c orchestrator.PrivateCheckpoint) bool {
 
 type retiredProjectionAuthority struct{ host *privateNativeHost }
 
+func (a retiredProjectionAuthority) WithNativeReadProjection(ctx context.Context, n agentproto.NativeOwner, o privatechat.Owner, generation int64, session, operation string, fn func(bool) error) error {
+	return a.host.WithRetiredRuntime(ctx, o, generation, n, func() error {
+		rec, err := a.host.store.lookup(ctx, n.InstanceID)
+		if err != nil {
+			return err
+		}
+		return a.host.registry.WithRetiredSessionRead(ctx, privateRegistration(n), privateCarrierStopEvidence(rec), session, operation, fn)
+	})
+}
+
 func (a retiredProjectionAuthority) WithNativeLease(ctx context.Context, n agentproto.NativeOwner, o privatechat.Owner, generation int64, fn func() error) error {
 	return a.host.WithRetiredRuntime(ctx, o, generation, n, fn)
 }

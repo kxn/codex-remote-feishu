@@ -102,7 +102,7 @@ func TestPrivateUserWorkflowNativeProcess(t *testing.T) {
 			if objective == "" {
 				objective = "fixture goal"
 			}
-			goal = map[string]any{"threadId": session, "objective": objective, "status": "active", "createdAt": 1710000000123, "updatedAt": 1710000000999}
+			goal = map[string]any{"threadId": session, "objective": objective, "status": "active", "createdAt": 1710000000123, "updatedAt": 1710000000999, "timeUsedSeconds": 0, "tokensUsed": 0}
 			respond(map[string]any{"goal": goal})
 		case "thread/goal/clear":
 			goal = nil

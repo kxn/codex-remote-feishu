@@ -18,6 +18,13 @@ import (
 
 type testNativeAuthority struct{}
 
+func (testNativeAuthority) WithNativeReadProjection(ctx context.Context, _ agentproto.NativeOwner, _ Owner, _ int64, _, _ string, fn func(bool) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fn(true)
+}
+
 func (testNativeAuthority) WithNativeLease(ctx context.Context, owner agentproto.NativeOwner, _ Owner, _ int64, fn func() error) error {
 	if err := ctx.Err(); err != nil {
 		return err

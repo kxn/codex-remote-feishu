@@ -90,6 +90,18 @@ func (s *Service) handleGoalCommand(surface *state.SurfaceConsoleRecord, action 
 		}
 	}
 	switch sub {
+	case "retry":
+		lease := s.goalInterlockLease(inst.InstanceID, threadID)
+		if !s.config.PrivateApplication || lease == nil || (lease.Phase != GoalInterlockObservationTimeout && lease.Phase != GoalInterlockVerificationRequired) || lease.TriggerSurfaceID != surface.SurfaceSessionID {
+			return s.issueGoalCommand(surface, threadID, "get", goalGetCommand(threadID, "user_control"), sourceMessageID)
+		}
+		if lease.Phase == GoalInterlockVerificationRequired {
+			lease.Phase = GoalInterlockVerificationGetPending
+			events := goalInterlockDiagnosticNotice(surface.SurfaceSessionID, "goal_verification_retry", "正在确认 Goal 状态", "先只读查询 Goal；确认安全后才会继续检查会话是否空闲。")
+			return append(events, s.resendGoalGet(lease)...)
+		}
+		events := goalInterlockDiagnosticNotice(surface.SurfaceSessionID, "goal_observation_retry", "正在重新确认会话状态", "将重新只读查询原会话；尚未确认空闲前，排队输入不会发送。")
+		return append(events, s.probeGoalThreadIdle(lease)...)
 	case "new", "edit":
 		objective, budget, ok := parseGoalObjectiveAndBudget(parts)
 		if !ok {

@@ -541,8 +541,11 @@ func (s *Service) maybeCommitBootstrapSurfaceBinding(surface *state.SurfaceConso
 	if binding.ThreadCommitted {
 		return nil
 	}
-	binding.ThreadCommitted = true
-	return s.bindSurfaceToThreadMode(surface, inst, targetThreadID, state.RouteModePinned)
+	events := s.bindSurfaceToThreadMode(surface, inst, targetThreadID, state.RouteModePinned)
+	if surface.AttachedInstanceID == inst.InstanceID && surface.RouteMode == state.RouteModePinned && surface.SelectedThreadID == targetThreadID {
+		binding.ThreadCommitted = true
+	}
+	return events
 }
 
 func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract.Event {

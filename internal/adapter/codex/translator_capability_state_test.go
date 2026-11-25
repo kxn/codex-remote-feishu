@@ -38,20 +38,6 @@ func TestObserveServerCapabilityStateNotificationsProduceStateOnlyEvents(t *test
 			},
 		},
 		{
-			name:  "mcp oauth completion without pending flow",
-			frame: `{"method":"mcpServer/oauthLogin/completed","params":{"name":"docs","threadId":"thread-1","success":false,"error":"callback timed out"}}`,
-			assert: func(t *testing.T, event agentproto.Event) {
-				state := event.CapabilityState
-				if event.ThreadID != "thread-1" || state == nil || state.MCPOAuthLoginCompleted == nil {
-					t.Fatalf("unexpected mcp oauth state: %#v", event)
-				}
-				completed := state.MCPOAuthLoginCompleted
-				if completed.Name != "docs" || completed.Success || completed.Error != "callback timed out" {
-					t.Fatalf("unexpected mcp oauth completion payload: %#v", completed)
-				}
-			},
-		},
-		{
 			name:  "app list updated",
 			frame: `{"method":"app/list/updated","params":{"data":[{"id":"app-1","name":"Docs","description":"Knowledge base"},{"id":"app-2","title":"Ops"}]}}`,
 			assert: func(t *testing.T, event agentproto.Event) {

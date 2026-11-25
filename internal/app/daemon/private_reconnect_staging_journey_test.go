@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/executionowner"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatestaging"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -19,6 +20,35 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+type reconnectReadAuthority struct {
+	registry *executionowner.Registry
+	native   agentproto.NativeOwner
+	owner    privatechat.Owner
+}
+
+func (a reconnectReadAuthority) WithNativeLease(ctx context.Context, native agentproto.NativeOwner, owner privatechat.Owner, generation int64, fn func() error) error {
+	if native != a.native || owner != a.owner || generation != 1 {
+		return privatechat.ErrJournalConflict
+	}
+	return a.registry.WithLease(ctx, privateRegistration(native), fn)
+}
+
+func (a reconnectReadAuthority) WithNativeReadProjection(ctx context.Context, native agentproto.NativeOwner, owner privatechat.Owner, generation int64, session, operation string, fn func(bool) error) error {
+	if native != a.native || owner != a.owner || generation != 1 || session != "thread" || operation == "" {
+		return privatechat.ErrJournalConflict
+	}
+	reg := privateRegistration(native)
+	return a.registry.WithScopedLease(ctx, reg, func(token *executionowner.Lease) error {
+		if err := token.CheckSessionRead(reg, session); err != nil {
+			return err
+		}
+		if err := fn(true); err != nil {
+			return err
+		}
+		return token.FinishSessionRead(reg, session, operation)
+	})
+}
 
 // legacyStageHostReducer freezes the pre-StageObjectID effect shape, so this
 // fixture exercises actual old pending_text and its confirmed stage receipt.
@@ -100,6 +130,15 @@ func testOldStagedPendingReconnect(t *testing.T, scenario string) {
 	host := New(":0", ":0", &privateCleanupTestGateway{base: base}, agentproto.ServerIdentity{})
 	owner := privatechat.Owner{GatewayID: "g", SurfaceID: "s", ChatID: "c", UserID: "u", TenantID: "tenant", AppID: "bot"}
 	native := agentproto.NativeOwner{Version: 1, Application: "private", OwnerID: "owner", Epoch: 1, CarrierIncarnation: "carrier", InstanceID: "instance", HostID: "host", InstanceGeneration: 1, ProcessGeneration: 1, Backend: agentproto.BackendCodex, HistoryNamespace: "history"}
+	registry, err := executionowner.Open(filepath.Join(t.TempDir(), "owners.db"), maintenanceFixtureProof{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = registry.Close() })
+	if err = registry.Register(ctx, privateRegistration(native)); err != nil {
+		t.Fatal(err)
+	}
+	authority := reconnectReadAuthority{registry: registry, native: native, owner: owner}
 	hello := agentproto.Hello{PrivateNativeProtocolVersion: agentproto.PrivateNativeProtocolVersion, CarrierIncarnation: "carrier", Instance: agentproto.InstanceHello{InstanceID: "instance", Backend: agentproto.BackendCodex, WorkspaceRoot: workspace, WorkspaceKey: workspace, Source: "headless", Managed: true}}
 	open := func() (*privatechat.Journal, *privatechat.Processor, *privatechat.NativeLease, *privatechat.App) {
 		j, e := privatechat.OpenJournal(path)
@@ -112,7 +151,7 @@ func testOldStagedPendingReconnect(t *testing.T, scenario string) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		l, e := j.OpenNativeLease(ctx, privateSettingsNativeAuthority{}, native, owner, 1)
+		l, e := j.OpenNativeLease(ctx, authority, native, owner, 1)
 		if e != nil {
 			t.Fatal(e)
 		}

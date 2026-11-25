@@ -1,9 +1,11 @@
 package privatechat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
@@ -15,6 +17,23 @@ import (
 )
 
 func TestPrivateGoalNativeResultAfterReceiverAckAndRestart(t *testing.T) {
+	testPrivateGoalNativeResultAfterRestart(t, false)
+}
+
+type deniedReadAuthority struct{ testNativeAuthority }
+
+func (deniedReadAuthority) WithNativeReadProjection(ctx context.Context, _ agentproto.NativeOwner, _ Owner, _ int64, _, _ string, fn func(bool) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fn(false)
+}
+
+func TestPrivateGoalLateResultAfterForeignClaimShowsOnlyLocalFailure(t *testing.T) {
+	testPrivateGoalNativeResultAfterRestart(t, true)
+}
+
+func testPrivateGoalNativeResultAfterRestart(t *testing.T, denied bool) {
 	ctx := t.Context()
 	root := t.TempDir()
 	path := filepath.Join(root, "private.db")
@@ -126,7 +145,11 @@ func TestPrivateGoalNativeResultAfterReceiverAckAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer j.Close()
-	lease, err = j.OpenNativeLease(ctx, testNativeAuthority{}, native, o, 1)
+	var authority NativeLeaseAuthority = testNativeAuthority{}
+	if denied {
+		authority = deniedReadAuthority{}
+	}
+	lease, err = j.OpenNativeLease(ctx, authority, native, o, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,6 +165,7 @@ func TestPrivateGoalNativeResultAfterReceiverAckAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	var page bool
+	var content strings.Builder
 	for _, effect := range projected {
 		event, e := DecodeEffectEvent(effect.Effect.Body)
 		if e != nil {
@@ -150,8 +174,13 @@ func TestPrivateGoalNativeResultAfterReceiverAckAndRestart(t *testing.T) {
 		if event.PageView != nil {
 			page = true
 		}
+		encoded, _ := json.Marshal(event)
+		content.Write(encoded)
 	}
 	if !page {
 		t.Fatalf("goal result did not produce a page after restart: %#v", projected)
+	}
+	if denied && !strings.Contains(content.String(), "该会话已由其他载体接管") {
+		t.Fatalf("late result missing ownership failure: %s", content.String())
 	}
 }

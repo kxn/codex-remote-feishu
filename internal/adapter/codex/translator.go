@@ -45,6 +45,8 @@ type Translator struct {
 	pendingRequestTypes       map[string]agentproto.RequestType
 	pendingMCPOAuthLogins     map[string]pendingMCPOAuthLogin
 	pendingMCPOAuthLoginKeys  map[string]string
+	earlyMCPOAuthCompletions  map[string]map[string]any
+	completedMCPOAuthLoginIDs map[string]bool
 	pendingModelList          map[string]pendingModelList
 	pendingGoalRequests       map[string]pendingGoalRequest
 	pendingThreadReads        map[string]pendingThreadRead
@@ -107,6 +109,7 @@ type pendingMCPOAuthLogin struct {
 	Scopes           []string
 	TimeoutSecs      int
 	AuthorizationURL string
+	LoginID          string
 }
 
 type pendingModelList struct {
@@ -188,6 +191,8 @@ func NewTranslator(instanceID string) *Translator {
 		pendingRequestTypes:        map[string]agentproto.RequestType{},
 		pendingMCPOAuthLogins:      map[string]pendingMCPOAuthLogin{},
 		pendingMCPOAuthLoginKeys:   map[string]string{},
+		earlyMCPOAuthCompletions:   map[string]map[string]any{},
+		completedMCPOAuthLoginIDs:  map[string]bool{},
 		pendingModelList:           map[string]pendingModelList{},
 		pendingGoalRequests:        map[string]pendingGoalRequest{},
 		pendingThreadReads:         map[string]pendingThreadRead{},

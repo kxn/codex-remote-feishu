@@ -75,6 +75,14 @@ func (r privateKnownUnsentReducer) ReduceHostReceipt(app *privatechat.App, e pri
 		problem.Code = "private_runtime_upgrade_required"
 		problem.Message = "当前运行环境版本较旧，无法安全执行此操作。请先发送 /detach，等待运行环境退出完成后再重新选择工作目录。"
 	}
+	if receipt.Reason == "foreign_session" {
+		problem.Code = "private_session_owned_elsewhere"
+		problem.Message = "该会话当前由其他运行环境管理，命令未发送。请重新选择会话或新建会话。"
+	}
+	if receipt.Reason == "read_preparation_expired" {
+		problem.Code = "private_read_preparation_expired"
+		problem.Message = "会话查询在发送前已超时，请重试。"
+	}
 	if event.Command.Kind == agentproto.CommandThreadCompactStart || event.Command.Kind == agentproto.CommandReviewStart {
 		if err = app.Service().RestorePrivateControlProjection(event.SurfaceSessionID, receipt.InstanceID, receipt.CommandID, event.Command.Kind, event.Command.Target.ThreadID, "", ""); err != nil {
 			return nil, err

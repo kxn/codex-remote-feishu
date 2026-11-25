@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -96,10 +97,10 @@ func Open(path string, verifier StopVerifier) (*Registry, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 1 {
+	if version > 2 {
 		tx.Rollback()
 		db.Close()
-		return nil, fmt.Errorf("execution owner schema %d is newer than supported 1", version)
+		return nil, fmt.Errorf("execution owner schema %d is newer than supported 2", version)
 	}
 	if version == 0 {
 		var tables int
@@ -128,13 +129,13 @@ func Open(path string, verifier StopVerifier) (*Registry, error) {
  CREATE TABLE IF NOT EXISTS transfers (
  incarnation TEXT NOT NULL, old_app TEXT NOT NULL, old_owner TEXT NOT NULL, old_epoch INTEGER NOT NULL,
  new_app TEXT NOT NULL, new_owner TEXT NOT NULL, new_epoch INTEGER NOT NULL, evidence_ref TEXT NOT NULL,
- PRIMARY KEY(incarnation,old_epoch));` + maintenanceSchema
+ PRIMARY KEY(incarnation,old_epoch));` + maintenanceSchema + readIntentSchema
 	if _, err = tx.Exec(schema); err != nil {
 		tx.Rollback()
 		db.Close()
 		return nil, err
 	}
-	if _, err = tx.Exec("PRAGMA user_version=1"); err != nil {
+	if _, err = tx.Exec("PRAGMA user_version=2"); err != nil {
 		tx.Rollback()
 		db.Close()
 		return nil, err
@@ -260,6 +261,9 @@ func bindSessionTx(ctx context.Context, tx *sql.Tx, v Registration, session stri
 	if !canonical(session) {
 		return fmt.Errorf("session ID required")
 	}
+	if err := checkForeignReadIntents(ctx, tx, v, session); err != nil {
+		return err
+	}
 	var err error
 	c, o := v.Carrier, v.Owner
 	var reservation int
@@ -352,6 +356,16 @@ func (r *Registry) finish(ctx context.Context, v Registration, next *Owner, evid
 		return fmt.Errorf("verify stop: %w", err)
 	}
 	c, o := v.Carrier, v.Owner
+	if next != nil {
+		var blocked int
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM session_read_intents i JOIN sessions s ON s.backend=i.backend AND s.namespace=i.namespace AND s.session_id=i.session_id JOIN carriers reader ON reader.incarnation=i.incarnation AND reader.epoch=i.epoch WHERE s.incarnation=? AND s.epoch=? AND i.expires_ns>? AND reader.stopped=0 AND NOT (i.incarnation=? AND i.epoch=? AND i.app=? AND i.owner_id=?)`, c.Incarnation, o.Epoch, time.Now().UnixNano(), c.Incarnation, o.Epoch, o.Application, o.ID).Scan(&blocked)
+		if err != nil {
+			return err
+		}
+		if blocked != 0 {
+			return ErrConflict
+		}
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE carriers SET stopped=1 WHERE instance_id=? AND incarnation=? AND backend=? AND namespace=? AND generation=? AND app=? AND owner_id=? AND epoch=? AND stopped=0`, c.InstanceID, c.Incarnation, c.Backend, c.Namespace, c.Generation, o.Application, o.ID, o.Epoch)
 	if err != nil {
 		return err
@@ -541,6 +555,9 @@ func reserveSessionTx(ctx context.Context, tx *sql.Tx, reg Registration, session
 // reserveSessionTxUnchecked is for the maintenance recovery transaction after
 // it has verified the frozen old-to-new carrier mapping and exact session.
 func reserveSessionTxUnchecked(ctx context.Context, tx *sql.Tx, reg Registration, session string) error {
+	if err := checkForeignReadIntents(ctx, tx, reg, session); err != nil {
+		return err
+	}
 	var known, allowed int
 	if err := tx.QueryRowContext(ctx, `SELECT count(*),coalesce(max(CASE WHEN (s.app=? AND s.owner_id=? AND s.epoch=? AND (s.active=0 OR s.incarnation=?) AND NOT EXISTS(SELECT 1 FROM transfers revoked WHERE revoked.incarnation=s.incarnation AND revoked.old_epoch=s.epoch)) OR (s.active=0 AND EXISTS(SELECT 1 FROM transfers t WHERE t.incarnation=s.incarnation AND t.old_epoch=s.epoch AND t.new_app=? AND t.new_owner=? AND t.new_epoch=?)) THEN 1 ELSE 0 END),0) FROM sessions s WHERE s.backend=? AND s.namespace=? AND s.session_id=?`, reg.Owner.Application, reg.Owner.ID, reg.Owner.Epoch, reg.Carrier.Incarnation, reg.Owner.Application, reg.Owner.ID, reg.Owner.Epoch, reg.Carrier.Backend, reg.Carrier.Namespace, session).Scan(&known, &allowed); err != nil {
 		return err

@@ -738,6 +738,7 @@ func (s RequestPromptTextSectionRecord) Normalized() RequestPromptTextSectionRec
 }
 
 type RequestPromptRecord struct {
+	RootTurnID               string `json:",omitempty"`
 	RequestID                string
 	RequestType              string
 	SemanticKind             string

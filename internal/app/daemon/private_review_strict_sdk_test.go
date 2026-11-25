@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -122,8 +123,42 @@ func TestPrivateStrictReviewNativeProcess(t *testing.T) {
 			// Codex 0.171 also emits a child-internal turn whose rootTurnId
 			// names the review turn. It must not become the user-facing turn.
 			fmt.Printf(`{"method":"turn/started","params":{"threadId":%q,"turn":{"id":%q,"rootTurnId":%q,"status":"inProgress"}}}`+"\n", id, reviewTurn+"-internal", reviewTurn)
+			if os.Getenv("STRICT_REVIEW_LIVE") == "1" {
+				for {
+					if _, err := os.Stat(os.Getenv("GRAPH_RELEASE") + ".live"); err == nil {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				fmt.Printf(`{"method":"item/agentMessage/delta","params":{"threadId":%q,"turnId":%q,"itemId":"review-live","delta":"review partial"}}`+"\n", id, reviewTurn+"-internal")
+			}
 			if os.Getenv("STRICT_REVIEW_REAL") != "1" {
 				fmt.Printf(`{"method":"turn/started","params":{"threadId":%q,"turn":{"id":%q}}}`+"\n", id, reviewTurn)
+			}
+			if os.Getenv("STRICT_REVIEW_PERMISSION") == "1" && reviews == 1 {
+				grant := map[string]any{"network": map[string]any{"enabled": true}, "fileSystem": map[string]any{"read": []any{cwd}}}
+				request, _ := json.Marshal(map[string]any{"id": "review-perm", "method": "item/permissions/requestApproval", "params": map[string]any{"threadId": id, "turnId": reviewTurn + "-internal", "itemId": "review-perm-item", "cwd": cwd, "startedAtMs": int64(1790000000000), "permissions": grant}})
+				fmt.Println(string(request))
+				valid := false
+				for scanner.Scan() {
+					var response struct {
+						ID     any            `json:"id"`
+						Result map[string]any `json:"result"`
+					}
+					if json.Unmarshal(scanner.Bytes(), &response) == nil && response.ID == "review-perm" {
+						perms, _ := response.Result["permissions"].(map[string]any)
+						valid = response.Result["scope"] == "turn" && reflect.DeepEqual(perms, grant)
+						break
+					}
+				}
+				if !valid {
+					os.Exit(52)
+				}
+				if out, e := os.OpenFile(os.Getenv("GRAPH_TRACE"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); e == nil {
+					fmt.Fprintln(out, "REVIEW_PERMISSION_TURN_ACCEPTED")
+					out.Close()
+				}
+				fmt.Printf(`{"method":"serverRequest/resolved","params":{"requestId":"review-perm","threadId":%q,"turnId":%q}}`+"\n", id, reviewTurn+"-internal")
 			}
 			fmt.Printf(`{"method":"item/completed","params":{"threadId":%q,"turnId":%q,"item":{"id":"review","type":"agentMessage","text":"strict review final"}}}`+"\n", id, reviewTurn)
 			if os.Getenv("STRICT_REVIEW_EARLY") == "1" {
@@ -215,7 +250,7 @@ func TestPrivateSDKStrictInlineReviewJourney(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) { testPrivateSDKStrictInlineReviewJourney(t, tc.early, tc.realShape) })
 	}
 }
-func testPrivateSDKStrictInlineReviewJourney(t *testing.T, early, realShape bool) {
+func testPrivateSDKStrictInlineReviewJourney(t *testing.T, early, realShape bool, live ...bool) {
 	cwd := t.TempDir()
 	prepareRealReviewRepository(t, cwd)
 	if e := os.WriteFile(filepath.Join(cwd, "review.txt"), []byte("changed"), 0600); e != nil {
@@ -229,6 +264,32 @@ func testPrivateSDKStrictInlineReviewJourney(t *testing.T, early, realShape bool
 	if realShape {
 		g.app.headlessRuntime.BaseEnv = append(g.app.headlessRuntime.BaseEnv, "STRICT_REVIEW_REAL=1")
 	}
+	if len(live) > 1 && live[1] {
+		g.app.headlessRuntime.BaseEnv = append(g.app.headlessRuntime.BaseEnv, "STRICT_REVIEW_PERMISSION=1")
+	}
+	if len(live) > 0 && live[0] {
+		g.app.headlessRuntime.BaseEnv = append(g.app.headlessRuntime.BaseEnv, "STRICT_REVIEW_LIVE=1")
+		go func() {
+			db, err := sql.Open("sqlite", "file:"+filepath.Join(g.app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?mode=ro")
+			if err != nil {
+				return
+			}
+			defer db.Close()
+			for {
+				var n int
+				_ = db.QueryRow(`SELECT count(*) FROM native_events WHERE applied=1 AND json_extract(payload,'$.kind')='turn.started' AND json_extract(payload,'$.threadId')='review-thread-2' AND json_extract(payload,'$.turnId')='review-turn-1-internal'`).Scan(&n)
+				if n > 0 {
+					_ = os.WriteFile(g.release+".live", []byte("ready"), 0600)
+					return
+				}
+				select {
+				case <-g.user.ctx.Done():
+					return
+				case <-time.After(20 * time.Millisecond):
+				}
+			}
+		}()
+	}
 	exe, e := os.Executable()
 	if e != nil {
 		t.Fatal(e)
@@ -241,6 +302,11 @@ func testPrivateSDKStrictInlineReviewJourney(t *testing.T, early, realShape bool
 	n := len(u.gateway.snapshotOperations())
 	u.send(g.app, "cold", "hi")
 	u.waitVisible(g.app, n, "/list")
+	if len(live) > 1 && live[1] {
+		n = len(u.gateway.snapshotOperations())
+		u.send(g.app, "review-full-access", "/access full")
+		u.waitVisible(g.app, n, "已更新当前会话的执行权限模式")
+	}
 	u.chooseNew(g.app, "initial")
 	n = len(u.gateway.snapshotOperations())
 	u.send(g.app, "parent-first", "make a change")
@@ -297,6 +363,23 @@ func testPrivateSDKStrictInlineReviewJourney(t *testing.T, early, realShape bool
 		}
 	}
 	u.waitFinal(g.app, beforeReview, card, "strict review final")
+	if len(live) > 1 && live[1] {
+		trace, err := os.ReadFile(g.trace)
+		if err != nil || !strings.Contains(string(trace), "REVIEW_PERMISSION_TURN_ACCEPTED") {
+			t.Fatalf("review B permission response missing: %v", err)
+		}
+	}
+	if len(live) > 0 && live[0] {
+		db, err := sql.Open("sqlite", "file:"+filepath.Join(g.app.headlessRuntime.Paths.StateDir, "private-chat.db")+"?mode=ro")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		var count int
+		if err = db.QueryRow(`SELECT count(*) FROM private_live_applied`).Scan(&count); err != nil || count < 1 {
+			t.Fatalf("review live was not projected: count=%d err=%v", count, err)
+		}
+	}
 	n = len(u.gateway.snapshotOperations())
 	cardStart := beforeReview
 	if !realShape {
@@ -346,4 +429,12 @@ func testPrivateSDKStrictInlineReviewJourney(t *testing.T, early, realShape bool
 	if realShape {
 		controlledReviewShutdown(t, g)
 	}
+}
+
+func TestPrivateSDKReviewLiveThenFinalAndNext(t *testing.T) {
+	testPrivateSDKStrictInlineReviewJourney(t, false, false, true)
+}
+
+func TestPrivateSDKReviewSubturnPermissionAutoApproval(t *testing.T) {
+	testPrivateSDKStrictInlineReviewJourney(t, false, false, false, true)
 }

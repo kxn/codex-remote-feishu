@@ -164,19 +164,26 @@ func (j *Journal) reviewProjectionSession(ctx context.Context, l *NativeLease, r
 	if event.Kind == agentproto.EventNativeControlResult && event.Action == "review.start" && event.Status == "accepted" {
 		return l.committedReviewSession(ctx, ref)
 	}
-	if !isNativeTurnProjection(event.Kind) || event.ThreadID == "" || event.TurnID == "" {
+	if !isNativeTurnProjection(event.Kind) && event.Kind != agentproto.EventRequestStarted && event.Kind != agentproto.EventRequestResolved {
+		return "", nil
+	}
+	return j.reviewSessionForEvent(ctx, l, event)
+}
+
+func (j *Journal) reviewSessionForEvent(ctx context.Context, l *NativeLease, event agentproto.Event) (string, error) {
+	if event.ThreadID == "" || event.TurnID == "" {
 		return "", nil
 	}
 	root, err := j.reviewRootTurn(ctx, l, event)
 	if err != nil {
 		return "", err
 	}
-	rows, err := j.db.QueryContext(ctx, `SELECT sequence,payload_hash FROM native_events WHERE incarnation=? AND json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.status')='accepted' AND json_extract(payload,'$.metadata.reviewThreadID')=? AND json_extract(payload,'$.turnId')=?`, ref.Incarnation, event.ThreadID, event.TurnID)
+	rows, err := j.db.QueryContext(ctx, `SELECT sequence,payload_hash FROM native_events WHERE incarnation=? AND json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.status')='accepted' AND json_extract(payload,'$.metadata.reviewThreadID')=? AND json_extract(payload,'$.turnId')=?`, l.native.CarrierIncarnation, event.ThreadID, event.TurnID)
 	if root != "" && root != event.TurnID {
 		if err == nil {
 			rows.Close()
 		}
-		rows, err = j.db.QueryContext(ctx, `SELECT sequence,payload_hash FROM native_events WHERE incarnation=? AND json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.status')='accepted' AND json_extract(payload,'$.metadata.reviewThreadID')=? AND json_extract(payload,'$.turnId')=?`, ref.Incarnation, event.ThreadID, root)
+		rows, err = j.db.QueryContext(ctx, `SELECT sequence,payload_hash FROM native_events WHERE incarnation=? AND json_extract(payload,'$.action')='review.start' AND json_extract(payload,'$.status')='accepted' AND json_extract(payload,'$.metadata.reviewThreadID')=? AND json_extract(payload,'$.turnId')=?`, l.native.CarrierIncarnation, event.ThreadID, root)
 	}
 	if err != nil {
 		return "", err
@@ -184,7 +191,7 @@ func (j *Journal) reviewProjectionSession(ctx context.Context, l *NativeLease, r
 	var refs []NativeEventRef
 	for rows.Next() {
 		var proof NativeEventRef
-		proof.Incarnation = ref.Incarnation
+		proof.Incarnation = l.native.CarrierIncarnation
 		if err = rows.Scan(&proof.Sequence, &proof.PayloadHash); err != nil {
 			rows.Close()
 			return "", err

@@ -244,7 +244,7 @@ func (s *Service) blockUnsafeFeishuRoomWorkspaceReset(room *state.FeishuRoomCont
 		if surface.PendingHeadless != nil {
 			return "当前群内有工作区正在启动，请等待完成后再切换。"
 		}
-		if surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+		if surface.ActiveRequestCapture != nil || blockingPendingRequest(surface) != nil {
 			return "当前群内有请求正在等待处理，请处理完成后再切换。"
 		}
 		if review := s.activeReviewSession(surface); review != nil && strings.TrimSpace(review.ActiveTurnID) != "" {

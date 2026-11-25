@@ -63,7 +63,7 @@ func (s *Service) validatePrivateGoalCheckpoint(surface string, c *PrivateGoalCh
 			return fmt.Errorf("invalid private goal interlock")
 		}
 		switch v.Phase {
-		case GoalInterlockPausePending, GoalInterlockQuiescing, GoalInterlockDraining, GoalInterlockResumePending:
+		case GoalInterlockPausePending, GoalInterlockQuiescing, GoalInterlockDraining, GoalInterlockResumePending, GoalInterlockOwnershipLost, GoalInterlockObservationTimeout, GoalInterlockVerificationRequired, GoalInterlockVerificationGetPending:
 		default:
 			return fmt.Errorf("invalid private goal phase")
 		}

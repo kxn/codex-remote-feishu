@@ -529,3 +529,28 @@ func TestGoalInterlockReconcileClearsStaleCommandIDs(t *testing.T) {
 		t.Fatal("restored stale pause command id must be removed on resend")
 	}
 }
+
+func TestGoalResumeAckRechecksQueuedInputWithNewPause(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	lease := &GoalInterlockLease{InstanceID: instanceID, ThreadID: "thread-1", TriggerSurfaceID: surfaceID, Phase: GoalInterlockResumePending, PauseCommandID: "old-pause", ResumeCommandID: "resume"}
+	svc.setGoalInterlockLease(lease)
+	svc.goalInterlockByCommand = map[string]string{"old-pause": goalInterlockKey(instanceID, "thread-1"), "resume": goalInterlockKey(instanceID, "thread-1")}
+	queued := svc.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: surfaceID, ChatID: "chat-1", ActorUserID: "user-1", MessageID: "queued", Text: "next"})
+	if findAgentCommand(queued, agentproto.CommandPromptSend) != nil || len(svc.root.Surfaces[surfaceID].QueuedQueueItemIDs) != 1 {
+		t.Fatal("input did not wait for resume")
+	}
+	stale := agentproto.Event{Kind: agentproto.EventThreadGoalCommandResult, CommandID: "old-pause", ThreadID: "thread-1", ThreadGoal: &agentproto.ThreadGoalUpdate{ThreadID: "thread-1", Status: "active"}}
+	if out := svc.ApplyAgentEvent(instanceID, stale); len(out) != 0 || svc.goalInterlockLease(instanceID, "thread-1") != lease {
+		t.Fatal("stale ack woke queue")
+	}
+	ack := stale
+	ack.CommandID = "resume"
+	out := svc.ApplyAgentEvent(instanceID, ack)
+	pause := findAgentCommand(out, agentproto.CommandThreadGoalSet)
+	if pause == nil || pause.Goal.Status != "paused" || findAgentCommand(out, agentproto.CommandPromptSend) != nil {
+		t.Fatalf("queue bypassed fresh pause: %+v", out)
+	}
+	if out = svc.ApplyAgentEvent(instanceID, ack); len(out) != 0 {
+		t.Fatalf("duplicate resume ack replayed: %+v", out)
+	}
+}

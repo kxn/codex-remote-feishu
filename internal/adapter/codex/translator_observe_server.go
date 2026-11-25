@@ -480,7 +480,15 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, exists := t.pendingThreadHistoryReads[requestID]; exists {
 			delete(t.pendingThreadHistoryReads, requestID)
-			history := parseThreadHistoryRecord(message["result"])
+			if errorMessage := jsonrpcutil.ExtractErrorMessage(message); errorMessage != "" {
+				return Result{Suppress: true, Events: []agentproto.Event{{Kind: agentproto.EventThreadHistoryRead, RequestID: requestID, CommandID: pending.CommandID, ThreadID: pending.ThreadID, Status: "failed", ErrorMessage: errorMessage}}}, nil
+			}
+			result, ok := message["result"].(map[string]any)
+			_, turnsOK := lookupMap(result, "thread")["turns"].([]any)
+			if !ok || lookupString(result, "thread", "id") == "" || lookupString(result, "thread", "id") != pending.ThreadID || !turnsOK {
+				return Result{Suppress: true, Events: []agentproto.Event{{Kind: agentproto.EventThreadHistoryRead, RequestID: requestID, CommandID: pending.CommandID, ThreadID: pending.ThreadID, Status: "failed", ErrorMessage: "历史查询返回的会话身份无效，请重试。"}}}, nil
+			}
+			history := parseThreadHistoryRecord(result)
 			threadID := choose(history.Thread.ThreadID, pending.ThreadID)
 			if threadID == "" {
 				threadID = pending.ThreadID
@@ -490,6 +498,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				Suppress: true,
 				Events: []agentproto.Event{{
 					Kind:          agentproto.EventThreadHistoryRead,
+					Status:        "completed",
 					RequestID:     requestID,
 					CommandID:     pending.CommandID,
 					ThreadID:      threadID,

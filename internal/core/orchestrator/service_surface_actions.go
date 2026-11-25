@@ -29,9 +29,9 @@ func (s *Service) prepareNewThreadWithOverlayCleanup(surface *state.SurfaceConso
 	if surface.ActiveRequestCapture != nil {
 		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
 	}
-	if pending := activePendingRequest(surface); pending != nil {
+	if pending := blockingPendingRequest(surface); pending != nil {
 		_ = pending
-		return notice(surface, "request_pending", pendingRequestNoticeText(activePendingRequest(surface)))
+		return notice(surface, "request_pending", pendingRequestNoticeText(blockingPendingRequest(surface)))
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
 		if blocked := s.blockPreparedNewThreadReprepare(surface); blocked != nil {
@@ -201,7 +201,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		}
 		return s.consumeCapturedRequestFeedback(surface, action, text)
 	}
-	if pending := activePendingRequest(surface); pending != nil {
+	if pending := blockingPendingRequest(surface); pending != nil {
 		return notice(surface, "request_pending", pendingRequestNoticeText(pending))
 	}
 	if events, handled := s.handleReviewSessionText(surface, action, text); handled {
@@ -372,7 +372,7 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 	if surface.ActiveRequestCapture != nil {
 		return append(events, notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")...)
 	}
-	if pending := activePendingRequest(surface); pending != nil {
+	if pending := blockingPendingRequest(surface); pending != nil {
 		_ = pending
 		return append(events, notice(surface, "request_pending", pendingRequestNoticeText(pending))...)
 	}
@@ -432,7 +432,7 @@ func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.
 	if surface.ActiveRequestCapture != nil {
 		return append(events, notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")...)
 	}
-	if pending := activePendingRequest(surface); pending != nil {
+	if pending := blockingPendingRequest(surface); pending != nil {
 		_ = pending
 		return append(events, notice(surface, "request_pending", pendingRequestNoticeText(pending))...)
 	}
@@ -526,7 +526,7 @@ func (s *Service) handleApplauseReaction(surface *state.SurfaceConsoleRecord, ac
 		return nil
 	}
 	inst, activeThreadID, activeTurnID, ok := s.activeSteerTarget(surface)
-	if !ok || surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+	if !ok || surface.ActiveRequestCapture != nil || blockingPendingRequest(surface) != nil {
 		return nil
 	}
 	if state.EffectiveInstanceBackend(inst) != agentproto.BackendCodex || !inst.CapabilitiesDeclared || !state.EffectiveInstanceCapabilities(inst).ThreadShellCommand {

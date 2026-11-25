@@ -59,3 +59,34 @@ func TestPrivateHistoryQuerySurvivesCheckpointAndRejectsStaleResult(t *testing.T
 		t.Fatal("duplicate history result republished")
 	}
 }
+
+func TestPrivateHistoryNativeFailureDoesNotShowEmptySuccessAndCanRetry(t *testing.T) {
+	now := time.Now().UTC()
+	s := newServiceForTest(&now)
+	s.config.PrivateApplication = true
+	inst := &state.InstanceRecord{InstanceID: "instance", Online: true, WorkspaceRoot: "/workspace", WorkspaceKey: "/workspace", Threads: map[string]*state.ThreadRecord{"thread": {ThreadID: "thread", CWD: "/workspace", Loaded: true}}}
+	s.UpsertInstance(inst)
+	s.MaterializeSurface("surface", "gateway", "chat", "user")
+	surface := s.root.Surfaces["surface"]
+	surface.AttachedInstanceID = "instance"
+	surface.SelectedThreadID = "thread"
+	surface.RouteMode = state.RouteModePinned
+	action := control.Action{Kind: control.ActionShowHistory, SurfaceSessionID: "surface", ActorUserID: "user", Text: "/history"}
+	opened := s.ApplySurfaceAction(action)
+	if len(opened) != 2 || opened[1].Command == nil {
+		t.Fatalf("history query: %#v", opened)
+	}
+	cmd := opened[1].Command.CommandID
+	failure := agentproto.Event{Kind: agentproto.EventThreadHistoryRead, CommandID: cmd, RequestID: "rpc", ThreadID: "thread", Status: "failed", ErrorMessage: "native read failed"}
+	out := s.ApplyAgentEvent("instance", failure)
+	if len(out) == 0 {
+		t.Fatal("history failure produced no feedback")
+	}
+	if s.SurfaceThreadHistory("surface") != nil {
+		t.Fatal("failed read became empty history")
+	}
+	retry := s.ApplySurfaceAction(action)
+	if len(retry) != 2 || retry[1].Command == nil || retry[1].Command.CommandID == cmd {
+		t.Fatalf("history did not retry: %#v", retry)
+	}
+}

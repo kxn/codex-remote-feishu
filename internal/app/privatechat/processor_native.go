@@ -179,10 +179,25 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 			return nil, e
 		}
 	}
+	readSession, readOperation, readExpired, e := p.journal.nativeReadProjection(ctx, l, ref)
+	if e != nil {
+		return nil, e
+	}
+	readAllowed := true
 	project := func(bindReview func(string) error) error {
 		ctx, projectionErr := beginProjection(ctx)
 		if projectionErr != nil {
 			return projectionErr
+		}
+		if readOperation != "" {
+			session, operation, expired, e := p.journal.nativeReadProjection(ctx, l, ref)
+			if e != nil {
+				return e
+			}
+			if session != readSession || operation != readOperation {
+				return ErrJournalConflict
+			}
+			readExpired = expired
 		}
 
 		event, applied, revision, e := p.journal.processorNativeEvent(ctx, ref)
@@ -213,7 +228,7 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 				compactCommand = command
 			}
 		}
-		if isNativeTurnProjection(event.Kind) && event.NativeBinding == nil {
+		if (isNativeTurnProjection(event.Kind) || reviewSession != "" && (event.Kind == agentproto.EventRequestStarted || event.Kind == agentproto.EventRequestResolved)) && event.NativeBinding == nil {
 			binding, e := p.journal.nativeBindingFromProof(ctx, l, event)
 			if e != nil {
 				return e
@@ -320,6 +335,9 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 		if e != nil {
 			return e
 		}
+		if reviewSession != "" && event.Kind != agentproto.EventNativeControlResult && !reviewEvent {
+			return ErrJournalConflict
+		}
 		projectedCommand := ""
 		if reviewEvent {
 			if bindReview == nil {
@@ -377,7 +395,13 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 			return e
 		}
 		var events []eventcontract.Event
-		if (event.Kind == agentproto.EventThreadHistoryRead || event.Kind == agentproto.EventNativeCommandRejected) && p.app.Service().PrivateReconnectQueryMatches(l.surface.SurfaceID, l.native.InstanceID, event.CommandID) {
+		if readExpired {
+			// The original native fact remains durable, but its local waiting
+			// operation has already expired and cannot reopen an older page.
+			events = nil
+		} else if !readAllowed {
+			events, _ = p.app.Service().HandlePrivateOwnershipQueryFailure(l.surface.SurfaceID, l.native.InstanceID, event.CommandID, errors.New("该会话已由其他载体接管，请重新选择会话。"))
+		} else if (event.Kind == agentproto.EventThreadHistoryRead || event.Kind == agentproto.EventNativeCommandRejected) && p.app.Service().PrivateReconnectQueryMatches(l.surface.SurfaceID, l.native.InstanceID, event.CommandID) {
 			pending, _ := p.app.Service().PrivateReconnectPendingText(l.surface.SurfaceID)
 			allowed, check := p.reconnectPendingInputProven(ctx, l.surface, l.generation, pending)
 			if check != nil {
@@ -436,7 +460,13 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 		out, e = p.journal.processorEffects(ctx, l.surface, l.generation, cp.Revision)
 		return e
 	}
-	if reviewSession != "" {
+	if readOperation != "" {
+		authority, ok := l.authority.(NativeReadProjectionAuthority)
+		if !ok {
+			return nil, ErrJournalConflict
+		}
+		err = authority.WithNativeReadProjection(ctx, l.native, l.surface, l.generation, readSession, readOperation, func(allowed bool) error { readAllowed = allowed; return project(nil) })
+	} else if reviewSession != "" {
 		err = l.withProjection(ctx, reviewSession, project)
 	} else {
 		err = l.with(ctx, func() error { return project(nil) })
@@ -602,7 +632,7 @@ func (j *Journal) nativeBindingFromProof(ctx context.Context, l *NativeLease, ev
 // isPrivateReviewTurn recognizes only the durable exact native review RPC
 // result, never a thread prefix or current surface selection.
 func (j *Journal) isPrivateReviewTurn(ctx context.Context, l *NativeLease, event agentproto.Event) (bool, error) {
-	if !isNativeTurnProjection(event.Kind) || event.NativeBinding == nil || event.ThreadID == "" || event.TurnID == "" {
+	if (!isNativeTurnProjection(event.Kind) && event.Kind != agentproto.EventItemDelta && event.Kind != agentproto.EventRequestStarted && event.Kind != agentproto.EventRequestResolved) || event.NativeBinding == nil || event.ThreadID == "" || event.TurnID == "" {
 		return false, nil
 	}
 	root, err := j.reviewRootTurn(ctx, l, event)

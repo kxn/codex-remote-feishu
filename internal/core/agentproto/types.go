@@ -451,8 +451,11 @@ type RequestQuestion struct {
 }
 
 type PermissionsRequestPrompt struct {
-	Reason      string           `json:"reason,omitempty"`
-	Permissions []map[string]any `json:"permissions,omitempty"`
+	ProfileInvalid bool             `json:"profileInvalid,omitempty"`
+	ProfilePresent bool             `json:"profilePresent,omitempty"`
+	Profile        map[string]any   `json:"profile,omitempty"`
+	Reason         string           `json:"reason,omitempty"`
+	Permissions    []map[string]any `json:"permissions,omitempty"`
 }
 
 type MCPElicitationPrompt struct {
@@ -473,18 +476,20 @@ type ToolCallbackPrompt struct {
 }
 
 type RequestPrompt struct {
-	Type           RequestType               `json:"type,omitempty"`
-	RawType        string                    `json:"rawType,omitempty"`
-	Title          string                    `json:"title,omitempty"`
-	Body           string                    `json:"body,omitempty"`
-	ItemID         string                    `json:"itemId,omitempty"`
-	AcceptLabel    string                    `json:"acceptLabel,omitempty"`
-	DeclineLabel   string                    `json:"declineLabel,omitempty"`
-	Options        []RequestOption           `json:"options,omitempty"`
-	Questions      []RequestQuestion         `json:"questions,omitempty"`
-	Permissions    *PermissionsRequestPrompt `json:"permissions,omitempty"`
-	MCPElicitation *MCPElicitationPrompt     `json:"mcpElicitation,omitempty"`
-	ToolCallback   *ToolCallbackPrompt       `json:"toolCallback,omitempty"`
+	IsBlocking       *bool                     `json:"isBlocking,omitempty"`
+	AutoResolutionMs *int64                    `json:"autoResolutionMs,omitempty"`
+	Type             RequestType               `json:"type,omitempty"`
+	RawType          string                    `json:"rawType,omitempty"`
+	Title            string                    `json:"title,omitempty"`
+	Body             string                    `json:"body,omitempty"`
+	ItemID           string                    `json:"itemId,omitempty"`
+	AcceptLabel      string                    `json:"acceptLabel,omitempty"`
+	DeclineLabel     string                    `json:"declineLabel,omitempty"`
+	Options          []RequestOption           `json:"options,omitempty"`
+	Questions        []RequestQuestion         `json:"questions,omitempty"`
+	Permissions      *PermissionsRequestPrompt `json:"permissions,omitempty"`
+	MCPElicitation   *MCPElicitationPrompt     `json:"mcpElicitation,omitempty"`
+	ToolCallback     *ToolCallbackPrompt       `json:"toolCallback,omitempty"`
 }
 
 type MCPToolCallProgress struct {

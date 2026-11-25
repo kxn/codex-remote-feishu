@@ -241,7 +241,16 @@ func (t *Translator) translateMCPOAuthLogin(command agentproto.Command) ([][]byt
 	flowKey := mcpOAuthLoginFlowKey(serverName, threadID)
 	if requestID, exists := t.pendingMCPOAuthLoginKeys[flowKey]; exists {
 		pending := t.pendingMCPOAuthLogins[requestID]
-		return nil, fmt.Errorf("mcp oauth login already pending for server %q thread %q command %s", serverName, threadID, pending.CommandID)
+		surface := strings.TrimSpace(choose(command.Origin.Surface, command.Origin.ChatID))
+		if pending.AuthorizationURL == "" || pending.CommandID == command.CommandID || surface == "" || pending.Initiator.SurfaceSessionID != surface {
+			return nil, fmt.Errorf("mcp oauth login already pending for server %q thread %q command %s", serverName, threadID, pending.CommandID)
+		}
+		// An explicit new command replaces an already-issued URL. Keep the
+		// old ID rejected so its eventual notification cannot complete retry.
+		if pending.LoginID != "" {
+			t.completedMCPOAuthLoginIDs[pending.LoginID] = true
+		}
+		t.clearPendingMCPOAuthLogin(requestID, pending)
 	}
 	requestID := t.NextRequest("mcp-oauth-login")
 	params := map[string]any{

@@ -371,6 +371,8 @@ func snapshotGateText(summary control.GateSummary) string {
 	switch summary.Kind {
 	case "request_capture":
 		return "正在等待一条文字处理意见；下一条文本不会发到当前会话"
+	case "nonblocking_request":
+		return "有补充问题待回答，也可以继续发消息。"
 	case "pending_request":
 		countText := "有 1 个待处理请求"
 		if summary.PendingRequestCount > 1 {

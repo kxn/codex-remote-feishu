@@ -68,6 +68,10 @@ func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt
 		definition.Sections = buildPermissionsRequestSections(backend, prompt, metadata)
 		definition.Options = buildPermissionsRequestOptions()
 		definition.HintText = "你可以选择仅授权当前这一次，或在当前会话内持续授权。"
+		if backend == agentproto.BackendCodex && (prompt == nil || prompt.Permissions == nil || (!prompt.Permissions.ProfilePresent && prompt.Permissions.Profile == nil) || prompt.Permissions.ProfileInvalid || !validCodexPermissionProfile(prompt.Permissions.Profile)) {
+			definition.Options = []state.RequestPromptOptionRecord{{OptionID: "decline", Label: "拒绝", Style: "default"}}
+			definition.HintText = "无法确认完整权限范围，请拒绝本次请求后重试。"
+		}
 	case control.RequestSemanticMCPServerElicitationForm:
 		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(xutil.MetadataString(metadata, "title"), promptTitle(prompt)), "需要处理 MCP 请求", "需要处理请求")
 		definition.Sections = buildMCPElicitationSections(backend, prompt, metadata)

@@ -20,7 +20,7 @@
 - 团队历史归属的完整扫描仅由显式历史/会话选择启动；普通输入、原生终态和 idle deadline 不读取全部团队历史。现有连接与恢复按 executionowner 的精确会话注册校验。历史暂不可读时保留当前私人对话，明确拒绝未经验证的历史选择，不把未知历史冒充个人会话。
 - 私人 Codex 未显式选模型时继承原生配置；固定 API 模型及用户既有选择保持优先。没有计划覆盖时不发送 collaborationMode；计划覆盖的必填 model 取精确 thread/start、resume 或 fork 响应。缺字段是具体协议失败，不能伪造 native 接受或猜默认模型。
 - 重启恢复的 request hold 不仅凭旧 request.started 重新启用。认证 wrapper 提供只读、版本化 pending inventory；daemon 核验精确 owner/代次、原事件 hash/水位及其后没有解决/答复证据，再恢复原请求。未决 response intent/dispatch 不重发、不重复启用按钮。清单暂不完整按已有 tick 最快每 5 秒只读重查，不重跑任务；旧 wrapper 缺能力时 `/status` 说明更新运行器以及可用的 `/detach` 出口。
-- journal 的 schema 9 迁移在同一事务中从冻结事件和原 display chain 回填可证发布顺序，保留 ID、内容、unknown 状态和实际收据。当前 schema 10 增加 control-action JSON 来源格式的 reader fence，v9→v10 不重写既有 checkpoint、原始输入或凭据；旧 v9 二进制在打开时拒绝，不能静默读掉新来源。没有操作/flow/context/display 证据的旧独立提示无法补造因果关系；保留它的原始证据，不借当前 UI 猜测或让它挡住独立的新工作。
+- journal 的 schema 9 迁移在同一事务中从冻结事件和原 display chain 回填可证发布顺序，保留 ID、内容、unknown 状态和实际收据。schema 10 增加 control-action JSON 来源格式的 reader fence，v9→v10 不重写既有 checkpoint、原始输入或凭据；schema 11 再为只读观察超时的本地收据语义设置 reader fence，v10→v11 保留既有内容。旧读者在打开超出其支持版本的数据库时拒绝，不能静默忽略新来源或本地观察结算。没有操作/flow/context/display 证据的旧独立提示无法补造因果关系；保留它的原始证据，不借当前 UI 猜测或让它挡住独立的新工作。
 
 ### 私人连续操作与停止中的载体
 
@@ -30,12 +30,28 @@
 - 有效的目录与会话归属不会因为后台载体暂时缺失而消失。已接收输入等待已有退出核验和替换流程，不进入旧 core 的 `not_attached` 消费分支；原结果未知则保留该会话的未知记录，显式退出并新建仍可工作。仅查看 `/list` 和编辑选择器不受原生替换等待阻止；确认切换仍遵守原队列和请求边界。
 - 私人 kill 效果在同一投影提交边界把对应实例排除出可接管候选；停止中投影由现有持久 stop intent 派生，重启时从未应用效果恢复，不建立第二份持久实例状态。旧实例收到退出请求后不能再次被同目录选择复用，迟到的退出结果只能移除旧实例。该规则同时覆盖显式接入和公共工作区候选，不只覆盖 `/list` 卡。
 - `draining` 且 wrapper 已退出时，可以核对物理退出，不能伪造原生 inspection。证明包括同宿主、冻结 PID 与启动身份、原生子进程组／job 已完整且为空、排他 journal 写锁、精确 launch hash、完整数据库及原生帧水位；registry 在退休写事务中再次验证。Linux 历史 scope 的裸 start ticks 必须结合冻结 carrier 的 boot identity，不能与带 boot 的进程身份直接比较而误报退出。
-- 私人宿主库使用 `user_version=2` 记录独立物理退出证明。升级事务只修改版本并确保既有表存在，原 carrier JSON、credential hash 和凭据文件不重写；v1 二进制拒绝此版本，避免旧 reader 静默丢弃新证明字段。私人聊天 journal 当前为 schema 10，两者不是同一个数据库。
+- 私人宿主库使用 `user_version=2` 记录独立物理退出证明。升级事务只修改版本并确保既有表存在，原 carrier JSON、credential hash 和凭据文件不重写；v1 二进制拒绝此版本，避免旧 reader 静默丢弃新证明字段。私人聊天 journal 当前为 schema 11，两者不是同一个数据库。
 - 物理退休仅说明旧载体不再写入，不结算旧命令。真实终态先独立投影；旧业务仍未决时不自动恢复该会话或重发输入。用户退出后，旧队列与未知执行保存在 detached 记录，新会话独立执行。后台只推进已有退出意图及清理，不预先为闲置用户启动替代载体；实际输入或明确选择触发准备。
 - 新会话首轮在原生接受后由 `new_thread_ready` 变为已选中原生线程。自动继续只在同一实例、`follow_execution_thread` 且当前选中线程等于本次执行线程时，把该冻结启动计划转成同线程的 `resume_existing`；否则沿原导航校验取消。不能发出“等待自动继续”后因自身正常线程落实而马上清除，也不能再次 `thread/start` 创建另一个会话。AutoWhip 仍按原开关、真实终态和计时策略推进。
 - 私人 worker 停止信号只结束后续准入，不取消已开始的 pass 项目或外部效果的收据结算。pass、逐 owner deadline、逐 native 事件和效果领取各自检查同一停止信号；已经进入的操作沿原有 I/O／数据库期限完成核心投影与持久提交。外层关闭期限只约束等待，未排空时返回错误并保留存储，不把取消调度造成的 `context canceled` 变成内存已变、checkpoint 未提交的全应用 poison。
 - `beginProjection` 在已有 reference gate／Processor 锁和精确 authority 之后检查原调用是否已经取消。尚未开始时不修改状态；开始后仅本地恢复、reduce、freeze 和 checkpoint 提交脱离调用方取消。纯读取及 authority／网络等待保留原期限，首次懒恢复单独保护。执行归属的普通／scoped lease 与维护本地回调在获取期间可取消，回调开始后 registry 写栅栏和 scoped Bind／Reserve 持续到提交；不能让外层 `database/sql` 自动回滚提前释放该锁。SQLite 租约获取用独占连接上的可取消重试替代不可中断 busy 等待，进入回调及归还连接前均恢复原 5000ms 超时。
 - 原生命令失败事件在公共事件封装中携带精确 `CommandID`。MCP OAuth 的拒绝／空链接与 compact 的 resume 失败必须经对应原生 RequestID 和已持久帧证明结算该命令，不能只有可见错误却让控制 lane 永久处于 sending。缺少关联的旧证据不猜补成功，也不重放已知可能发送的操作。
+
+### 2026-11-25 Codex 升级协议与子功能时序复核
+
+- 协议依据取实际受管 Codex 0.171.0 二进制导出的 app-server schema 和对应实现，不以 PATH 中另一版本或旧模拟消息为事实。产品的独立审阅继续使用独立临时线程加原生 inline review；不重新启用已被原生拒绝的 detached 参数。
+- 附加权限请求的 `permissions` 是完整对象，不能按旧数组读取或返回。请求记录保留原对象及对象是否存在；允许只返回已验证、已展示的原申请范围，拒绝返回空对象，持续授权仅由明确的会话授权选择产生。缺失、无效或未知范围仅提供拒绝，不能猜补权限。审阅自动授权仍受既有 full-access 设置约束，子 turn 只有精确持久 root proof 才能归入原审阅，不按线程或到达时间猜测。
+- `tool/requestUserInput` 的显式 `isBlocking=false` 只解除该类补充问题的输入门禁；仍保留原问题和答复入口。其他审批、MCP、旧版本缺字段的问题继续阻塞。当前原生 turn 未结束时，新输入沿原私人队列等待，不把非阻塞问题解释为并行启动第二个 turn。`autoResolutionMs` 保留原值，不把已废弃字段转换成客户端自动答复或自动取消。
+- 新会话首轮收到已认证、已接受且与当前 owner、实例、队首输入和运行 turn 完整匹配的原生 RPC 请求时，沿已有 bootstrap 提交路径落实真实线程；不能让已经出现问题的会话仍停留在 `new_thread_ready` 并拒绝排队输入。尚无创建／接受证明、其他线程或迟到事件不能提交当前导航。问题是否阻塞与线程是否真实建立分别判断。
+- `thread/read` 的 JSON-RPC 错误、身份不符和无效结果按原 RequestID／CommandID 结算为具体失败；不得构造空历史成功。用户重试产生新查询，更新仍有效的原历史卡；失败不取消无关对话。当前 `includeTurns` 仍受原生支持，其弃用提示不等于本版本必然失败。
+- MCP OAuth 的链接响应与完成通知只按同一原生进程内的精确 `loginId`、服务器及可选线程核对。完成通知可先于响应，但只作有界未分配事实，响应证明身份后才结算。明确重试替代同一 surface 已生成链接的旧尝试；旧尝试的迟到结果不能完成新尝试。缺少可核对 loginId 时保留可用链接，明确结果未确认，并提供刷新服务状态／重试；普通对话不受登录等待阻塞。原生没有取消 RPC，不把清理本地等待描述为取消服务端授权。
+- Goal 恢复期间的 `resume_pending` 仍可接收下一条私人输入并沿原队列等待。精确 `goal/set(active)` 确认清理本次 lease 后，必须重新推进同一 surface 的队列，让它按当前 active Goal 再走正常 pause／idle probe；不能只清 lease 而遗留无人唤醒的队列，也不能绕过 probe 直接发送。较旧或其他命令的确认不得唤醒别的 lease／surface。
+- Goal 暂停／恢复返回错误、空快照或不确定状态时，不能仅清 lease 遗留队列，也不能把它当作 idle 观察超时。原 lease 的 `verification_required`／`verification_get_pending` 保留同一队列；显式 `/goal retry` 先读最新 Goal，仍 active 时提示本人明确 `/goal pause`，确认 paused／终结后才再发 fresh idle probe。该读取超时仍回到 verification_required，失去归属转 ownership_lost；重启沿精确命令和原观察期限恢复，不重发未知写。外部 complete／blocked 等状态禁止自动恢复为 active。没有待处理输入时的自动恢复失败只结束自身恢复并说明结果未确认，不能虚称存在排队输入。
+- MCP 的 `openai/userVerification` 需要设备证明，当前飞书端没有原生设备证明客户端；明确说明不支持并保留拒绝／取消，不把普通 JSON 表单当作已完成设备认证，也不宣告相应 capability。
+- 私人原生命令按实际作用域统一区分宿主操作、历史只读查询、会话修改和精确运行控制。压缩和 Goal 修改与普通 prompt 一样，在发送前核对所选会话当前归属；已知未发送只结算本命令并显示具体原因，不能留下 sending 或取消无关 active prompt。历史只读查询不因一次查看永久占有未受管会话。MCP OAuth 指定线程时读取该线程实际配置，同样使用只读归属边界；未指定线程时仍是全局登录。链接 RPC 成功或失败后结束该次读取，不为后续浏览器授权长期占有线程。
+- 历史查询的“检查归属—网络发送—应用结果”不能依靠一次预检。私人 journal 的 `private_read_observations` 与 dispatch 准备在同一事务保存精确截止事实，避免跨库崩溃丢失期限；execution-owner registry schema 2 使用该原值保存按 dispatch ID 的两分钟独立只读意图；绑定、预留和转移在同一 registry 事务核对它，网络发送不持 registry 写锁。结果应用在 Processor 锁内再次取得 registry 栅栏：若权限已经变化，仅结算本地查询失败并消费该结果，保留原生成功／失败事实，不发布别的工作资料，也不让事件队列永久堵住。明确未发送和已结算结果只释放自己的读意图，不删除写预留或其他读操作；崩溃后的重试不能延长原意图或盲目重发。
+- 只读观察到期通过精确 effect／dispatch／command 的本地收据结算对应等待，沿原有 Processor/checkpoint 提交并持久去重；它确认“等待已到期”，不确认原生命令失败或未发送，不改写原生 sending／unknown 事实。新重试产生独立查询；旧结果仍登记与核查，但不能覆盖新查询、重新打开旧等待或自动重发。全局 OAuth 只记录 owner／carrier 的观察截止，不创建虚假会话租约；超时不取消原生授权，不承诺立即重试，普通聊天与显式退出仍可用。Goal probe 超时保留队列，`/goal retry` 发全新只读观察，只有新的精确 idle 证明才继续；真实 ownership_lost 不能由此放行。新的认证连接仍可沿原自动恢复流程产生独立只读查询，同连接 hello 重投去重，不能把“原 dispatch 不重放”扩大成阻断正常恢复。私人 journal 10→11 为本地收据与截止事实设置 reader fence，不新建第二份执行或所有权状态。迁移中的既有未决只读 dispatch 获得自迁移起的观察期限，不伪造原发送时间。
+- registry 1→2 迁移保留既有 carrier、会话、写预留、转移及停止证明；schema 1 读者必须拒绝打开 schema 2，不能绕过新的读意图规则。该版本独立于私人 journal schema 11 和私人 carrier schema 2。
 
 ### 执行归属
 

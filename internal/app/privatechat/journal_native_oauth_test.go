@@ -13,7 +13,7 @@ import (
 
 func TestNativeOAuthTranslatorRequiresPersistedRequestProof(t *testing.T) {
 	for _, tc := range []struct{ name, response, outcome string }{
-		{"accepted", `{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent"}}`, "accepted"},
+		{"accepted", `{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent","loginId":"login-1"}}`, "accepted"},
 		{"rejected", `{"id":"relay-mcp-oauth-login-0","error":{"message":"OAuth is unavailable"}}`, "failed"},
 		{"empty URL", `{"id":"relay-mcp-oauth-login-0","result":{}}`, "failed"},
 	} {

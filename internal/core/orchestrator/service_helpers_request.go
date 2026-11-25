@@ -379,6 +379,26 @@ func activePendingRequest(surface *state.SurfaceConsoleRecord) *state.RequestPro
 	return pendingRequestRecord(surface, activePendingRequestID(surface))
 }
 
+// blockingPendingRequest leaves nonblocking user-input requests available for
+// response while allowing ordinary work to continue.
+func blockingPendingRequest(surface *state.SurfaceConsoleRecord) *state.RequestPromptRecord {
+	if surface == nil {
+		return nil
+	}
+	ensurePendingRequestOrder(surface)
+	for _, id := range surface.PendingRequestOrder {
+		request := surface.PendingRequests[id]
+		if request == nil {
+			continue
+		}
+		if request.Prompt != nil && request.Prompt.Type == agentproto.RequestTypeRequestUserInput && request.Prompt.IsBlocking != nil && !*request.Prompt.IsBlocking {
+			continue
+		}
+		return request
+	}
+	return nil
+}
+
 func pendingRequestIsActive(surface *state.SurfaceConsoleRecord, requestID string) bool {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {

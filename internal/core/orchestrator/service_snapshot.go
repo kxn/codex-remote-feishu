@@ -193,8 +193,16 @@ func (s *Service) snapshotGateSummary(surface *state.SurfaceConsoleRecord) contr
 		count++
 	}
 	if count != 0 {
-		summary := control.GateSummary{Kind: "pending_request", PendingRequestCount: count}
-		if active := activePendingRequest(surface); active != nil {
+		kind := "pending_request"
+		if blockingPendingRequest(surface) == nil {
+			kind = "nonblocking_request"
+		}
+		summary := control.GateSummary{Kind: kind, PendingRequestCount: count}
+		active := blockingPendingRequest(surface)
+		if active == nil {
+			active = activePendingRequest(surface)
+		}
+		if active != nil {
 			summary.PendingRequestLifecycle = normalizeRequestLifecycleState(active.LifecycleState)
 			summary.PendingRequestVisibility = normalizeRequestVisibilityState(active.VisibilityState)
 		}

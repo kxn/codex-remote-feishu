@@ -430,7 +430,7 @@ func TestObserveServerRequestResolvedSupportsLegacyMethod(t *testing.T) {
 func TestObserveServerPermissionsRequestApprovalProducesDedicatedRequestType(t *testing.T) {
 	tr := NewTranslator("inst-1")
 
-	result, err := tr.ObserveServer([]byte(`{"id":"req-perm-1","method":"item/permissions/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","reason":"Need docs scope","permissions":[{"name":"docs.read","title":"Read docs"}]}}`))
+	result, err := tr.ObserveServer([]byte(`{"id":"req-perm-1","method":"item/permissions/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","cwd":"/workspace","startedAtMs":1710000000000,"reason":"Need workspace access","permissions":{"fileSystem":{"read":["/workspace"]},"network":{"enabled":true}}}}`))
 	if err != nil {
 		t.Fatalf("observe permissions request approval: %v", err)
 	}
@@ -446,6 +446,14 @@ func TestObserveServerPermissionsRequestApprovalProducesDedicatedRequestType(t *
 	}
 	if event.RequestPrompt == nil || event.RequestPrompt.Type != agentproto.RequestTypePermissionsRequestApproval {
 		t.Fatalf("expected typed permissions request prompt, got %#v", event.RequestPrompt)
+	}
+	permissions := event.RequestPrompt.Permissions
+	if permissions == nil || !permissions.ProfilePresent || permissions.ProfileInvalid {
+		t.Fatalf("expected valid native permission profile, got %#v", permissions)
+	}
+	actual, err := json.Marshal(permissions.Profile)
+	if err != nil || string(actual) != `{"fileSystem":{"read":["/workspace"]},"network":{"enabled":true}}` {
+		t.Fatalf("native permission profile not preserved: %s, %v", actual, err)
 	}
 }
 

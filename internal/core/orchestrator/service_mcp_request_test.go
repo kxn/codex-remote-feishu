@@ -24,10 +24,9 @@ func TestPermissionsRequestPromptBecomesRenderableCard(t *testing.T) {
 			Type:  agentproto.RequestTypePermissionsRequestApproval,
 			Title: "需要授予权限",
 			Permissions: &agentproto.PermissionsRequestPrompt{
-				Reason: "需要访问 docs.read",
-				Permissions: []map[string]any{
-					{"name": "docs.read", "title": "Read docs"},
-				},
+				Reason:         "需要访问 docs.read",
+				ProfilePresent: true,
+				Profile:        map[string]any{"network": map[string]any{"enabled": true}},
 			},
 		},
 		Metadata: map[string]any{
@@ -62,9 +61,8 @@ func TestRespondPermissionsRequestBuildsStructuredGrantPayload(t *testing.T) {
 		RequestPrompt: &agentproto.RequestPrompt{
 			Type: agentproto.RequestTypePermissionsRequestApproval,
 			Permissions: &agentproto.PermissionsRequestPrompt{
-				Permissions: []map[string]any{
-					{"name": "docs.read", "title": "Read docs"},
-				},
+				ProfilePresent: true,
+				Profile:        map[string]any{"network": map[string]any{"enabled": true}},
 			},
 		},
 		Metadata: map[string]any{"requestType": "permissions_request_approval"},
@@ -88,8 +86,8 @@ func TestRespondPermissionsRequestBuildsStructuredGrantPayload(t *testing.T) {
 	if response["scope"] != "session" {
 		t.Fatalf("expected session-scoped permission grant, got %#v", response)
 	}
-	permissions, _ := response["permissions"].([]map[string]any)
-	if len(permissions) != 1 || permissions[0]["name"] != "docs.read" {
+	permissions, _ := response["permissions"].(map[string]any)
+	if network, _ := permissions["network"].(map[string]any); network["enabled"] != true {
 		t.Fatalf("unexpected granted permissions payload: %#v", response)
 	}
 }

@@ -17,9 +17,8 @@ import (
 var ErrJournalConflict = errors.New("private journal conflict")
 var ErrJournalState = errors.New("invalid private journal state")
 
-// Schema 10 fences readers that cannot validate control-action prompt sources.
-// The v9 upgrade preserves existing records; the new contract lives in JSON.
-const privateJournalSchemaVersion = 10
+// Schema 11 adds bounded native-read observation receipts and deadlines.
+const privateJournalSchemaVersion = 11
 
 // Ingress is an already authenticated private event. Payload and source IDs
 // are immutable, including attachment references. Lane is "input" or "control".
@@ -166,10 +165,17 @@ func OpenJournal(path string) (*Journal, error) {
 		originMigration += `ALTER TABLE private_applied ADD COLUMN route_discard INTEGER NOT NULL DEFAULT 0;`
 	}
 	versionPragma := fmt.Sprintf("PRAGMA user_version=%d;", privateJournalSchemaVersion)
+	readObservationMigration := ""
+	if version > 0 && version < 11 {
+		// Existing unknown dispatches get a new observation window starting at
+		// migration, never a claim about when the original native send occurred.
+		readObservationMigration = `INSERT INTO private_read_observations(dispatch_id,expires_ns) SELECT d.id,(CAST(strftime('%s','now') AS INTEGER)+120)*1000000000 FROM dispatch d JOIN native_commands n ON n.dispatch_id=d.id WHERE d.state IN ('prepared','sending','sent','unknown') AND ((d.session<>'' AND json_extract(n.payload,'$.kind') IN ('thread.read','thread.history.read','thread.goal.get')) OR json_extract(n.payload,'$.kind')='mcp.oauth_login.start') ON CONFLICT DO NOTHING;`
+	}
 	if _, err = db.Exec(`PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE;
  CREATE TABLE IF NOT EXISTS ingress (seq INTEGER PRIMARY KEY AUTOINCREMENT, gateway TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, event_id TEXT NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('input','control','inspect')), payload BLOB NOT NULL, sources BLOB NOT NULL, origin_router TEXT NOT NULL DEFAULT '', origin_seq INTEGER NOT NULL DEFAULT 0, UNIQUE(tenant,app_id,event_id));
  CREATE TABLE IF NOT EXISTS dispatch (id TEXT PRIMARY KEY, gateway TEXT NOT NULL, tenant TEXT NOT NULL, app_id TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('input','control','inspect')), mode TEXT NOT NULL, backend TEXT NOT NULL, namespace TEXT NOT NULL, session TEXT NOT NULL, carrier TEXT NOT NULL, carrier_generation INTEGER NOT NULL, command_id TEXT NOT NULL UNIQUE, state TEXT NOT NULL CHECK(state IN ('prepared','sending','sent','resolved','accepted','unknown','failed')), evidence BLOB, request_id TEXT NOT NULL DEFAULT '', event_sequence INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS dispatch_input (dispatch_id TEXT NOT NULL REFERENCES dispatch(id), seq INTEGER NOT NULL REFERENCES ingress(seq), PRIMARY KEY(dispatch_id,seq));
+ CREATE TABLE IF NOT EXISTS private_read_observations (dispatch_id TEXT PRIMARY KEY REFERENCES dispatch(id), expires_ns INTEGER NOT NULL CHECK(expires_ns>0));
  CREATE TABLE IF NOT EXISTS private_checkpoint (tenant TEXT NOT NULL, app_id TEXT NOT NULL, gateway TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, revision INTEGER NOT NULL, cursor INTEGER NOT NULL, data BLOB NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(tenant,app_id,gateway,surface,chat,user_id,generation));
  CREATE TABLE IF NOT EXISTS private_effect (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, app_id TEXT NOT NULL, gateway TEXT NOT NULL, surface TEXT NOT NULL, chat TEXT NOT NULL, user_id TEXT NOT NULL, generation INTEGER NOT NULL, revision INTEGER NOT NULL, ordinal INTEGER NOT NULL, lane TEXT NOT NULL CHECK(lane IN ('interactive','background')), body BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','sending','confirmed','unknown')), receipt BLOB, UNIQUE(tenant,app_id,gateway,surface,chat,user_id,generation,revision,ordinal));
  CREATE TABLE IF NOT EXISTS private_applied (seq INTEGER PRIMARY KEY REFERENCES ingress(seq), revision INTEGER NOT NULL, canceled_by INTEGER REFERENCES ingress(seq), route_discard INTEGER NOT NULL DEFAULT 0);
@@ -191,7 +197,7 @@ func OpenJournal(path string) (*Journal, error) {
  CREATE TABLE IF NOT EXISTS native_command_receipts (command_id TEXT PRIMARY KEY REFERENCES native_commands(command_id), incarnation TEXT NOT NULL, payload BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS native_query_proofs (waiter_id TEXT PRIMARY KEY REFERENCES native_commands(command_id), source_id TEXT NOT NULL, source_hash TEXT NOT NULL, request_id TEXT NOT NULL, payload BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS native_events (incarnation TEXT NOT NULL, sequence INTEGER NOT NULL, payload_hash TEXT NOT NULL, command_id TEXT NOT NULL, payload BLOB NOT NULL, applied INTEGER NOT NULL DEFAULT 0, applied_revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(incarnation,sequence));
- ` + appliedMigration + originMigration + ` UPDATE dispatch SET state='unknown' WHERE state='sending'; UPDATE private_effect SET state='unknown' WHERE state='sending'; ` + versionPragma); err != nil {
+ ` + appliedMigration + originMigration + readObservationMigration + ` UPDATE dispatch SET state='unknown' WHERE state='sending'; UPDATE private_effect SET state='unknown' WHERE state='sending'; ` + versionPragma); err != nil {
 		_, _ = db.Exec(`ROLLBACK`)
 		j.Close()
 		return nil, err

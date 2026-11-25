@@ -66,6 +66,9 @@ func nativeEventOutcome(command agentproto.Command, event agentproto.Event) (out
 			}
 		}
 	case agentproto.CommandThreadHistoryRead:
+		if command.NativeBinding.Owner.Backend == agentproto.BackendCodex && event.Kind == agentproto.EventThreadHistoryRead && event.ThreadID != "" && event.ThreadID == command.Target.ThreadID && event.Status == "failed" && event.ErrorMessage != "" && event.ThreadHistory == nil {
+			return "failed", "thread/read", true
+		}
 		if command.NativeBinding.Owner.Backend == agentproto.BackendOpenCode && event.Kind == agentproto.EventThreadHistoryRead && event.ThreadHistory != nil && event.ThreadID == command.Target.ThreadID && event.ThreadID != "" {
 			return "accepted", "session/load", true
 		}
