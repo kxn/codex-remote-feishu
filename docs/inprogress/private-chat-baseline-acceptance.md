@@ -234,7 +234,7 @@
 
 ## 本轮整体验收
 
-当前状态：下述连续旅程、最终全仓普通测试、相关组件整包 race、真实 Codex 探针和 Windows 构建均已通过；部署与现场状态核验仍在进行中，尚不写成上线完成。
+当前状态：下述连续旅程、最终全仓普通测试、相关组件整包 race、真实 Codex 探针和 Windows 构建均已通过；修复代码已部署，实际运行身份及现场恢复状态已核对。真实飞书客户端视觉效果不由受控平台测试替代。
 
 ### 根因和统一修正
 
@@ -291,4 +291,15 @@
 
 - 最终相关组件整包 race：`go test -race ./internal/app/daemon/... ./internal/app/privatechat ./internal/core/orchestrator ./internal/app/wrapper/... ./internal/adapter/codex ./internal/adapter/feishu -count=1` 通过，41 个有测试包，daemon 包 443.593 秒，日志 `/tmp/private-final-race-v3.log`。全仓普通测试共 122 个有测试包，无失败。
 
-代码已具备部署条件；实际安装身份、恢复状态和空闲 CPU 在部署完成后补记。
+### 已部署的现场证据
+
+2026-11-25 按 `safe-push` 和 `local-upgrade` 仓库流程发布代码提交 `d516d37eeb0e18e8c5d79f414715ec8e2fdb413b`，目标为已核实的单一 `codex-remote.service`／`stable` 安装。升级事务为 `committed`，安装版本 `local-e6a8639bbd24`。实际新 PID `2174308`；`/proc/2174308/exe` 与安装二进制的 SHA-256 同为 `e6a8639bbd2413449112d7cdb0576dd29f72c076f20fbc6e520d3e1f8d650046`，不是只核对构建文件。
+
+- `/healthz` 返回 `ok`；运行时 authority 为 `separate_applications`，私人读取无错误，六个 gateway 均为 `connected`，团队运行时可用。
+- 当前用户的原工作目标保留为 `new_thread_ready`、`DispatchMode=normal`，无 pending launch、无 recovery hold。导致本次失败的旧 PID `1130575` 对应载体已由新代码完成物理证明并进入 `retired`；没有手工改数据库或构造结束事件。
+- 一条更早的旧 PID `310905` 载体缺少完整原生 inventory，继续隔离保留，不冒充已证明退休；它不占用当前工作目标，也不构成该目标的 recovery hold。
+- 宿主库实际为 v2，私人 journal 保持 v9；配置文件 SHA 与升级前一致。升级前保留了 11 个数据库各自的 SQLite 一致快照及配置／安装状态，备份定位文件 `/tmp/private-continuity-predeploy-location.json`；不将这些独立数据库快照声称为跨库原子快照。
+- 部署前原进程空闲 CPU 为单核 `1.902%`（144.05 秒）；新进程为 `1.928%`（52.92 秒）。测量来自实际服务 `/proc`，新进程日志未出现 poison、panic、fatal 或启动失败。
+- 升级构建产生的两份 shim 嵌入产物已只恢复其生成改动；代码树、源提交和运行中的二进制分别核对，不把构建目录副作用混入业务提交。
+
+现场证据文件为 `/tmp/private-continuity-runtime-status.json`、`/tmp/private-continuity-upgrade.log`、`/tmp/private-continuity-cpu-baseline.json`、`/tmp/private-continuity-cpu-deployed.json`。以上未发送伪造的真人业务消息到实际飞书会话；用户连续操作的验证来自前述真实 SDK 接口与受控平台／原生端，真实 Codex 探针另外执行。
