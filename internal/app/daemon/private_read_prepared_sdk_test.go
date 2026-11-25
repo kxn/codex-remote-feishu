@@ -4,11 +4,61 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
+
+// Saturate only newly scheduled work. Existing jobs keep their captured slot
+// channels and can finish while SDK ingress continues to be reduced.
+func blockPreparedFixtureEffects(r *privateWorkRunner) func() {
+	r.effectMu.Lock()
+	if r.running == nil {
+		r.running = make(map[string]struct{})
+		r.normalSlots = make(chan struct{}, 8)
+		r.controlSlots = make(chan struct{}, 4)
+		r.publishSlots = make(chan struct{}, 8)
+	}
+	normal, publish := r.normalSlots, r.publishSlots
+	blockedNormal, blockedPublish := make(chan struct{}, cap(normal)), make(chan struct{}, cap(publish))
+	for i := 0; i < cap(blockedNormal); i++ {
+		blockedNormal <- struct{}{}
+	}
+	for i := 0; i < cap(blockedPublish); i++ {
+		blockedPublish <- struct{}{}
+	}
+	r.normalSlots, r.publishSlots = blockedNormal, blockedPublish
+	r.effectMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() { r.effectMu.Lock(); r.normalSlots, r.publishSlots = normal, publish; r.effectMu.Unlock() })
+	}
+}
+
+func TestPreparedFixtureSlotSwapLetsOlderEffectFinish(t *testing.T) {
+	r := &privateWorkRunner{}
+	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	r.startEffect("old", "", false, false, func() { close(started); <-release; close(finished) })
+	<-started
+	restore := blockPreparedFixtureEffects(r)
+	defer restore()
+	called := make(chan struct{}, 1)
+	r.startEffect("blocked", "", false, false, func() { called <- struct{}{} })
+	close(release)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("older effect blocked by slot swap")
+	}
+	r.effectWG.Wait()
+	select {
+	case <-called:
+		t.Fatal("saturated slot admitted a new effect")
+	default:
+	}
+}
 
 // Freeze a real SDK-created effect at the private-commit/registry-commit crash
 // boundary, then let the ordinary worker recover it without a transport replay.
@@ -33,13 +83,8 @@ func TestPrivateSDKPreparedReadRecoversOrExpiresBeforeSend(t *testing.T) {
 			u.send(g.app, "message", "hi")
 			u.waitFinal(g.app, before, "message", "done-graph-a")
 			r := g.app.applications
-			r.runner.effectMu.Lock()
-			locked := true
-			defer func() {
-				if locked {
-					r.runner.effectMu.Unlock()
-				}
-			}()
+			restoreEffects := blockPreparedFixtureEffects(r.runner)
+			defer restoreEffects()
 			before = len(u.gateway.snapshotOperations())
 			u.send(g.app, "goal", "/goal")
 			db, err := sql.Open("sqlite", filepath.Join(g.app.headlessRuntime.Paths.StateDir, "private-chat.db"))
@@ -80,8 +125,7 @@ func TestPrivateSDKPreparedReadRecoversOrExpiresBeforeSend(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			r.runner.effectMu.Unlock()
-			locked = false
+			restoreEffects()
 			if expired {
 				u.waitVisible(g.app, before, "会话查询在发送前已超时")
 			} else {
