@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 )
@@ -25,7 +26,7 @@ func (r privateHostReceiptReducer) ReduceHostReceipt(app *privatechat.App, effec
 	if err = json.Unmarshal(raw, &receipt); err != nil {
 		return nil, err
 	}
-	if receipt.Version == 2 && receipt.Kind == "suppressed" && receipt.Reason == "stale_model_view" && receipt.EffectID == effect.ID && len(receipt.Results) == 0 {
+	if receipt.Version == 2 && receipt.Kind == "suppressed" && receipt.EffectID == effect.ID && len(receipt.Results) == 0 && (receipt.Reason == "stale_model_view" || receipt.Reason == "obsolete_recovery_input" && original.TimelineText != nil && original.TimelineText.Type == control.TimelineTextRecoveryInputWaiting) {
 		return nil, nil
 	}
 	if receipt.Version != 1 || receipt.EffectID != effect.ID || strings.TrimSpace(receipt.PlanHash) == "" {

@@ -583,6 +583,7 @@ type TimelineTextType string
 const (
 	TimelineTextSteerUserSupplement  TimelineTextType = "steer_user_supplement"
 	TimelineTextQueuedMessageStarted TimelineTextType = "queued_message_started"
+	TimelineTextRecoveryInputWaiting TimelineTextType = "recovery_input_waiting"
 )
 
 type TimelineText struct {

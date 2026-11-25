@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
@@ -82,7 +83,13 @@ func (p *Processor) applyHostReceipt(ctx context.Context, o Owner, generation in
 		if delivered.EffectID != id || delivered.PlanHash != publication.PlanHash || !bytes.Equal(delivered.Plan, publication.Plan) || delivered.CompletedAt.IsZero() {
 			return nil, ErrJournalConflict
 		}
-		if delivered.Version == 2 && delivered.Kind == "suppressed" && delivered.Reason == "stale_model_view" && len(delivered.Results) == 0 {
+		if delivered.Version == 2 && delivered.Kind == "suppressed" && (delivered.Reason == "stale_model_view" || delivered.Reason == "obsolete_recovery_input") && len(delivered.Results) == 0 {
+			if delivered.Reason == "obsolete_recovery_input" {
+				event, e := DecodeEffectEvent(effect.Body)
+				if e != nil || event.TimelineText == nil || event.TimelineText.Type != control.TimelineTextRecoveryInputWaiting {
+					return nil, ErrJournalConflict
+				}
+			}
 			for _, op := range publication.Operations {
 				if op.State != "prepared" {
 					return nil, ErrJournalConflict

@@ -19,6 +19,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -26,18 +27,24 @@ import (
 )
 
 func TestPrivateSDKInterruptedShutdownThenSameWorkspaceNewSession(t *testing.T) {
-	testPrivateSDKInterruptedShutdownRecovery(t, false, false, false)
+	testPrivateSDKInterruptedShutdownRecovery(t, false, false, false, false, false)
 }
 func TestPrivateSDKInterruptedShutdownThenDirectMessageRecovery(t *testing.T) {
-	testPrivateSDKInterruptedShutdownRecovery(t, true, false, false)
+	testPrivateSDKInterruptedShutdownRecovery(t, true, false, false, false, false)
 }
 func TestPrivateSDKInterruptedUnknownTurnCanDetachAndStartNew(t *testing.T) {
-	testPrivateSDKInterruptedShutdownRecovery(t, false, true, false)
+	testPrivateSDKInterruptedShutdownRecovery(t, false, true, false, false, false)
 }
 func TestPrivateSDKCleanShutdownThenDirectMessageRecovery(t *testing.T) {
-	testPrivateSDKInterruptedShutdownRecovery(t, true, false, true)
+	testPrivateSDKInterruptedShutdownRecovery(t, true, false, true, false, false)
 }
-func testPrivateSDKInterruptedShutdownRecovery(t *testing.T, direct, unknown, clean bool) {
+func TestPrivateSDKCleanRestartDelayedHelloExplainsPendingInput(t *testing.T) {
+	testPrivateSDKInterruptedShutdownRecovery(t, true, false, true, true, false)
+}
+func TestPrivateSDKCleanRestartCancelBeforeHello(t *testing.T) {
+	testPrivateSDKInterruptedShutdownRecovery(t, true, false, true, true, true)
+}
+func testPrivateSDKInterruptedShutdownRecovery(t *testing.T, direct, unknown, clean, delayHello, cancelRecovery bool, faults ...*recoveryNoticeUnknownGateway) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX controlled native")
 	}
@@ -72,7 +79,19 @@ func testPrivateSDKInterruptedShutdownRecovery(t *testing.T, direct, unknown, cl
 	var mu sync.Mutex
 	var children []*exec.Cmd
 	var waits sync.WaitGroup
+	helloEntered, helloRelease := make(chan struct{}), make(chan struct{})
+	var releaseHello sync.Once
+	defer releaseHello.Do(func() { close(helloRelease) })
 	startServer := func(app *App) *httptest.Server {
+		if delayHello && app != old {
+			var first sync.Once
+			app.relay = relayws.NewServer(relayws.ServerCallbacks{AuthorizeHello: app.authorizeApplicationHello, OnHello: func(c context.Context, m relayws.ConnectionMeta, h agentproto.Hello) {
+				first.Do(func() { close(helloEntered); <-helloRelease })
+				app.applicationHello(c, m, h)
+			}, OnEvents: app.applicationEvents, OnCommandAck: app.applicationAck, OnDisconnect: app.applicationDisconnect})
+			app.sendAgentCommand = app.relay.SendCommand
+			app.applications.native.relay = app.relay
+		}
 		app.relay.SetServerIdentity(agentproto.ServerIdentity{BinaryIdentity: agentproto.BinaryIdentity{Product: relayruntime.ProductName, Version: "fixture", BuildFingerprint: "fixture"}})
 		server := httptest.NewServer(app.relay)
 		url := "ws" + strings.TrimPrefix(server.URL, "http")
@@ -205,6 +224,10 @@ func testPrivateSDKInterruptedShutdownRecovery(t *testing.T, direct, unknown, cl
 		t.Fatal(err)
 	}
 	next := New("127.0.0.1:0", "127.0.0.1:0", gateway, agentproto.ServerIdentity{})
+	if len(faults) > 0 {
+		faults[0].messageIDAssigningGateway = gateway
+		next.gateway = faults[0]
+	}
 	if err = next.prepareApplicationCore(); err != nil {
 		t.Fatal(err)
 	}
@@ -240,10 +263,91 @@ func testPrivateSDKInterruptedShutdownRecovery(t *testing.T, direct, unknown, cl
 	}
 	n = len(gateway.snapshotOperations())
 	user.send(next, "after-ready-hi", "hi")
-	user.waitFinal(next, n, "after-ready-hi", "done")
+	if delayHello && len(faults) > 0 {
+		faults[0].wait(t, ctx)
+		select {
+		case <-helloEntered:
+		case <-ctx.Done():
+			t.Fatal("authenticated replacement hello not reached")
+		}
+		releaseHello.Do(func() { close(helloRelease) })
+		user.waitFinal(next, n, "after-ready-hi", "done")
+	} else if delayHello {
+		user.waitVisible(next, n, "后台正在恢复，已收到这条消息，恢复完成后会自动执行。")
+		matchedNotice := false
+		for _, op := range gateway.snapshotOperations()[n:] {
+			if op.ReplyToMessageID == "after-ready-hi" && strings.Contains(op.Text, "后台正在恢复，已收到这条消息，恢复完成后会自动执行。") {
+				matchedNotice = true
+			}
+		}
+		if !matchedNotice {
+			t.Fatal("recovery notice did not reply to the original input")
+		}
+		select {
+		case <-helloEntered:
+		case <-ctx.Done():
+			t.Fatal("authenticated replacement hello not reached")
+		}
+		if cancelRecovery {
+			beforeCancel := len(gateway.snapshotOperations())
+			user.send(next, "cancel-restoration", "/detach")
+			user.waitVisible(next, beforeCancel, "已退出当前会话")
+			releaseHello.Do(func() { close(helloRelease) })
+			user.chooseNew(next, "after-cancel")
+			n = len(gateway.snapshotOperations())
+			user.send(next, "after-cancel-hi", "after cancel")
+			user.waitFinal(next, n, "after-cancel-hi", "done")
+			data, e := os.ReadFile(trace)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if strings.Count(string(data), `"text":"hi"`) != 1 {
+				t.Fatalf("canceled input replayed: %s", data)
+			}
+			return
+		}
+		secondBefore := len(gateway.snapshotOperations())
+		user.send(next, "during-recovery-second", "second queued while restoring")
+		for {
+			visible := false
+			for _, op := range gateway.snapshotOperations()[secondBefore:] {
+				if op.Kind == feishu.OperationAddReaction && op.MessageID == "during-recovery-second" && op.EmojiType == "OneSecond" {
+					visible = true
+				}
+			}
+			if visible {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("second queued input not visible")
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+		releaseHello.Do(func() { close(helloRelease) })
+		user.waitFinal(next, n, "after-ready-hi", "done")
+		user.waitFinal(next, secondBefore, "during-recovery-second", "done")
+		secondStarted := false
+		for _, op := range gateway.snapshotOperations()[n:] {
+			if op.ReplyToMessageID == "after-ready-hi" && strings.Contains(op.Text, "开始执行这条排队消息") {
+				t.Fatal("first recovery input showed queued-start notice")
+			}
+			if op.ReplyToMessageID == "during-recovery-second" && strings.Contains(op.Text, "开始执行这条排队消息") {
+				secondStarted = true
+			}
+		}
+		if !secondStarted {
+			t.Fatal("second input lacked its queued-start notice")
+		}
+	} else {
+		user.waitFinal(next, n, "after-ready-hi", "done")
+	}
 	n = len(gateway.snapshotOperations())
 	user.send(next, "after-ready-next", "second turn")
 	user.waitFinal(next, n, "after-ready-next", "done")
+	if len(faults) > 0 {
+		faults[0].verify(t, next)
+	}
 	if clean {
 		data, e := os.ReadFile(trace)
 		if e != nil {
@@ -261,7 +365,17 @@ func testPrivateSDKInterruptedShutdownRecovery(t *testing.T, direct, unknown, cl
 				sessions = append(sessions, frame.Params.ThreadID)
 			}
 		}
-		if len(sessions) != 3 || sessions[0] == "" || sessions[1] != sessions[0] || sessions[2] != sessions[0] {
+		expected := 3
+		if delayHello && len(faults) == 0 {
+			expected = 4
+		}
+		consistent := len(sessions) == expected && sessions[0] != ""
+		for _, id := range sessions {
+			if id != sessions[0] {
+				consistent = false
+			}
+		}
+		if !consistent {
 			t.Fatalf("clean restart did not continue the same session: %v", sessions)
 		}
 	}

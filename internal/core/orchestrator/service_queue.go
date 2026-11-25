@@ -226,6 +226,7 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 	if item.ReplyToMessagePreview == "" {
 		item.ReplyToMessagePreview = item.SourceMessagePreview
 	}
+	recoveryNotice := s.privateRecoveryInputNotice(surface, item)
 	surface.QueueItems[item.ID] = item
 	if front {
 		surface.QueuedQueueItemIDs = append([]string{item.ID}, surface.QueuedQueueItemIDs...)
@@ -237,6 +238,9 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 		position = 1
 	}
 	var events []eventcontract.Event
+	if recoveryNotice != nil {
+		events = append(events, *recoveryNotice)
+	}
 	events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
 		QueueItemID:   item.ID,
 		Status:        string(item.Status),

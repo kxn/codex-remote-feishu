@@ -655,6 +655,7 @@ type HeadlessLaunchRecord struct {
 	PID                       int
 	SourceInstanceID          string
 	AutoRestore               bool
+	RecoveryInputNoticeSent   bool `json:",omitempty"`
 }
 
 type SelectionAnnouncementRecord struct {
@@ -788,7 +789,8 @@ type RequestCaptureRecord struct {
 }
 
 type QueueItemRecord struct {
-	StagePending          bool `json:",omitempty"`
+	StagePending          bool   `json:",omitempty"`
+	WaitReason            string `json:",omitempty"`
 	ID                    string
 	SurfaceSessionID      string
 	ActorUserID           string

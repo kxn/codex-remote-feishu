@@ -45,7 +45,7 @@ func (j *Journal) PublicationOrderReady(ctx context.Context, o Owner, generation
 	if n != 1 {
 		return ErrJournalConflict
 	}
-	err = j.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM private_publication_order current JOIN private_publication_order prior ON prior.order_key=current.order_key JOIN private_effect e ON e.id=current.effect_id JOIN private_effect p ON p.id=prior.effect_id WHERE current.effect_id=? AND p.tenant=e.tenant AND p.app_id=e.app_id AND p.gateway=e.gateway AND p.surface=e.surface AND p.chat=e.chat AND p.user_id=e.user_id AND p.generation=e.generation AND (p.revision<e.revision OR (p.revision=e.revision AND p.ordinal<e.ordinal)) AND NOT EXISTS(SELECT 1 FROM private_effect_applied a WHERE a.effect_id=p.id))`, id).Scan(&n)
+	err = j.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM private_publication_order current JOIN private_publication_order prior ON prior.order_key=current.order_key JOIN private_effect e ON e.id=current.effect_id JOIN private_effect p ON p.id=prior.effect_id WHERE current.effect_id=? AND p.tenant=e.tenant AND p.app_id=e.app_id AND p.gateway=e.gateway AND p.surface=e.surface AND p.chat=e.chat AND p.user_id=e.user_id AND p.generation=e.generation AND (p.revision<e.revision OR (p.revision=e.revision AND p.ordinal<e.ordinal)) AND NOT EXISTS(SELECT 1 FROM private_effect_applied a WHERE a.effect_id=p.id) AND NOT (coalesce(json_extract(p.body,'$.event.TimelineText.Type'),'')='recovery_input_waiting' AND p.state IN ('unknown','confirmed')))`, id).Scan(&n)
 	if err != nil {
 		return err
 	}

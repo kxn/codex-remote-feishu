@@ -60,6 +60,12 @@ func FrozenPrivatePublicationOrderScopes(event eventcontract.Event) []string {
 	if event.PageView != nil {
 		add("page", event.PageView.TrackingKey)
 	}
+	// A recovery acknowledgement and the answer to that same accepted input
+	// are causally ordered, while native execution remains independent of UI
+	// delivery and unrelated messages retain their own publication lanes.
+	if event.TimelineText != nil && event.TimelineText.Type == control.TimelineTextRecoveryInputWaiting || event.Block != nil && event.Block.Final {
+		add("input", event.SourceMessageID)
+	}
 	message := event.Meta.MessageDelivery.TargetMessageID
 	if message == "" && event.PageView != nil {
 		message = event.PageView.MessageID

@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 var errPrivatePublicationUnknown = errors.New("private platform operation requires delivery reconciliation")
@@ -132,7 +133,21 @@ func (p *privatePublisher) Publish(ctx context.Context, o privatechat.Owner, gen
 				return nil, errPrivatePublicationUnknown
 			}
 		}
-		if err = p.journal.BeginPublicationOperation(ctx, o, generation, id, op.Ordinal); err != nil {
+		begun := false
+		if planned.TimelineText != nil && planned.TimelineText.Type == control.TimelineTextRecoveryInputWaiting {
+			var suppressed bool
+			begun, suppressed, err = p.beginRecoveryNotice(ctx, o, generation, id, op.Ordinal)
+			if err != nil {
+				return nil, err
+			}
+			if suppressed {
+				return p.processor.ApplyHostReceipt(ctx, o, generation, id, privateHostReceiptReducer{p.host})
+			}
+		}
+		if !begun {
+			err = p.journal.BeginPublicationOperation(ctx, o, generation, id, op.Ordinal)
+		}
+		if err != nil {
 			return nil, err
 		}
 		batch := []feishu.Operation{operation}

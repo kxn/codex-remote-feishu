@@ -303,3 +303,19 @@
 - 升级构建产生的两份 shim 嵌入产物已只恢复其生成改动；代码树、源提交和运行中的二进制分别核对，不把构建目录副作用混入业务提交。
 
 现场证据文件为 `/tmp/private-continuity-runtime-status.json`、`/tmp/private-continuity-upgrade.log`、`/tmp/private-continuity-cpu-baseline.json`、`/tmp/private-continuity-cpu-deployed.json`。以上未发送伪造的真人业务消息到实际飞书会话；用户连续操作的验证来自前述真实 SDK 接口与受控平台／原生端，真实 Codex 探针另外执行。
+
+## 2026-11-25 重启后首条消息的恢复说明
+
+现场核对：14:16 重启后的首条 `hi` 仍在原生 session `01a21157-f99b-7ab2-9321-34fa5257ff4d` 执行，输入 seq 28 的派发恰一次。问题是后台恢复期间没有解释，却在就绪时显示旧的“开始执行这条排队消息”。旧版也有该排队文字；本次不将它从真正忙队列中删除。
+
+当前合同：同一次私人自动载体恢复，在收到真人输入后回复一次“后台正在恢复，已收到这条消息，恢复完成后会自动执行。”；恢复后的队首直接执行。后续等待前一输入的消息保留原 reaction 和开始提示。原队列项记录等待原因，原 pending launch 记录说明去重，不建立第二套队列，也不要求用户手动恢复。闲置恢复不主动刷消息，团队输出规则不变。
+
+说明与原消息的答复按来源关联排序，原生启动和派发不等待说明回执。实际平台操作尚未开始时，若输入已经结束、取消或被导航丢弃，则结算为本地 suppressed。最终核验与操作 begin 共用 Processor 锁，网络 I/O 在锁外；effect 已标 sending／unknown 但操作全部 prepared 的崩溃窗口也需重新核验。有实际 uncertain 操作的说明保留证据，不重发、不伪造未发送；其 unknown 状态不挡最终答复。
+
+连续验证从未绑定 SDK 入口开始，先选择目录、新建并完成首轮，再真实关闭 App、保留原数据库重开。第二个 authenticated hello 被延迟，用户收到恢复说明后立即再发第二条消息，随后才放行 hello。验证两条对应原消息的 final、第一条没有队列开始提示、第二条保留正常排队提示，下一轮继续，最后才核对原生 session 和派发次数。另一条旅程在可见恢复说明后立即 `/detach`，再选择同目录新建并获得下一条对应 final，旧输入不能改投新会话。
+
+发布交错测试覆盖 completed／discarded 与 effect prepared、sending、unknown 但操作未开始、unknown 且操作已开始的八种组合；另验 prepared／sending 的说明次序、unknown 不挡答复、checkpoint 恢复不重复说明及撤回后等待原因。独立复核曾发现 effect sending 到实际操作 begin 间的取消与崩溃窗口，最终实现将判断移到真实操作 begin 边界；普通正文、菜单及 reaction 不增加这个恢复说明专用锁。
+
+`TestPrivateSDKRecoveryNoticeUnknownDoesNotBlockInput` 另从相同冷入口完成重启旅程，仅将恢复说明的真实平台 Apply 替换为一次结果未知失败。放行 authenticated hello 后，原消息及下一轮均得到 source-bound final，所有 turn 继续原 session；说明只尝试一次，未被记作成功可见，事后核对持久 op 保留 unknown 和实际错误。定向 race 通过，日志 `/tmp/private-recovery-unknown-sdk-race2.log`。
+
+生产实现冻结后的全仓普通测试通过（122 个有测试包，daemon 207.333 秒），日志 `/tmp/private-recovery-notice-all.log`。恢复与发布交错、clean/interrupted restart、普通队列 reaction 和菜单后继续对话的定向 race 通过（daemon 94.963 秒），日志 `/tmp/private-recovery-notice-race.log`。Windows 全仓生产构建通过，日志 `/tmp/private-recovery-notice-windows.log`；最后新增的 unknown 旅程另有上述新鲜 race 证据，不声称它已包含在较早开始的全仓测试二进制中。真实飞书客户端仍不是该受控 gateway 测试的覆盖范围。

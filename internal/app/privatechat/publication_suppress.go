@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 // SuppressPreparedPublication records a local decision not to send. The frozen
 // operations remain prepared, and no platform receipt is invented.
 func (j *Journal) SuppressPreparedPublication(ctx context.Context, o Owner, generation int64, id, reason string, at time.Time) error {
-	if reason != "stale_model_view" || at.IsZero() {
+	if (reason != "stale_model_view" && reason != "obsolete_recovery_input") || at.IsZero() {
 		return ErrJournalState
 	}
 	tx, err := j.db.BeginTx(ctx, nil)
@@ -32,8 +34,18 @@ func (j *Journal) SuppressPreparedPublication(ctx context.Context, o Owner, gene
 		}
 		return tx.Commit()
 	}
-	if state != "prepared" && state != "sending" {
+	if state != "prepared" && state != "sending" && !(reason == "obsolete_recovery_input" && state == "unknown") {
 		return ErrJournalState
+	}
+	if reason == "obsolete_recovery_input" {
+		var body []byte
+		if err = tx.QueryRowContext(ctx, `SELECT body FROM private_effect WHERE id=?`, id).Scan(&body); err != nil {
+			return err
+		}
+		event, e := DecodeEffectEvent(body)
+		if e != nil || event.TimelineText == nil || event.TimelineText.Type != control.TimelineTextRecoveryInputWaiting || event.SourceMessageID == "" || event.TimelineText.ReplyToMessageID != event.SourceMessageID {
+			return ErrJournalConflict
+		}
 	}
 	pub, err := readPublication(ctx, tx, id)
 	if err != nil {
