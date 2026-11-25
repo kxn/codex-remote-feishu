@@ -66,6 +66,61 @@ func (t *Tx) GetOperation(id string) (work.Operation, error) {
 func (t *Tx) ListOperations(scopeID string) ([]work.Operation, error) {
 	return listRecords[work.Operation](t, "operations", " WHERE scope_id=?", scopeID)
 }
+
+// ListPreparedNativeGoalPolicies retains the former scope-then-operation order
+// while limiting and decoding only candidates for the goal policy worker.
+func (t *Tx) ListPreparedNativeGoalPolicies(limit int) ([]work.Operation, error) {
+	if limit < 1 || limit > 256 {
+		return nil, fmt.Errorf("invalid goal policy limit")
+	}
+	return t.listOperationCandidates(`SELECT payload FROM operations WHERE state='prepared' AND kind='native.goal.policy' ORDER BY scope_id,id LIMIT ?`, limit)
+}
+
+// ListUnfinishedNativeGateStops includes retryable operations, as did the
+// original scan which excluded only confirmed and terminal states.
+func (t *Tx) ListUnfinishedNativeGateStops(scopeID string) ([]work.Operation, error) {
+	return t.listOperationCandidates(`SELECT payload FROM operations WHERE state IN ('prepared','sending','unknown','retryable') AND kind='native.gate_stop' AND scope_id=? ORDER BY id`, scopeID)
+}
+
+// PendingProjectProvisionIDs returns only actionable provisioning operations
+// in the original scope-then-operation traversal order.
+func (t *Tx) PendingProjectProvisionIDs() ([]string, error) {
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT id FROM operations WHERE state IN ('prepared','sending','retryable') AND kind IN ('project.provision','project.member.provision') ORDER BY scope_id,id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (t *Tx) listOperationCandidates(query string, args ...any) ([]work.Operation, error) {
+	rows, err := t.tx.QueryContext(t.ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []work.Operation
+	for rows.Next() {
+		var payload string
+		if err = rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var operation work.Operation
+		if err = json.Unmarshal([]byte(payload), &operation); err != nil {
+			return nil, err
+		}
+		result = append(result, operation)
+	}
+	return result, rows.Err()
+}
 func (t *Tx) PutOutbox(v work.Outbox, expected int64) error {
 	operation, err := t.GetOperation(v.OperationID)
 	if err != nil {

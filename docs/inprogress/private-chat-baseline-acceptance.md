@@ -164,3 +164,13 @@
 
 
 最终回归期间曾出现模型卡“平台可见但新 token 未登记即点击”的真实漏操作，已以刻意阻塞 gateway 回执的 SDK 红测证明，不能用测试等待内部状态掩盖。实现通过先捕获、精确结算、本次 HTTP 回调内继续的方式修正；过期权限和投递未知仍按原证明规则处理。测试同时允许真实同步 HTTP 替换和异步同卡 PATCH，并按旧 UI 的模型设置终态验证后续重开入口，不要求旧终态卡新增表单。
+
+
+### 部署后空闲性能复核
+
+`d1df2523` 版本在六个飞书连接均在线、无原生执行的 30 秒采样中消耗单核 11.8%；10 秒真实 CPU profile 再测为 11.3%。采样 `/tmp/private-live-cpu.pprof` 显示主要热点为团队定时维护反复 `ListOperations` 和 JSON 解码，不是私人请求恢复。只读聚合确认历史操作正文约 3 MB，主要是旧 runtime.inspect 结果；不能用此前私人历史扫描优化冒充此处已解决。
+
+后续修正把 goal policy、停止核对、项目准备的候选筛选下推到 SQL；载体启动和压缩使用已有生成列，避免 JSON 全历史扫描。使用现有 operations_pending 索引，不删除旧资料，不改调度频率。保留 retryable、原 scope/ID 顺序，以及 worker/host/代次/重建条件。测试用无关历史的大 payload、损坏但不属于候选的历史、候选种类/状态与查询计划验证过滤先于解码；合成耗时仅作开发证据，不代替再次部署后的真实 CPU 采样。
+
+
+性能修正后的全仓回归通过 `/tmp/private-perf-final-all.log`；workstore/workruntime 全包 race 通过 `/tmp/team-operations-filter-final-race.log`，启动与压缩相关 workstore/workhost/workruntime race 通过 `/tmp/native-maintenance-index-race2.log`。本轮仅改变候选读取，不改变执行状态合同。

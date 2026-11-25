@@ -26,7 +26,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workteamhome"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worktransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
 type teamRuntime struct {
@@ -190,22 +189,9 @@ func (r *teamRuntime) every(ctx context.Context, name string, interval time.Dura
 func (r *teamRuntime) runProvisioning(ctx context.Context) error {
 	var ids []string
 	err := r.store.Within(ctx, func(tx *workstore.Tx) error {
-		scopes, err := tx.ListScopes()
-		if err != nil {
-			return err
-		}
-		for _, scope := range scopes {
-			ops, err := tx.ListOperations(scope.ID)
-			if err != nil {
-				return err
-			}
-			for _, op := range ops {
-				if (op.Kind == "project.provision" || op.Kind == "project.member.provision") && (op.State == work.OperationPrepared || op.State == work.OperationSending || op.State == work.OperationRetryable) {
-					ids = append(ids, op.ID)
-				}
-			}
-		}
-		return nil
+		var err error
+		ids, err = tx.PendingProjectProvisionIDs()
+		return err
 	})
 	if err != nil {
 		return err

@@ -16,6 +16,7 @@
 - 工作区启动、hello、启动 PID 回执和超时只推进其冻结的精确实例。hello 早于 PID 回执也能完成准备；旧回执、旧连接或退出后的 hello 不得重新附着或覆盖新选择。成功卡之后的下一条消息必须真正进入原生执行，不能以测试手工清除 hold 作为前置条件。
 - 私人发布另存 owner/epoch 内的因果顺序：同操作、同卡及同一 turn 的正文依序应用；不同操作独立。表情与工具过程不因未决收据阻塞正文。未知发送不能直接重试，也不能变为整个用户的全局门禁。
 - 平台已呈现新卡但本地收据未登记的点击，先持久捕获 SDK 事实，再在同一次 callback 内核对精确 publication。仍在 sending 时有界等真实收据，不把新 token 立即标为 Expired；超时明确未执行，卡片不由后台延迟消费。较新写入与已应用旧视图仍按 freshness 拒绝，禁止把此等待用作恢复过期卡的授权。
+- 团队后台的 goal policy、停止核对、项目准备、载体启动恢复和压缩查询先用已有 kind/state 生成列筛选候选；不反复反序列化无关历史操作。保留原有 scope/ID 遍历顺序、limit、retryable、worker 代次与 host/rebuild 条件；调度频率和状态迁移不变。
 - 团队历史归属的完整扫描仅由显式历史/会话选择启动；普通输入、原生终态和 idle deadline 不读取全部团队历史。现有连接与恢复按 executionowner 的精确会话注册校验。历史暂不可读时保留当前私人对话，明确拒绝未经验证的历史选择，不把未知历史冒充个人会话。
 - 私人 Codex 未显式选模型时继承原生配置；固定 API 模型及用户既有选择保持优先。没有计划覆盖时不发送 collaborationMode；计划覆盖的必填 model 取精确 thread/start、resume 或 fork 响应。缺字段是具体协议失败，不能伪造 native 接受或猜默认模型。
 - 重启恢复的 request hold 不仅凭旧 request.started 重新启用。认证 wrapper 提供只读、版本化 pending inventory；daemon 核验精确 owner/代次、原事件 hash/水位及其后没有解决/答复证据，再恢复原请求。未决 response intent/dispatch 不重发、不重复启用按钮。清单暂不完整按已有 tick 最快每 5 秒只读重查，不重跑任务；旧 wrapper 缺能力时 `/status` 说明更新运行器以及可用的 `/detach` 出口。

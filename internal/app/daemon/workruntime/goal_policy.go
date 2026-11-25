@@ -58,25 +58,9 @@ func (c *Coordinator) RunGoalPolicies(ctx context.Context, limit int) error {
 	}
 	var pending []work.Operation
 	err := c.store.Within(ctx, func(tx *workstore.Tx) error {
-		scopes, e := tx.ListScopes()
-		if e != nil {
-			return e
-		}
-		for _, scope := range scopes {
-			ops, e := tx.ListOperations(scope.ID)
-			if e != nil {
-				return e
-			}
-			for _, op := range ops {
-				if op.Kind == "native.goal.policy" && op.State == work.OperationPrepared {
-					pending = append(pending, op)
-					if len(pending) >= limit {
-						return nil
-					}
-				}
-			}
-		}
-		return nil
+		var e error
+		pending, e = tx.ListPreparedNativeGoalPolicies(limit)
+		return e
 	})
 	if err != nil {
 		return err

@@ -185,14 +185,11 @@ func (s *Stops) runOnce(ctx context.Context, scopeID string) error {
 }
 
 func (s *Stops) finishObservedStops(tx *workstore.Tx, scopeID string) error {
-	ops, err := tx.ListOperations(scopeID)
+	ops, err := tx.ListUnfinishedNativeGateStops(scopeID)
 	if err != nil {
 		return err
 	}
 	for _, op := range ops {
-		if op.Kind != "native.gate_stop" || op.State == work.OperationConfirmed || op.State == work.OperationTerminal {
-			continue
-		}
 		body, err := tx.GetContent(scopeID, op.RequestRef)
 		if err != nil {
 			return err
