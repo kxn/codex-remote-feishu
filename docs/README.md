@@ -126,6 +126,7 @@
 
 ## 6. 当前索引
 
+- 单聊旧版对照、完整使用场景及逐项验收，请读[单聊基线验收](./inprogress/private-chat-baseline-acceptance.md)。整体尚未通过；局部启动测试不代表首条消息可执行。
 - 本轮已确认的单聊／团队分离架构、旧版对照、迁移及任务拆分，请读[应用分离设计与实施](./inprogress/private-team-application-separation.md)。它替代旧团队设计中共用业务内核的要求，完整切换尚需实施验收。
 
 - 使用飞书团队，请读[飞书使用说明书](./general/user-guide.md)。

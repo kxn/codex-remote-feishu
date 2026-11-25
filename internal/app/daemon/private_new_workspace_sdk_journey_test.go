@@ -18,6 +18,7 @@ import (
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/platformingress"
@@ -50,7 +51,11 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	cwd := t.TempDir()
 	app.service.SetPersistedThreadCatalog(newWorkspaceJourneyCatalog{cwd: cwd})
 	setTestWorkBotSettings(t, app, state.BotCapabilitySettingsRecord{GatewayID: "gateway", Backend: agentproto.BackendCodex, CodexProfileID: state.OAuthCodexProfileID})
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	timeout := 10 * time.Second
+	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+		timeout = 180 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	exe, err := os.Executable()
 	if err != nil {
@@ -85,10 +90,24 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		if err = os.WriteFile(filepath.Join(isolatedCodex, "auth.json"), credentials, 0600); err != nil {
 			t.Fatal(err)
 		}
+		if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+			if raw, e := os.ReadFile(filepath.Join(sourceHome, "config.toml")); e == nil {
+				if e = os.WriteFile(filepath.Join(isolatedCodex, "config.toml"), raw, 0600); e != nil {
+					t.Fatal(e)
+				}
+			} else if !os.IsNotExist(e) {
+				t.Fatal(e)
+			}
+		}
 	} else {
 		t.Skip("set PRIVATE_REAL_CODEX_HOME for isolated OAuth probe")
 	}
 	app.headlessRuntime.BaseEnv = []string{"HOME=" + isolatedHome, "PATH=" + os.Getenv("PATH")}
+	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+		app.headlessRuntime.BaseEnv = buildDaemonHeadlessBaseEnv(os.Environ(), config.CaptureProxyEnv())
+		app.headlessRuntime.BaseEnv = config.UpsertEnvValue(app.headlessRuntime.BaseEnv, "HOME", isolatedHome)
+		app.headlessRuntime.BaseEnv = config.UpsertEnvValue(app.headlessRuntime.BaseEnv, "CODEX_HOME", filepath.Join(isolatedHome, ".codex"))
+	}
 	app.headlessRuntime.CodexRealBinary = codex
 	app.relay.SetServerIdentity(agentproto.ServerIdentity{BinaryIdentity: agentproto.BinaryIdentity{Product: relayruntime.ProductName, Version: "fixture", BuildFingerprint: "fixture"}})
 	server := httptest.NewServer(app.relay)
@@ -277,6 +296,9 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	}
 	for _, inst := range final.Instances {
 		if inst.InstanceID == readyInstance && inst.Online {
+			if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
+				testPrivateRealCodexTwoTurns(t, ctx, r, gateway, app, raw)
+			}
 			return
 		}
 	}
