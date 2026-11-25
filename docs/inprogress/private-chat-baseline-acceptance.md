@@ -174,3 +174,6 @@
 
 
 性能修正后的全仓回归通过 `/tmp/private-perf-final-all.log`；workstore/workruntime 全包 race 通过 `/tmp/team-operations-filter-final-race.log`，启动与压缩相关 workstore/workhost/workruntime race 通过 `/tmp/native-maintenance-index-race2.log`。本轮仅改变候选读取，不改变执行状态合同。
+
+
+2026-11-25 部署复核：运行代码 `678f491a`，安装事务 `committed`，运行进程 SHA-256 与仓库本次构建一致（`8d9d160ae90ddc9d8815a074d16cb35a726e7df566afdb5ede31c55a27fbf38b`），六个飞书连接均为 connected，配置内容与修复前备份一致。相同 30 秒空闲窗口中，daemon 使用 0.53 CPU 秒，即单核 1.77%，相较前一部署的 11.8% 明显下降；该采样不代表执行模型任务时的 CPU 上限。证据 `/tmp/private-perf-live-ready.json`、`/tmp/private-perf-live-idle-cpu.json`。真实飞书业务消息未人工合成发送；前述 SDK 旅程的平台端仍是受控网关，真实 Codex 调用已单独实跑。
