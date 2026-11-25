@@ -882,6 +882,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 }
 
 func (s *Service) RemoveInstance(instanceID string) {
+	delete(s.privateStoppingInstances, instanceID)
 	if strings.TrimSpace(instanceID) == "" {
 		return
 	}

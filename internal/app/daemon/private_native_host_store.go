@@ -40,6 +40,8 @@ type privateCarrierRecord struct {
 	UpgradeRecoveryEffectID   string                                 `json:"upgradeRecoveryEffectId,omitempty"`
 	SurfaceGeneration         int64                                  `json:"surfaceGeneration"`
 	Inspection                privatechat.NativeEventRef             `json:"inspection"`
+	PhysicalExitProof         bool                                   `json:"physicalExitProof,omitempty"`
+	PhysicalExitWatermark     int64                                  `json:"physicalExitWatermark,omitempty"`
 	StopEffectID              string                                 `json:"stopEffectId,omitempty"`
 	StopInspectionID          string                                 `json:"stopInspectionId,omitempty"`
 	StopInspectionOrdinal     int64                                  `json:"stopInspectionOrdinal,omitempty"`
@@ -49,6 +51,51 @@ type privateCarrierRecord struct {
 	Process                   hostinventory.ProcessIdentity          `json:"process"`
 	State                     string                                 `json:"state"`
 }
+
+// sealPhysicalExit records the proof type, not a fabricated native inspection.
+// The registry verifier independently rechecks all host and journal facts.
+func (s *privateNativeHostStore) sealPhysicalExit(ctx context.Context, instance string, watermark int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var raw []byte
+	var state string
+	if err = tx.QueryRowContext(ctx, `SELECT record,state FROM carriers WHERE instance=?`, instance).Scan(&raw, &state); err != nil {
+		return err
+	}
+	if state != "draining" {
+		return fmt.Errorf("durable draining required")
+	}
+	var rec privateCarrierRecord
+	if json.Unmarshal(raw, &rec) != nil {
+		return fmt.Errorf("invalid carrier record")
+	}
+	if rec.Inspection.Sequence != 0 || rec.Process.PID <= 0 || watermark < 0 {
+		return fmt.Errorf("invalid physical exit evidence")
+	}
+	rec.State = "sealed"
+	rec.PhysicalExitProof = true
+	rec.PhysicalExitWatermark = watermark
+	raw, err = json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE carriers SET record=?,state='sealed' WHERE instance=? AND state='draining'`, raw, instance)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("carrier changed")
+	}
+	return tx.Commit()
+}
+
 type privateNativeHostStore struct {
 	db            *sql.DB
 	credentialDir string
@@ -83,7 +130,7 @@ func openPrivateNativeHostStore(path string) (*privateNativeHostStore, error) {
 		return nil, err
 	}
 	var version int
-	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version > 1 {
+	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version > 2 {
 		db.Close()
 		return nil, fmt.Errorf("invalid host store version %d: %v", version, err)
 	}
@@ -94,7 +141,19 @@ func openPrivateNativeHostStore(path string) (*privateNativeHostStore, error) {
 			return nil, fmt.Errorf("nonempty unversioned host store")
 		}
 	}
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS carriers (instance TEXT PRIMARY KEY, incarnation TEXT NOT NULL UNIQUE, record BLOB NOT NULL, credential_hash BLOB NOT NULL, state TEXT NOT NULL); PRAGMA user_version=1`)
+	// Version 2 introduces a distinct physical-exit proof in the carrier
+	// record. A v1 reader would silently discard it when rewriting JSON.
+	// Migrate only the schema version, preserving every record and credential.
+	tx, err := db.Begin()
+	if err == nil {
+		_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS carriers (instance TEXT PRIMARY KEY, incarnation TEXT NOT NULL UNIQUE, record BLOB NOT NULL, credential_hash BLOB NOT NULL, state TEXT NOT NULL); PRAGMA user_version=2`)
+		if err == nil {
+			err = tx.Commit()
+		}
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}
 	if err != nil {
 		db.Close()
 		return nil, err

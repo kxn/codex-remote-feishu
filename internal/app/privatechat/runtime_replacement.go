@@ -27,8 +27,20 @@ func (p *Processor) PrepareRetiredRuntimeReplacement(ctx context.Context, o Owne
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}
+	unsettled, err := p.journal.CarrierHasUnsettledBusiness(ctx, o, generation, old.CarrierIncarnation)
+	if err != nil {
+		return nil, err
+	}
+	if unsettled {
+		return nil, ErrDeferred
+	}
 	var out []EffectRecord
-	err := authority.WithRetiredRuntime(ctx, o, generation, old, func() error {
+	err = authority.WithRetiredRuntime(ctx, o, generation, old, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		owner, e := p.ensureOwner(ctx, o, generation)
 		if e != nil {
 			return e
@@ -96,7 +108,19 @@ func (p *Processor) RestoreRetiredRuntimeReplacement(ctx context.Context, o Owne
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}
+	unsettled, err := p.journal.CarrierHasUnsettledBusiness(ctx, o, generation, old.CarrierIncarnation)
+	if err != nil {
+		return err
+	}
+	if unsettled {
+		return ErrDeferred
+	}
 	return authority.WithRetiredRuntime(ctx, o, generation, old, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		if _, err := p.ensureOwner(ctx, o, generation); err != nil {
 			return err
 		}

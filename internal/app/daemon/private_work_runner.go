@@ -78,21 +78,29 @@ func (r *privateWorkRunner) Run(ctx context.Context) error {
 		case <-tick.C:
 		case <-r.wake:
 		}
-		if err := r.pass(ctx); err != nil && ctx.Err() != nil {
+		// Stop admission at the next scheduling boundary, but let an already
+		// running local projection finish its checkpoint transaction. Cancelling
+		// it after the core mutation would poison the shared Processor.
+		err := r.passUntilStopped(context.WithoutCancel(ctx), ctx)
+		if err != nil && ctx.Err() != nil {
 			r.effectWG.Wait()
 			return ctx.Err()
 		}
 	}
 }
 func (r *privateWorkRunner) pass(ctx context.Context) error {
+	return r.passUntilStopped(ctx, ctx)
+}
+
+func (r *privateWorkRunner) passUntilStopped(ctx, stop context.Context) error {
 	for offset := 0; ; offset += 128 {
 		inputs, err := r.journal.PendingIngressWorkPage(ctx, 128, offset)
 		if err != nil {
 			return err
 		}
 		for _, item := range inputs {
-			if ctx.Err() != nil {
-				return ctx.Err()
+			if stop.Err() != nil {
+				return stop.Err()
 			}
 			if err = r.host.refreshPrivateBotSettings(ctx, r.processor, item.Owner, item.Generation); err != nil {
 				continue
@@ -124,10 +132,16 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 				}
 			}
 			if item.Lane == "input" {
+				if stop.Err() != nil {
+					return stop.Err()
+				}
 				recovering, recoveryErr := r.prepareRetiredRuntime(ctx, item.Owner, item.Generation)
 				if recovering && recoveryErr != nil {
 					continue
 				}
+			}
+			if stop.Err() != nil {
+				return stop.Err()
 			}
 			if _, err = r.processor.ApplyIngress(ctx, item.Owner, item.Generation, item.Sequence); err != nil {
 				continue
@@ -140,7 +154,10 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			break
 		}
 	}
-	if err := r.runOwnerDeadlines(ctx); err != nil {
+	if stop.Err() != nil {
+		return stop.Err()
+	}
+	if err := r.runOwnerDeadlines(ctx, stop); err != nil {
 		return err
 	}
 
@@ -149,6 +166,9 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 		return err
 	}
 	for _, rec := range retired {
+		if stop.Err() != nil {
+			return stop.Err()
+		}
 		if err := r.native.projectRetiredCarrierEvents(ctx, rec); err != nil {
 			log.Printf("private retired projection owner=%s: %v", rec.Surface.SurfaceID, err)
 		}
@@ -160,6 +180,26 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			return e
 		}
 		for _, rec := range records {
+			if stop.Err() != nil {
+				return stop.Err()
+			}
+			if state == "sealed" && rec.StopEffectID != "" {
+				if r.native.retire(ctx, rec.Snapshot.Owner.InstanceID) == nil {
+					continue
+				}
+			}
+			if state == "draining" && rec.StopEffectID != "" {
+				r.native.mu.Lock()
+				connected := r.native.connections[rec.Snapshot.Owner.InstanceID] != 0
+				r.native.mu.Unlock()
+				if connected {
+					if r.native.advanceCarrierStop(ctx, rec, rec.StopEffectID) == nil {
+						continue
+					}
+				} else if r.native.recoverPhysicalExitedCarrier(ctx, rec) == nil {
+					continue
+				}
+			}
 			if state == "running" {
 				r.observeExitedPendingCarrier(ctx, rec)
 			}
@@ -175,11 +215,17 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 				continue
 			}
 			for _, item := range pending {
+				if stop.Err() != nil {
+					return stop.Err()
+				}
 				if _, e = r.processor.ApplyNative(ctx, lease, item.Ref, privatechat.CoreNativeReducer{}); e != nil {
 					break
 				}
 			}
 			if state == "running" {
+				if stop.Err() != nil {
+					return stop.Err()
+				}
 				r.tickCarrier(ctx, rec, lease)
 			}
 		}
@@ -190,10 +236,10 @@ func (r *privateWorkRunner) pass(ctx context.Context) error {
 			return err
 		}
 		for _, work := range effects {
-			if ctx.Err() != nil {
-				return ctx.Err()
+			if stop.Err() != nil {
+				return stop.Err()
 			}
-			r.scheduleEffect(ctx, work)
+			r.scheduleEffectWithStop(ctx, stop, work)
 		}
 		if len(effects) < 128 {
 			break
@@ -240,6 +286,10 @@ func (r *privateWorkRunner) tickCarrier(ctx context.Context, rec privateCarrierR
 // scheduleEffect isolates slow network/process work from durable ingress and
 // gives control/cancellation an independent bounded execution pool.
 func (r *privateWorkRunner) scheduleEffect(ctx context.Context, work privatechat.PendingEffectWork) {
+	r.scheduleEffectWithStop(ctx, ctx, work)
+}
+
+func (r *privateWorkRunner) scheduleEffectWithStop(ctx, stop context.Context, work privatechat.PendingEffectWork) {
 	event, _, err := privatechat.DecodeStoredEffect(work.Effect.Effect.Body)
 	if err == nil && event.Command != nil && work.Effect.State != "confirmed" {
 		registered, lookupErr := r.journal.HasNativeDispatch(ctx, work.Effect.Effect.ID)
@@ -254,11 +304,18 @@ func (r *privateWorkRunner) scheduleEffect(ctx context.Context, work privatechat
 		laneKey = fmt.Sprintf("input:%v:%d", work.Owner, work.Generation)
 	}
 	r.startEffect(key, laneKey, controlLane, work.Effect.Effect.Lane == "interactive", func() {
-		if err == nil && event.DaemonCommand != nil && localEffectReturnsAfterHostCall(event.DaemonCommand.Kind) {
-			_ = r.runLocalEffectWithRecovery(ctx, work, func() error { return r.runEffect(ctx, work) })
+		if stop.Err() != nil {
 			return
 		}
-		_ = r.runEffect(ctx, work)
+		// Scheduled effects can be in a local receipt transaction when worker
+		// shutdown begins. stopWorkers waits for their completion; if the
+		// caller's shutdown deadline expires, stores remain open.
+		effectCtx := context.WithoutCancel(ctx)
+		if err == nil && event.DaemonCommand != nil && localEffectReturnsAfterHostCall(event.DaemonCommand.Kind) {
+			_ = r.runLocalEffectWithRecovery(effectCtx, work, func() error { return r.runEffect(effectCtx, work) })
+			return
+		}
+		_ = r.runEffect(effectCtx, work)
 	})
 }
 

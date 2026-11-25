@@ -55,6 +55,7 @@ type Service struct {
 	privateWorktreeObservationMissing bool
 	privateRecoveryHolds              map[string]PrivateCheckpoint
 	privateDetachedExecutions         map[string][]PrivateDetachedExecution
+	privateStoppingInstances          map[string]bool
 	privateOfflineStops               map[string]PrivateOfflineStop
 	privateReconnectQueries           map[string]PrivateReconnectQuery
 	privateNavigation                 map[string]PrivateNavigationSnapshot

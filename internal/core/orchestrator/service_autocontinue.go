@@ -245,7 +245,17 @@ func (s *Service) maybeDispatchPendingAutoContinue(surface *state.SurfaceConsole
 	}
 	switch episode.FrozenRouteMode {
 	case state.RouteModeNewThreadReady:
-		if surface.RouteMode != state.RouteModeNewThreadReady || strings.TrimSpace(surface.PreparedThreadCWD) != strings.TrimSpace(autoContinueEpisodePromptDispatchPlan(episode).CWD) {
+		plan := autoContinueEpisodePromptDispatchPlan(episode)
+		// The first turn can commit its exact native thread after the episode
+		// was scheduled. The matching pinned route is the continuation of that
+		// same operation, not a user navigation to another session.
+		if surface.RouteMode == state.RouteModePinned && plan.SurfaceBindingPolicy == agentproto.SurfaceBindingPolicyFollowExecutionThread &&
+			strings.TrimSpace(plan.ExecutionThreadID) != "" && strings.TrimSpace(surface.SelectedThreadID) == strings.TrimSpace(plan.ExecutionThreadID) {
+			plan.ExecutionMode = agentproto.PromptExecutionModeResumeExisting
+			plan.SourceThreadID = plan.ExecutionThreadID
+			setAutoContinueEpisodePromptDispatchPlan(episode, plan)
+			episode.FrozenRouteMode = state.RouteModePinned
+		} else if surface.RouteMode != state.RouteModeNewThreadReady || strings.TrimSpace(surface.PreparedThreadCWD) != strings.TrimSpace(plan.CWD) {
 			clearAutoContinueRuntime(surface)
 			return nil
 		}

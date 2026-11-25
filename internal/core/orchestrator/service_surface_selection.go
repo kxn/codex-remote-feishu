@@ -441,7 +441,7 @@ func (s *Service) workspaceOnlineInstances(workspaceKey string) []*state.Instanc
 	}
 	instances := []*state.InstanceRecord{}
 	for _, inst := range s.root.Instances {
-		if inst == nil || !inst.Online || !instanceSupportsWorkspaceSelectionKey(inst, workspaceKey) {
+		if inst == nil || !inst.Online || s.privateInstanceStopping(inst.InstanceID) || !instanceSupportsWorkspaceSelectionKey(inst, workspaceKey) {
 			continue
 		}
 		instances = append(instances, inst)

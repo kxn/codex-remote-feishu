@@ -440,10 +440,10 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 	switch kind {
 	case control.FeishuTargetPickerSessionThread:
 		events = s.useThreadPreservingTargetPicker(surface, threadID, true)
-		succeeded = targetPickerThreadReady(surface, threadID)
+		succeeded = s.targetPickerOperationReady(surface, "", threadID, events)
 	case control.FeishuTargetPickerSessionNewThread:
 		events = s.enterTargetPickerNewThread(surface, workspaceKey)
-		succeeded = targetPickerNewThreadReady(surface, workspaceKey)
+		succeeded = s.targetPickerOperationReady(surface, workspaceKey, "", events)
 	case control.FeishuTargetPickerSessionWorktree:
 		record.PageOverride = control.FeishuTargetPickerPageWorktree
 		record.SelectedWorkspaceKey = workspaceKey
@@ -476,7 +476,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		}
 		return result
 	}
-	if kind == control.FeishuTargetPickerSessionThread && surface.PendingHeadless != nil && strings.TrimSpace(surface.PendingHeadless.ThreadID) == threadID {
+	if kind == control.FeishuTargetPickerSessionThread && targetPickerStartedPending(surface, events) && strings.TrimSpace(surface.PendingHeadless.ThreadID) == threadID {
 		filtered := filterPickerFollowupEvents(events)
 		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, view.SelectedSessionLabel)
 		processing := s.startTargetPickerProcessingWithSections(
@@ -493,7 +493,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		)
 		return append(processing, filtered...)
 	}
-	if kind == control.FeishuTargetPickerSessionNewThread && surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
+	if kind == control.FeishuTargetPickerSessionNewThread && targetPickerStartedPending(surface, events) && surface.PendingHeadless.PrepareNewThread &&
 		pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == workspaceKey {
 		filtered := filterPickerFollowupEvents(events)
 		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, "新会话")
@@ -524,8 +524,11 @@ func (s *Service) enterTargetPickerNewThread(surface *state.SurfaceConsoleRecord
 	if !s.surfaceIsHeadless(surface) {
 		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，不能在这里直接新建会话。")
 	}
-	if currentWorkspace := s.surfaceCurrentWorkspaceKey(surface); currentWorkspace == workspaceKey && strings.TrimSpace(surface.AttachedInstanceID) != "" {
-		return s.prepareNewThreadPreservingTargetPicker(surface)
+	if currentWorkspace := s.surfaceCurrentWorkspaceKey(surface); currentWorkspace == workspaceKey {
+		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+		if inst != nil && inst.Online && s.surfaceInstanceCompatibleForAttach(surface, inst) {
+			return s.prepareNewThreadPreservingTargetPicker(surface)
+		}
 	}
 	targetBackend := s.surfaceBackend(surface)
 	continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, true)

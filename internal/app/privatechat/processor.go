@@ -110,6 +110,11 @@ func (p *Processor) ApplyIngress(ctx context.Context, o Owner, generation, seq i
 	defer unlockReference()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}
@@ -339,6 +344,13 @@ func (p *Processor) ensureOwner(ctx context.Context, o Owner, generation int64) 
 		}
 		return state, nil
 	}
+	// A first lookup restores owner state and is therefore a projection even
+	// when its caller is otherwise a read-only operation.
+	projectionCtx, err := beginProjection(ctx)
+	if err != nil {
+		return state, err
+	}
+	ctx = projectionCtx
 	if err := p.app.RegisterOwner(o); err != nil {
 		return state, err
 	}
@@ -354,6 +366,10 @@ func (p *Processor) ensureOwner(ctx context.Context, o Owner, generation int64) 
 		return state, err
 	}
 	state.generation = generation
+	if err = p.restoreStoppingInstances(ctx, o, generation); err != nil {
+		p.poisoned = true
+		return state, err
+	}
 	if err = p.journal.restoreClaudeWorkspaceOverlay(ctx, p.app, o, generation); err != nil {
 		p.poisoned = true
 		return state, err
@@ -392,6 +408,12 @@ func (p *Processor) freezeEffects(o Owner, generation int64, key string, events 
 	effects := make([]Effect, 0, len(events))
 	for i, event := range events {
 		event = event.Normalized()
+		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandKillHeadless {
+			if event.SurfaceSessionID != o.SurfaceID || event.DaemonCommand.InstanceID == "" {
+				return nil, ErrJournalConflict
+			}
+			p.app.Service().MarkPrivateInstanceStopping(event.DaemonCommand.InstanceID)
+		}
 		if event.PendingInput != nil && event.PendingInput.SourceMessageID == "" {
 			return nil, fmt.Errorf("pending input lacks source message identity")
 		}

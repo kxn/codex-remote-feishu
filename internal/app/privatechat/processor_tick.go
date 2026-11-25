@@ -26,6 +26,11 @@ func (p *Processor) ApplyPrivateTick(ctx context.Context, l *NativeLease, tickID
 	}
 	ref := tickRef{ID: tickID, At: now.UTC().Format(time.RFC3339Nano)}
 	err = l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		o := l.surface
 		var revision int64
 		var observed string

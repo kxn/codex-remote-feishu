@@ -126,6 +126,7 @@ func NewSystemErrorEvent(problem ErrorInfo) Event {
 	problem = problem.Normalize()
 	return Event{
 		Kind:         EventSystemError,
+		CommandID:    problem.CommandID,
 		ThreadID:     problem.ThreadID,
 		TurnID:       problem.TurnID,
 		ItemID:       problem.ItemID,

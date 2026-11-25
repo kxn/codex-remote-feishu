@@ -203,6 +203,11 @@ func (a privateApplicationAdmitter) BuildPrivateIngress(ctx context.Context, rec
 			return privatechat.Ingress{}, e
 		}
 		action, ok = feishu.DecodePrivateMenu(raw)
+		// A platform-menu event has no chat ID. Its destination is the
+		// authenticated p2p binding resolved above, never a historical message
+		// or the current navigation state. Keep MessageID empty so this opens a
+		// new top-level card just like a slash command.
+		action.ChatID = b.ChatID
 	case ingressowner.Reaction, ingressowner.Recall:
 		raw, e := ingressmapper.RestoreObservation(record.Event)
 		if e != nil {

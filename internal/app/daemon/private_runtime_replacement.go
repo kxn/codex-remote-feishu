@@ -20,11 +20,11 @@ func (h *privateNativeHost) WithRetiredRuntime(ctx context.Context, o privatecha
 	if err != nil {
 		return err
 	}
-	if rec.State != "retired" || rec.Surface != o || rec.SurfaceGeneration != generation || rec.Snapshot.Owner != old || rec.Inspection.Incarnation != old.CarrierIncarnation {
+	if rec.State != "retired" || rec.Surface != o || rec.SurfaceGeneration != generation || rec.Snapshot.Owner != old || (!rec.PhysicalExitProof && rec.Inspection.Incarnation != old.CarrierIncarnation) {
 		return privatechat.ErrJournalConflict
 	}
 	reg := privateRegistration(old)
-	evidence := privateInspectionEvidence(rec.Inspection)
+	evidence := privateCarrierStopEvidence(rec)
 	if err = h.registry.Retire(ctx, reg, evidence); err != nil {
 		return err
 	}
@@ -66,8 +66,31 @@ func (r *privateWorkRunner) prepareRetiredRuntime(ctx context.Context, o private
 	if err != nil {
 		return true, err
 	}
-	if rec.State != "retired" || rec.Surface != o || rec.SurfaceGeneration != generation || (nav != nil && rec.Snapshot.Owner != nav.Owner) {
-		return false, nil
+	if rec.Surface != o || rec.SurfaceGeneration != generation || (nav != nil && rec.Snapshot.Owner != nav.Owner) {
+		return true, privatechat.ErrJournalConflict
+	}
+	if rec.State != "retired" {
+		if rec.State == "running" {
+			r.native.mu.Lock()
+			connected := r.native.connections[rec.Snapshot.Owner.InstanceID] != 0
+			r.native.mu.Unlock()
+			if connected {
+				return false, nil
+			}
+		}
+		// The saved target remains valid even if its carrier has not yet been
+		// proved stopped. Keep the input durable for reconciliation instead of
+		// consuming it as a misleading not-attached notice.
+		return true, privatechat.ErrDeferred
+	}
+	if rec.PhysicalExitProof {
+		unsettled, e := r.journal.CarrierHasUnsettledBusiness(ctx, o, generation, rec.Snapshot.Owner.CarrierIncarnation)
+		if e != nil {
+			return true, e
+		}
+		if unsettled {
+			return true, privatechat.ErrDeferred
+		}
 	}
 	if _, err = r.ingress.privatePublicationBindingFor(ctx, o, generation); err != nil {
 		return true, err

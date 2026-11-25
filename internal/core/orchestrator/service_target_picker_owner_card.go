@@ -257,22 +257,29 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 		return events
 	}
 	filtered := filterPickerFollowupEvents(events)
+	operationFailure := strings.TrimSpace(xutil.FirstNonEmpty(fallbackFailureText, targetPickerOperationFailure(events)))
+	if operationFailure == "" && targetPickerPendingStillRunning(surface, record) {
+		return filtered
+	}
+	if operationFailure != "" {
+		events = notice(surface, "target_picker_failure", operationFailure)
+	}
 	switch record.PendingKind {
 	case targetPickerPendingUseThread:
-		if targetPickerThreadReady(surface, record.PendingThreadID) {
+		if s.targetPickerOperationReady(surface, "", record.PendingThreadID, events) {
 			return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已切换会话", "当前工作目标已经切换完成。", false, filtered)
 		}
 	case targetPickerPendingNewThread:
-		if targetPickerNewThreadReady(surface, record.PendingWorkspaceKey) {
+		if s.targetPickerOperationReady(surface, record.PendingWorkspaceKey, "", events) {
 			return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "当前工作目标已经准备完成，下一条文本会直接开启新会话。", false, filtered)
 		}
 	case targetPickerPendingGitImport:
-		if targetPickerNewThreadReady(surface, record.PendingWorkspaceKey) {
+		if s.targetPickerOperationReady(surface, record.PendingWorkspaceKey, "", events) {
 			status := targetPickerGitImportSuccessStatus(record.PendingWorkspaceKey)
 			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 		}
 	case targetPickerPendingWorktreeCreate:
-		if targetPickerNewThreadReady(surface, record.PendingWorkspaceKey) {
+		if s.targetPickerOperationReady(surface, record.PendingWorkspaceKey, "", events) {
 			status := targetPickerWorktreeCreateSuccessStatus(record.PendingWorkspaceKey)
 			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 		}

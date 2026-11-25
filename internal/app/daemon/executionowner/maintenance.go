@@ -37,18 +37,22 @@ func (r *Registry) WithMaintenancePause(ctx context.Context, m Maintenance, old 
 	if commit == nil || old.validate() != nil {
 		return ErrConflict
 	}
-	tx, err := r.db.BeginTx(ctx, nil)
+	fence, err := r.beginLocalFence(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer fence.close()
+	tx := fence.tx
 	var n int
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM backend_maintenance m JOIN backend_maintenance_carriers x ON x.maintenance_id=m.maintenance_id WHERE m.backend=? AND m.maintenance_id=? AND m.epoch=? AND m.target_version=? AND m.phase='draining' AND x.incarnation=? AND x.instance_id=? AND x.backend=? AND x.namespace=? AND x.generation=? AND x.app=? AND x.owner_id=? AND x.owner_epoch=?`, m.Backend, m.ID, m.Epoch, m.TargetVersion, old.Carrier.Incarnation, old.Carrier.InstanceID, old.Carrier.Backend, old.Carrier.Namespace, old.Carrier.Generation, old.Owner.Application, old.Owner.ID, old.Owner.Epoch).Scan(&n)
+	err = tx.QueryRowContext(fence.ctx, `SELECT count(*) FROM backend_maintenance m JOIN backend_maintenance_carriers x ON x.maintenance_id=m.maintenance_id WHERE m.backend=? AND m.maintenance_id=? AND m.epoch=? AND m.target_version=? AND m.phase='draining' AND x.incarnation=? AND x.instance_id=? AND x.backend=? AND x.namespace=? AND x.generation=? AND x.app=? AND x.owner_id=? AND x.owner_epoch=?`, m.Backend, m.ID, m.Epoch, m.TargetVersion, old.Carrier.Incarnation, old.Carrier.InstanceID, old.Carrier.Backend, old.Carrier.Namespace, old.Carrier.Generation, old.Owner.Application, old.Owner.ID, old.Owner.Epoch).Scan(&n)
 	if err != nil {
 		return err
 	}
 	if n != 1 {
 		return ErrConflict
+	}
+	if err = fence.enter(); err != nil {
+		return err
 	}
 	if err = commit(); err != nil {
 		return err
@@ -63,18 +67,22 @@ func (r *Registry) WithMaintenanceRecoveryPreparation(ctx context.Context, m Mai
 	if commit == nil || old.validate() != nil {
 		return ErrConflict
 	}
-	tx, err := r.db.BeginTx(ctx, nil)
+	fence, err := r.beginLocalFence(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer fence.close()
+	tx := fence.tx
 	var n int
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM backend_maintenance m JOIN backend_maintenance_carriers x ON x.maintenance_id=m.maintenance_id JOIN carriers c ON c.incarnation=x.incarnation JOIN stop_receipts s ON s.incarnation=c.incarnation AND s.epoch=c.epoch WHERE m.backend=? AND m.maintenance_id=? AND m.epoch=? AND m.target_version=? AND m.phase='restoring' AND x.incarnation=? AND x.instance_id=? AND x.backend=? AND x.namespace=? AND x.generation=? AND x.app=? AND x.owner_id=? AND x.owner_epoch=? AND x.disposition='' AND c.stopped=1`, m.Backend, m.ID, m.Epoch, m.TargetVersion, old.Carrier.Incarnation, old.Carrier.InstanceID, old.Carrier.Backend, old.Carrier.Namespace, old.Carrier.Generation, old.Owner.Application, old.Owner.ID, old.Owner.Epoch).Scan(&n)
+	err = tx.QueryRowContext(fence.ctx, `SELECT count(*) FROM backend_maintenance m JOIN backend_maintenance_carriers x ON x.maintenance_id=m.maintenance_id JOIN carriers c ON c.incarnation=x.incarnation JOIN stop_receipts s ON s.incarnation=c.incarnation AND s.epoch=c.epoch WHERE m.backend=? AND m.maintenance_id=? AND m.epoch=? AND m.target_version=? AND m.phase='restoring' AND x.incarnation=? AND x.instance_id=? AND x.backend=? AND x.namespace=? AND x.generation=? AND x.app=? AND x.owner_id=? AND x.owner_epoch=? AND x.disposition='' AND c.stopped=1`, m.Backend, m.ID, m.Epoch, m.TargetVersion, old.Carrier.Incarnation, old.Carrier.InstanceID, old.Carrier.Backend, old.Carrier.Namespace, old.Carrier.Generation, old.Owner.Application, old.Owner.ID, old.Owner.Epoch).Scan(&n)
 	if err != nil {
 		return err
 	}
 	if n != 1 {
 		return ErrConflict
+	}
+	if err = fence.enter(); err != nil {
+		return err
 	}
 	if err = commit(); err != nil {
 		return err
@@ -88,18 +96,22 @@ func (r *Registry) WithReleasedRecovery(ctx context.Context, m Maintenance, old 
 	if commit == nil || old.validate() != nil || !canonical(newInstance) {
 		return ErrConflict
 	}
-	tx, err := r.db.BeginTx(ctx, nil)
+	fence, err := r.beginLocalFence(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer fence.close()
+	tx := fence.tx
 	var n int
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM backend_maintenance m JOIN backend_maintenance_carriers x ON x.maintenance_id=m.maintenance_id JOIN carriers c ON c.incarnation=x.rebuilt_incarnation WHERE m.backend=? AND m.maintenance_id=? AND m.epoch=? AND m.target_version=? AND m.phase='released' AND x.incarnation=? AND x.instance_id=? AND x.backend=? AND x.namespace=? AND x.generation=? AND x.app=? AND x.owner_id=? AND x.owner_epoch=? AND x.disposition='rebuilt' AND x.recovery_evidence<>'' AND c.instance_id=? AND c.stopped=0`, m.Backend, m.ID, m.Epoch, m.TargetVersion, old.Carrier.Incarnation, old.Carrier.InstanceID, old.Carrier.Backend, old.Carrier.Namespace, old.Carrier.Generation, old.Owner.Application, old.Owner.ID, old.Owner.Epoch, newInstance).Scan(&n)
+	err = tx.QueryRowContext(fence.ctx, `SELECT count(*) FROM backend_maintenance m JOIN backend_maintenance_carriers x ON x.maintenance_id=m.maintenance_id JOIN carriers c ON c.incarnation=x.rebuilt_incarnation WHERE m.backend=? AND m.maintenance_id=? AND m.epoch=? AND m.target_version=? AND m.phase='released' AND x.incarnation=? AND x.instance_id=? AND x.backend=? AND x.namespace=? AND x.generation=? AND x.app=? AND x.owner_id=? AND x.owner_epoch=? AND x.disposition='rebuilt' AND x.recovery_evidence<>'' AND c.instance_id=? AND c.stopped=0`, m.Backend, m.ID, m.Epoch, m.TargetVersion, old.Carrier.Incarnation, old.Carrier.InstanceID, old.Carrier.Backend, old.Carrier.Namespace, old.Carrier.Generation, old.Owner.Application, old.Owner.ID, old.Owner.Epoch, newInstance).Scan(&n)
 	if err != nil {
 		return err
 	}
 	if n != 1 {
 		return ErrConflict
+	}
+	if err = fence.enter(); err != nil {
+		return err
 	}
 	if err = commit(); err != nil {
 		return err

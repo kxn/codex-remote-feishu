@@ -135,6 +135,16 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 	if s.privateReplacementInputAction(action) {
 		return nil
 	}
+	if _, ok := s.PrivateReplacementInputTarget(action.SurfaceSessionID); ok {
+		switch action.Kind {
+		case control.ActionListInstances, control.ActionWorkspaceList,
+			control.ActionTargetPickerSelectWorkspace, control.ActionTargetPickerSelectSession,
+			control.ActionTargetPickerPage, control.ActionTargetPickerBack, control.ActionTargetPickerCancel:
+			// Navigation is read-only. Confirm remains gated until the exact
+			// in-flight replacement finishes or the user explicitly cancels it.
+			return nil
+		}
+	}
 	if s.targetPickerHasBlockingProcessing(surface) {
 		return nil
 	}

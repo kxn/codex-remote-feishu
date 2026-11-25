@@ -17,6 +17,11 @@ func (p *Processor) SetThreadPolicy(ctx context.Context, o Owner, generation int
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}
@@ -35,6 +40,11 @@ func (p *Processor) UpdateThreadCarrier(ctx context.Context, o Owner, generation
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}
@@ -51,6 +61,11 @@ func (p *Processor) RecordRetiredThread(ctx context.Context, o Owner, generation
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}

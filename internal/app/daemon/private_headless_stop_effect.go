@@ -99,6 +99,16 @@ func (h *privateNativeHost) advanceCarrierStop(ctx context.Context, rec privateC
 	if rec.State != "draining" && rec.State != "sealed" && rec.State != "retired" {
 		return privatechat.ErrDeferred
 	}
+	if rec.State == "retired" {
+		// A later user /detach can reuse the already proven physical retirement
+		// without replacing the earlier shutdown's durable stop intent.
+		reg := privateRegistration(rec.Snapshot.Owner)
+		evidence := privateCarrierStopEvidence(rec)
+		if err = h.registry.Retire(ctx, reg, evidence); err != nil {
+			return err
+		}
+		return h.VerifyStop(ctx, reg, evidence)
+	}
 	rec, err = h.store.stopIntent(ctx, instance, stopID)
 	if err != nil {
 		return err

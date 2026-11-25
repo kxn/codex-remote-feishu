@@ -120,6 +120,11 @@ func (p *Processor) PauseUpgradeDispatch(ctx context.Context, plan UpgradeRecove
 		return ErrProcessorPoisoned
 	}
 	return authority.WithUpgradePause(ctx, plan, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		saved, exists, err := p.journal.UpgradePauseForCarrier(ctx, plan.MaintenanceID, plan.OldOwner.CarrierIncarnation)
 		if err != nil {
 			return err
@@ -222,6 +227,11 @@ func (p *Processor) PrepareUpgradeRecovery(ctx context.Context, plan UpgradeReco
 	}
 	var out []EffectRecord
 	err := authority.WithUpgradeRecovery(ctx, plan, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		var existing string
 		var raw []byte
 		var hash string
@@ -299,6 +309,11 @@ func (p *Processor) RestoreUpgradeHeadlessProjection(ctx context.Context, owner 
 	defer unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}
@@ -349,6 +364,11 @@ func (p *Processor) ResumeUpgradeRecovery(ctx context.Context, plan UpgradeRecov
 	}
 	var out []EffectRecord
 	err := authority.WithReleasedUpgrade(ctx, plan, newInstance, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		var effectID, existing string
 		var raw []byte
 		var hash string

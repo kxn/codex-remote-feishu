@@ -20,6 +20,9 @@ func (p *Processor) ApplyHostLifecycle(ctx context.Context, id string, at time.T
 	defer unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}
@@ -33,7 +36,11 @@ func (p *Processor) ApplyHostLifecycle(ctx context.Context, id string, at time.T
 	sort.Slice(owners, func(i, j int) bool { return owners[i].SurfaceID < owners[j].SurfaceID })
 	var result []PendingEffectWork
 	for _, o := range owners {
-		effects, err := p.applyOwnerHostLifecycleLocked(ctx, o, p.owners[o].generation, id, at, reduce)
+		projectionCtx, err := beginProjection(ctx)
+		if err != nil {
+			return result, err
+		}
+		effects, err := p.applyOwnerHostLifecycleLocked(projectionCtx, o, p.owners[o].generation, id, at, reduce)
 		result = append(result, effects...)
 		if err != nil {
 			return result, err
@@ -49,6 +56,11 @@ func (p *Processor) ApplyOwnerHostLifecycle(ctx context.Context, o Owner, genera
 	defer unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}

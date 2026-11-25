@@ -101,6 +101,11 @@ func (p *Processor) RegisterNativeHello(ctx context.Context, l *NativeLease, hel
 		return ErrJournalConflict
 	}
 	return l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		return p.registerNativeHelloLocked(ctx, l, hello)
 	})
 }
@@ -159,6 +164,11 @@ func (p *Processor) applyNative(ctx context.Context, l *NativeLease, ref NativeE
 		return nil, ErrJournalState
 	}
 	err = l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		event, applied, revision, e := p.journal.processorNativeEvent(ctx, ref)
 		if e != nil {
 			return e
@@ -585,6 +595,11 @@ func (p *Processor) MarkNativeStopping(ctx context.Context, l *NativeLease) erro
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		if p.poisoned {
 			return ErrProcessorPoisoned
 		}

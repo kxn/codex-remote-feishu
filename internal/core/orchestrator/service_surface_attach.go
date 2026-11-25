@@ -116,6 +116,9 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	if surface != nil && s.PrivateDetachedInstance(surface.SurfaceSessionID, instanceID) {
 		return notice(surface, "private_old_execution_unknown", "旧会话执行结果尚未确认，暂时不能重新接入；请选择其他会话或新建。")
 	}
+	if s.privateInstanceStopping(instanceID) {
+		return notice(surface, "private_instance_stopping", "该实例正在停止，请选择其他工作区或新建会话。")
+	}
 	inst := s.root.Instances[instanceID]
 	if inst == nil {
 		return notice(surface, "instance_not_found", "实例不存在。")

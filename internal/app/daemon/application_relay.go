@@ -103,13 +103,26 @@ func (a *App) applicationEvents(ctx context.Context, meta relayws.ConnectionMeta
 	if a.applications == nil || a.applications.native == nil {
 		return
 	}
+	applyPrivateEventBatch(events, func(event agentproto.Event) error {
+		return a.applications.native.receive(ctx, meta, instance, event)
+	}, func(event agentproto.Event, err error) {
+		log.Printf("private native event not applied: instance=%s kind=%s err=%v", instance, event.Kind, err)
+	})
+	a.wakePrivateApplication()
+}
+
+// Live display frames are individually authenticated and validated by receive;
+// rejecting one must not drop later durable frames in the same envelope.
+// Durable failures stop this batch so their journal sequence remains ordered.
+func applyPrivateEventBatch(events []agentproto.Event, receive func(agentproto.Event) error, report func(agentproto.Event, error)) {
 	for _, event := range events {
-		if err := a.applications.native.receive(ctx, meta, instance, event); err != nil {
-			log.Printf("private native event retained for reconciliation: instance=%s kind=%s err=%v", instance, event.Kind, err)
-			return
+		if err := receive(event); err != nil {
+			report(event, err)
+			if event.Live == nil {
+				return
+			}
 		}
 	}
-	a.wakePrivateApplication()
 }
 
 func (a *App) applicationAck(ctx context.Context, meta relayws.ConnectionMeta, instance string, ack agentproto.CommandAck) {

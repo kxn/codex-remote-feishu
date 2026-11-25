@@ -75,6 +75,11 @@ func (p *Processor) PrepareMigrationResume(ctx context.Context, o Owner, generat
 	defer unlockReference()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}
@@ -145,6 +150,11 @@ func (p *Processor) RestoreMigrationHeadlessProjection(ctx context.Context, o Ow
 	defer unlockReference()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}

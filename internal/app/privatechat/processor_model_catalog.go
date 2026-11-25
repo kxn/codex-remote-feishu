@@ -18,6 +18,11 @@ func (p *Processor) ApplyPrivateModelCatalog(ctx context.Context, o Owner, gener
 	defer unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}

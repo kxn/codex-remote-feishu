@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/ingressmapper"
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
@@ -153,80 +151,11 @@ func TestPrivateSDKOldImageCannotCrossNewOrDetach(t *testing.T) {
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
-			if command == "/detach" {
-				// Restore a session before the delayed SDK result arrives. This
-				// catches a late image being silently assigned to the new route.
-				msg.EventID, msg.MessageID, msg.RawContent = "reattach", "reattach", `{"text":"/list"}`
-				if err = r.hook.Receive(ctx, msg); err != nil {
-					close(stager.release)
-					t.Fatal(err)
-				}
-				var callback map[string]any
-				var card string
-				var find func(any)
-				find = func(v any) {
-					switch x := v.(type) {
-					case map[string]any:
-						if x["kind"] == "target_picker_confirm" && x["private_view"] != nil {
-							callback = x
-						}
-						for _, v := range x {
-							find(v)
-						}
-					case []any:
-						for _, v := range x {
-							find(v)
-						}
-					}
-				}
-				for deadline := time.Now().Add(5 * time.Second); callback == nil; {
-					for _, op := range gateway.snapshotOperations() {
-						if op.Kind != feishu.OperationSendCard || op.MessageID == "" {
-							continue
-						}
-						body, _ := feishu.FreezePrivateOperation(op, a.daemonLifecycleID)
-						var doc any
-						if json.Unmarshal(body, &doc) == nil {
-							find(doc)
-							if callback != nil {
-								card = op.MessageID
-								break
-							}
-						}
-					}
-					if time.Now().After(deadline) {
-						close(stager.release)
-						t.Fatal("workspace picker missing")
-					}
-					time.Sleep(10 * time.Millisecond)
-				}
-				for deadline := time.Now().Add(5 * time.Second); ; {
-					if _, e := r.router.PublishedMessage(ctx, "tenant", "app", "private-chat", card); e == nil {
-						break
-					}
-					if time.Now().After(deadline) {
-						close(stager.release)
-						t.Fatal("picker receipt missing")
-					}
-					time.Sleep(10 * time.Millisecond)
-				}
-				click := platformingress.HumanInteractionEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", EventID: "reattach-click", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, ChatID: "private-chat", MessageID: card, Kind: "card", Values: callback, ReceivedAt: time.Now()}
-				if _, err = r.hook.ReceiveInteractionResponse(ctx, click); err != nil {
-					close(stager.release)
-					t.Fatal(err)
-				}
-				for deadline := time.Now().Add(5 * time.Second); ; {
-					current, e := r.journal.LoadCheckpoint(ctx, o, record.Owner.Epoch)
-					if e == nil && current.Core.AttachedInstanceID == native.InstanceID {
-						break
-					}
-					if time.Now().After(deadline) {
-						close(stager.release)
-						t.Fatal("new route did not attach")
-					}
-					time.Sleep(10 * time.Millisecond)
-				}
-			}
+			// Detach marks the controlled old carrier stopping. This local cleanup
+			// fixture checks the canceled source while detached; the separate cold
+			// SDK delayed-image journey verifies selecting a real new carrier before
+			// the download returns.
+
 			close(stager.release)
 			for deadline := time.Now().Add(5 * time.Second); ; {
 				staged, stageErr := r.router.Get(ctx, e.Key)

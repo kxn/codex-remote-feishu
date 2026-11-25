@@ -407,7 +407,7 @@ func (h *privateNativeHost) restoreSealed(ctx context.Context) error {
 		if err = h.outbound.Drain(ctx, reg); err != nil {
 			// If retirement committed before the host state update, this exact replay
 			// succeeds without invoking VerifyStop. Any other error stays fail closed.
-			if e := h.registry.Retire(ctx, reg, privateInspectionEvidence(rec.Inspection)); e != nil {
+			if e := h.registry.Retire(ctx, reg, privateCarrierStopEvidence(rec)); e != nil {
 				return err
 			}
 			if e := h.store.transition(ctx, reg.Carrier.InstanceID, "sealed", "retired", hostinventory.ProcessIdentity{}); e != nil {
@@ -504,6 +504,13 @@ func (h *privateNativeHost) VerifyStop(ctx context.Context, reg executionowner.R
 			return fmt.Errorf("outbound drain not restored")
 		}
 	}
+	if rec.PhysicalExitProof {
+		if evidence != privateCarrierStopEvidence(rec) {
+			return executionowner.ErrConflict
+		}
+		_, err = h.verifyPrivatePhysicalExit(ctx, rec)
+		return err
+	}
 	ref := rec.Inspection
 	if evidence != privateInspectionEvidence(ref) {
 		return executionowner.ErrConflict
@@ -554,6 +561,12 @@ func (h *privateNativeHost) receiveAck(ctx context.Context, meta relayws.Connect
 func privateInspectionEvidence(ref privatechat.NativeEventRef) string {
 	return fmt.Sprintf("%s:%d:%s", ref.Incarnation, ref.Sequence, ref.PayloadHash)
 }
+func privateCarrierStopEvidence(rec privateCarrierRecord) string {
+	if rec.PhysicalExitProof {
+		return fmt.Sprintf("private-physical-exit:%s:%d", rec.Snapshot.Owner.CarrierIncarnation, rec.PhysicalExitWatermark)
+	}
+	return privateInspectionEvidence(rec.Inspection)
+}
 func (h *privateNativeHost) retire(ctx context.Context, instance string) error {
 	h.drainMu.Lock()
 	defer h.drainMu.Unlock()
@@ -571,7 +584,7 @@ func (h *privateNativeHost) retire(ctx context.Context, instance string) error {
 	if err = h.projectStoppedCarrierEvents(ctx, rec); err != nil {
 		return err
 	}
-	if err = h.outbound.Retire(ctx, privateRegistration(rec.Snapshot.Owner), privateInspectionEvidence(rec.Inspection)); err != nil {
+	if err = h.outbound.Retire(ctx, privateRegistration(rec.Snapshot.Owner), privateCarrierStopEvidence(rec)); err != nil {
 		return err
 	}
 	return h.store.transition(ctx, instance, "sealed", "retired", hostinventory.ProcessIdentity{})

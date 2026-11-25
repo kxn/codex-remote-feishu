@@ -22,6 +22,19 @@
 - 重启恢复的 request hold 不仅凭旧 request.started 重新启用。认证 wrapper 提供只读、版本化 pending inventory；daemon 核验精确 owner/代次、原事件 hash/水位及其后没有解决/答复证据，再恢复原请求。未决 response intent/dispatch 不重发、不重复启用按钮。清单暂不完整按已有 tick 最快每 5 秒只读重查，不重跑任务；旧 wrapper 缺能力时 `/status` 说明更新运行器以及可用的 `/detach` 出口。
 - journal schema 9 在同一迁移事务中从冻结事件和原 display chain 回填可证发布顺序，保留 ID、内容、unknown 状态和实际收据。没有操作/flow/context/display 证据的旧独立提示无法补造因果关系；保留它的原始证据，不借当前 UI 猜测或让它挡住独立的新工作。
 
+### 私人连续操作与停止中的载体
+
+- 选择目录、新建和接续的成功结论必须来自**本次操作**产生的结果，并核对实际在线、配置匹配、未停止中的精确实例。先前 checkpoint 中相同的目录和 `new_thread_ready` 不证明本次成功；已失去载体的同目录选择必须走实际准备流程。直接选择、目录、Git、Worktree 和异步完成使用同一个结论判定。
+- 有效的目录与会话归属不会因为后台载体暂时缺失而消失。已接收输入等待已有退出核验和替换流程，不进入旧 core 的 `not_attached` 消费分支；原结果未知则保留该会话的未知记录，显式退出并新建仍可工作。仅查看 `/list` 和编辑选择器不受原生替换等待阻止；确认切换仍遵守原队列和请求边界。
+- 私人 kill 效果在同一投影提交边界把对应实例排除出可接管候选；停止中投影由现有持久 stop intent 派生，重启时从未应用效果恢复，不建立第二份持久实例状态。旧实例收到退出请求后不能再次被同目录选择复用，迟到的退出结果只能移除旧实例。该规则同时覆盖显式接入和公共工作区候选，不只覆盖 `/list` 卡。
+- `draining` 且 wrapper 已退出时，可以核对物理退出，不能伪造原生 inspection。证明包括同宿主、冻结 PID 与启动身份、原生子进程组／job 已完整且为空、排他 journal 写锁、精确 launch hash、完整数据库及原生帧水位；registry 在退休写事务中再次验证。Linux 历史 scope 的裸 start ticks 必须结合冻结 carrier 的 boot identity，不能与带 boot 的进程身份直接比较而误报退出。
+- 私人宿主库迁移到 `user_version=2` 以记录独立物理退出证明。升级事务只修改版本并确保既有表存在，原 carrier JSON、credential hash 和凭据文件不重写；v1 二进制拒绝此版本，避免旧 reader 静默丢弃新证明字段。私人聊天 journal 仍为 schema 9，两者不是同一个数据库。
+- 物理退休仅说明旧载体不再写入，不结算旧命令。真实终态先独立投影；旧业务仍未决时不自动恢复该会话或重发输入。用户退出后，旧队列与未知执行保存在 detached 记录，新会话独立执行。后台只推进已有退出意图及清理，不预先为闲置用户启动替代载体；实际输入或明确选择触发准备。
+- 新会话首轮在原生接受后由 `new_thread_ready` 变为已选中原生线程。自动继续只在同一实例、`follow_execution_thread` 且当前选中线程等于本次执行线程时，把该冻结启动计划转成同线程的 `resume_existing`；否则沿原导航校验取消。不能发出“等待自动继续”后因自身正常线程落实而马上清除，也不能再次 `thread/start` 创建另一个会话。AutoWhip 仍按原开关、真实终态和计时策略推进。
+- 私人 worker 停止信号只结束后续准入，不取消已开始的 pass 项目或外部效果的收据结算。pass、逐 owner deadline、逐 native 事件和效果领取各自检查同一停止信号；已经进入的操作沿原有 I/O／数据库期限完成核心投影与持久提交。外层关闭期限只约束等待，未排空时返回错误并保留存储，不把取消调度造成的 `context canceled` 变成内存已变、checkpoint 未提交的全应用 poison。
+- `beginProjection` 在已有 reference gate／Processor 锁和精确 authority 之后检查原调用是否已经取消。尚未开始时不修改状态；开始后仅本地恢复、reduce、freeze 和 checkpoint 提交脱离调用方取消。纯读取及 authority／网络等待保留原期限，首次懒恢复单独保护。执行归属的普通／scoped lease 与维护本地回调在获取期间可取消，回调开始后 registry 写栅栏和 scoped Bind／Reserve 持续到提交；不能让外层 `database/sql` 自动回滚提前释放该锁。SQLite 租约获取用独占连接上的可取消重试替代不可中断 busy 等待，进入回调及归还连接前均恢复原 5000ms 超时。
+- 原生命令失败事件在公共事件封装中携带精确 `CommandID`。MCP OAuth 的拒绝／空链接与 compact 的 resume 失败必须经对应原生 RequestID 和已持久帧证明结算该命令，不能只有可见错误却让控制 lane 永久处于 sending。缺少关联的旧证据不猜补成功，也不重放已知可能发送的操作。
+
 ### 执行归属
 
 群项目的 WorkContext、WorkerSession 和 ExecutionAttempt 分别记录工作、受管原生会话与一次任务承接；任务要求版本、责任代次、worker、carrier 和 controller 分别核对。成员长期目录按项目与角色稳定归属，执行 cwd 和临时任务上下文不改变资料归属。普通群消息按明确成员/上下文或可证明的任务负责人路由；管理和评审上下文不领取普通业务。
@@ -198,7 +211,7 @@ Goal 查询失败只结算查询，不把正常执行变成异常。查询／清
 
 私人 journal 的 schema 7 为上述 `sent`／`resolved` 扩展 dispatch 状态；旧 dispatch、关联输入、原生命令与索引在事务内迁移，并检查外键。新增的导航快照、停止意图、退出后旧执行证据和 Goal 投影使用 checkpoint 版本 2，新代码仍可读版本 1。旧版本 reader 必须拒绝不兼容 journal，不能忽略新字段后继续派发旧输入。升级到 schema 7 后，单独换回旧二进制不是受支持的回滚；升级工具的二进制备份也不等于数据回滚。不得为降级清除未知记录、改低版本号或恢复一个会丢失新接收消息的旧库。
 
-当前 journal 打开时事务迁移至 schema 8。该版本包含未发送界面更新的 V2 本地取消结果、文件／队列的 `StagePending` 占位语义，以及 `private_applied.canceled_by` 指向真人取消操作的记录。成功丢弃旧输入由 core 的实际操作结果决定，不能由菜单按钮意图或易被展示过滤的 notice 推断。中立入口原始 router 与序号随私人入站持久化，成功取消在 private_applied 保存边界；先完成取消、后完成下载的旧输入仍按原始顺序关联 canceled_by，而不是按下载完成后的私人序号误投新会话。取消的旧入站输入使用 revision 0，不借用控制操作的效果或来源；原始输入保留。取消后的 SDK 暂存清理使用同事务登记的 ingress 引用，复用原 manifest／文件身份与 hash 校验，不伪造阶段效果或删除外部文件。V2 `suppressed` 只说明旧模型页已失效、决定不发送，原 publication operations 保持 prepared，不生成任何平台发送成功收据。已有 sending／unknown 平台操作继续核查。只支持 schema 7 的旧二进制拒读 schema 8，同样不能仅回换二进制或改低版本号回滚。
+schema 8 迁移引入未发送界面更新的 V2 本地取消结果、文件／队列的 `StagePending` 占位语义，以及 `private_applied.canceled_by` 指向真人取消操作的记录。成功丢弃旧输入由 core 的实际操作结果决定，不能由菜单按钮意图或易被展示过滤的 notice 推断。中立入口原始 router 与序号随私人入站持久化，成功取消在 private_applied 保存边界；先完成取消、后完成下载的旧输入仍按原始顺序关联 canceled_by，而不是按下载完成后的私人序号误投新会话。取消的旧入站输入使用 revision 0，不借用控制操作的效果或来源；原始输入保留。取消后的 SDK 暂存清理使用同事务登记的 ingress 引用，复用原 manifest／文件身份与 hash 校验，不伪造阶段效果或删除外部文件。V2 `suppressed` 只说明旧模型页已失效、决定不发送，原 publication operations 保持 prepared，不生成任何平台发送成功收据。已有 sending／unknown 平台操作继续核查。只支持 schema 7 的旧二进制拒读 schema 8，同样不能仅回换二进制或改低版本号回滚。
 
 旧 team-private 迁移先以真实 owner witness、锁和中立入口屏障排空源写入，再保存源快照、目标导入及 transfer；target ready 前不启动私人载体或发送新结果。已停止进程不等于所有远端执行已静止：不能证明的旧执行、已领取输入和未知发送分别保留；不会把旧 attempt 当作私人 task，也不会自动重跑旧输入。`/status` 汇总待核查组件，`/recover` 按本人请求分页列出历史输入（`/recover page N` 翻页）；`/recover N` 查看并按证据取回附件，`/new` 后 `/recover confirm N` 才把该项作为新输入。再次确认或重启不会重复入队；同一新会话的后续恢复需要已持久的原生 `start_new` 命令及实际接受回执，核对 owner、epoch、backend 和 namespace。缺失附件或未决来源不能伪装恢复成功。
 

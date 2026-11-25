@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-11-25`
-> Summary: 按团队功能加入前的版本重建单聊使用场景、入口调用图和逐项验收，明确尚未验证的流程。
+> Summary: 从旧版用户可见行为提取完整流程与相邻场景衔接，禁止预置私人运行状态或等待内部就绪冒充用户验收。
 
 本次以 `edffb35f` 为旧版基线，初始审查对象为 `42159c64`，后续在同一分支统一修复。初始缺口和整改后的实测结果分别保存；当前结论见末尾“本轮整体验收”。保留用户已明确取消 Cron、VS Code 接管和历史改写的决定；其余单聊差异均需逐项证明，不能自行称作产品取舍。单聊与群团队继续独立。
 
@@ -13,6 +13,59 @@
 每项记录前置状态、入口和完整操作序列、旧版预期、实际平台输出、原生行为、异常分支和验证证据。验证状态分为“已执行通过”“已执行失败”“仅有局部测试”“未执行”；静态代码审查不能写成已通过。受控飞书端可验证生产 SDK 与发布协议，不能代替客户端视觉验收。真实原生后端、受控原生后端和真实平台分别记录，不相互替代。
 
 初始审计结论：当时尚未通过。下文初始盘点里的测试名称只代表覆盖线索，不是整改后的通过声明；整改后的新鲜执行证据见末尾。
+
+## 本轮重验：用户流程及其衔接
+
+**本轮重验开始时未通过，当前执行结果见末尾。** `678f491a` 线上再次出现“成功待命卡后 hi 返回未接管”。前轮的全仓测试、真实模型及局部旅程日志是实际发生的验证，但部分 fixture 直接 launch 载体、读取内部 online/route/receipt 后才操作，不能证明用户从入口连续使用。因此前轮“完整流程已接通”的概括撤回，保留各自有限证据，不把测试数量当产品验收。
+
+现场按原始事件可重建为：先前工作区已准备 → 服务退出核验未完成，旧载体留在 draining → 同库重启 → 普通消息提示接管 → `/list` 选原目录并新建 → 本次准备实际失败，但旧 ready 快照盖成成功卡 → 下一条 hi 仍被消费为 not_attached。工作目录和声明的目标仍在，问题是目标、实际执行环境和本次选择结果没有形成一致的生命周期。
+
+本轮把以下要求作为整体完成条件：
+
+1. 安装和外部世界可准备目录、账户及原生历史；私人接管、实例、会话、队列必须从 SDK 人类操作产生。不能在旅程开头直接 UpsertInstance、launchPrivateNative、写 claim/checkpoint/retired 来代替用户流程。
+2. 下一动作以人可见的卡片、文字、反应或 HTTP 同卡响应为时钟。看到成功立即输入/点击；不先查询内部 online、checkpoint、PublishedMessage、CardRef 或 receipt。它们只用于事后断言和失败诊断。
+3. 必须核对衔接两边：上一步是否真的兑现、下一步是否实际完成。没有 noWorkspace 或有任意卡不等于通过；须有正确工作目录、会话、原生输入及可见最终回复，再继续下一步。
+4. 对用户允许的相邻操作组合逐条登记；包括多种菜单/slash入口、同目录/换目录、忙态/确认/附件、取消与断线/正常关闭/退出核验超时。失败必须具有真正能继续的操作路径。
+5. 物理载体已停止与旧业务结果已确定分别证明。真实进程组及写入封锁可完成载体退役；未知结果保持原记录，不补造终态、不自动重跑，也不能因此无期限挡住无关的新工作。
+
+下表每条需登记可见步骤、原生终点、实际结果和日志；缺失或只分层测试继续记未验，不能以函数接线相同代替体验相同。
+
+### 旧版可见序列和衔接验收合同
+
+以下来源是旧提交的真实代码行为，用作外部承诺的起点，不要求复刻其实现缺陷：`internal/core/orchestrator/service.go:ApplySurfaceAction` 先处理启动/脱离 gate、文本对 picker 的关闭、再路由文本/图片/文件/reaction/stop/detach；`service_target_picker.go:dispatchTargetPickerConfirmed` 在选择完成时输出同卡成功并处理曾保存的待发输入；`service_surface_actions.go:prepareNewThreadWithOverlayCleanup/stopSurface/cancelPendingHeadlessLaunch/detach` 记录就绪、阻塞、停止请求和草稿处理；`service_snapshot_runtime.go:ApplyInstanceConnected` 连接后完成 pending 生命周期。`app_ingress.go:HandleGatewayAction/onHello/onDisconnect` 是旧平台到这些动作的路径。旧代码中“已有成功判定的实现”并不构成其时序正确的证明，仍以人能看到的承诺和紧随动作验收。
+
+| 序列及起点 | 用户可见动作→承诺→紧邻动作→终点/失败出口 | 证据定位与执行断言 |
+|---|---|---|
+| U01 未接管、普通文本 | 发 hi→被要求选择工作目标→选已有目录→新建→成功卡→立即 hi；未接管时的原 hi 明确未发送、不自动重播，final 后第二条 | `edffb35f` 的 p2p `handleText` 先返回 `not_attached`；picker 的 pending/replay 不等于未接管私聊自动保存输入。核原 message ID 与无重复 native dispatch。 |
+| U02 未接管、图片优先 | 发图片或图+文字→目标引导→取消或选目录→继续消息 | 旧 `stageImage/handleText`；核图片簇、source IDs、顺序和最终 native 输入；不准事先构造队列。 |
+| U03 目录 A、无历史 | `/list`→选 A→新建→成功后文本→同 session 二轮 | 旧 `dispatchTargetPickerConfirmed` 的 `new_thread_ready` 成功文案明确称下一条创建；以平台可见卡为唯一等待。 |
+| U04 A 已有运行环境→A 新建 | 正在 A→用户选择 A、新会话→成功即发→新 thread；若旧 instance 不可用则可恢复或显示真实失败，不能成功卡后 noWorkspace | 旧 `enterTargetPickerNewThread` 同目录短路；现场指出旧 route/CWD 非可用证据。 |
+| U05 A→B→A 已有 | A final→选 B 新建→B final→选择 A 原 session→A final；跨页旧回调、迟到 A/B 输出不串 | 旧 `useThread` 和 workspace attach；检查具体 A/B 的 cwd、身份与 thread IDs，不预置 claim。 |
+| U06 已有 session→同 session | `/list` 或 `/use` 打开卡片并明确选择已有→切换成功→下一输入到该会话；占用/不可见输出实际失败且原会话不丢 | 旧 `useThreadWithOverlayCleanup` 的 busy、not_found、claim 分支。 |
+| U07 text 绕过 picker | 菜单/目标卡编辑中直接发文本→picker 关闭或失效→原路由正确处理；processing 时按旧门禁提示，不吞文字 | 旧 `ApplySurfaceAction` 的 dismiss 和 `blockActionForActiveTargetPicker` 的顺序。 |
+| U08 启动中取消→new | 选择目录显示处理中→`/detach` 或可见取消→确认取消与关联启动结束→重新选目录/新建→文本 final；迟到旧 hello 不抢路由 | 旧 `cancelPendingHeadlessLaunch` 输出 exact instance kill、清待发并最终提示；新版不把 kill 请求等同退出。 |
+| U09 排队/忙→new | 活跃 turn + 草稿/排队→`/new`/目标卡；按旧忙态允许/阻止给真实反馈→结束或取消→再新建并发下一轮 | 旧 `blockNewThreadPreparation`、`discardDrafts`；未获许可的旧已发输入不能伪造取消。 |
+| U10 pending request→cancel→new | 原生确认显示→取消/拒绝/处理→确认原请求状态→`/new`→下一消息；重复按钮无重复动作 | 旧 `activePendingRequest` 阻止错误路由变更；真实 request/frame 与可见卡两者都核。 |
+| U11 run→stop→new | 活跃 turn→`/stop`→明确“已发送停止请求”或未可中断；不提前称结束→终态后 new→下一轮 final | 旧 `stopSurface` 的 `stop_requested/stop_not_interruptible` 和草稿清理；新版用 native terminal/未知回执守住边界。 |
+| U12 多图排队→new | 图 1、图 2、文字在下载/排队中→明确新建/取消→迟到下载→再发文字 | 旧 stage/route-change discard；新架构核 origin 顺序与 manifest，旧附件不得自动流入新 thread。 |
+| U13 附件→detach/reselect | 文件下载中→detach→picker 重新接管→新消息；managed staging 精确清理，非系统文件保留 | 旧 route-change discard 与新 durable cleanup；需验真实 SDK 收据而非伪造 staging 完成。 |
+| U14 附件→stop | 文件/多图暂存或排队→stop→可见清理数量/结果→迟到完成→下一消息 | 旧 `stopSurface` 先计数并 discard drafts、clear requests；不对已 accepted 输入虚称未执行。 |
+| U15 配置→执行 | 无载体选 profile/model/access/plan→原卡成功→立刻选目录/新建→下一 native request 精确取用户所选设置→final | 旧设置 action + 启动 contract；新 profile/账号环境与 cwd 均验，不能先手工写设置再宣称 SDK 完整。 |
+| U16 忙时配置→停止/下一轮 | 活跃中改设置→明确即时生效或等待/失败→本 turn 正确完成或 stop→下一轮与重启按已保存设置执行 | 查旧 backend contract 和重启语义；不能靠静态菜单/当前 snapshot 代替 native 下一帧。 |
+| U17 Codex→Claude→OpenCode | 选后端/profile→成功反馈→目录/新建→首轮 final→再切后端；无效凭据给具体失败，切回可修复 | 每个 backend 各有真实载体身份、会话命名空间；受控 frame 与可用真实账户边界分别登记。 |
+| U18 `/model` 冷目录→选择→执行 | 打开等待卡→原卡自动更新→选模型→成功→下一 native turn 确认模型，失败仍可重试 | 同一原卡最新 token、callback 时序和平台 receipt；不得把异步模型列表完成当设置已保存。 |
+| U19 正常重启→继续 | 用户 A 选 session 并完成→干净退出/重启→用户看到恢复结果→原 session 立即下一轮；后台完成与 UI 都可追溯 | 旧 onHello/dispatch 链；新 journal 以真实 exact hello/receipt 恢复，不能由测试直接设置 attached。 |
+| U20 断线 unknown→new | 原 turn/消息未知→用户看见未知/恢复反馈→明确 `/new`→新目录或相同目录→新消息 final；旧 late terminal 不污染 | 旧能力须保留可逃生交互，新 durable unknown 不视作成功、不重发；逐原始来源验证。 |
+| U21 任务回复→文件/预览→下一轮 | native 工具/思考/最终答复、diff/preview→平台可见→选文件发送→正确回执→下一轮 | 旧 `onEvents` 与 renderer/preview；确认 response 和文件内容均来自该 turn，失败不能阻塞正文。 |
+| U22 查询和动作同卡→切页 | `/history`/`/goal`/`/review`/`/compact`/`/mcp` 在发出后返回另一页→结果只更新仍有效原页；目标动作终态后下一输入可发 | 旧 active owner flow 和 pending request；分开“请求写入”“后端接受”“完成”，不可只验按钮或 ACK。 |
+| U23 按钮/平台菜单入口 | `/menu`、平台菜单、slash 别名及同卡按钮从各起始状态达同一产品操作→完成后重放旧 token 被拒→当前卡可继续 | 旧 gateway parse/routing 和 owner flow；同卡不能被旧异步 PATCH 覆盖，重复 event 不重复发送。 |
+| U24 故障/权限→修复 | profile/config/目录不可用或模型探测失败→原卡给真实原因→返回设置并修正→目录选择→final | 身份/存储错误不伪装配置错误；已确认设置不能因旧缓存或旧 carrier 隐式退回。 |
+
+| U25 自动继续与 AutoWhip | 新会话首轮上游中断→真实自动续轮→关闭→开启 AutoWhip→原时限补发→停止短语→关闭→普通消息 final | 不手工推进 tick；自动输入各一次，所有轮次同一真实原生 session。 |
+| U26 排队与表情操作 | busy→排队首条文字及非队首图文→重复点赞／鼓掌→撤回另一项→`/steerall`→`/stop`→下一轮 final | 冻结原 source 和图片配对；重复 reaction 不重复发送，撤回文本不进入 native。 |
+
+执行时每个 U 编号必须登记其 SDK 入口、可见反馈、用户下一动作、确切 native session/turn/input、结果或失败、重启/重复和平台 receipt；某个步骤由内部状态注入或等待则记“局部”，不填整条通过。真实飞书服务与受控平台、真实后端与模拟 native 必须明确区分。
+
 
 ## 初始审计的现场事实
 
@@ -51,7 +104,7 @@
 | `/menu` `/help` | 未绑定/运行中 → 打开、分类、返回、重复回调 → 同卡导航/各自可用项；过期或 foreign card 拒绝且不改当前卡 | M 验证三个分类、back、重复回调；需各 command 的参数提交、异步结果与陈旧卡完整组合。 |
 | `/status` | idle、运行、等待确认、无载体/恢复中分别打开 → 原状态/队列/工作区信息；查询失败明确提示 | M 仅有输出；X 测运行时菜单。缺状态与实际 native/receipt 精确一致及恢复后同卡验收。 |
 | `/workspace` `/workspace list` `/list` | 未绑定或原会话 → 打开列表→选择目录→选择已有会话/新会话→确认→选中路由→发送消息→最终答复；失效路径/忙/冲突不丢输入 | X 有 SDK 选择 carrier；`private_new_workspace_sdk_journey_test.go` 真 Codex 新建到待命；缺两者串成首次 prompt→final、目录/账号切换及进程启动失败恢复。 |
-| `/use` `/useall` | 有已验证历史→列表或显式 ID 选会话→确认→下一条确实发原 session；不可见/其他 owner/未静止旧执行给明确原因 | 核心历史隔离与 alias 另有 focused；缺 SDK 输入→同一 native session→最终平台答复，及 `/useall` 多项选择完整回执。 |
+| `/use` `/useall` | 有已验证历史→列表及卡片选会话→确认→下一条确实发原 session；不可见/其他 owner/未静止旧执行给明确原因 | 核心历史隔离与 alias 另有 focused；缺 SDK 输入→同一 native session→最终平台答复，及 `/useall` 多项选择完整回执。 |
 | `/new` | 有原 session/待命→明确新建→冻结/丢弃旧草稿→新 thread 首条→final；未知旧执行不可重发 | `private_sdk_staging_order_test.go` 控制下载并核取消；真实 Codex 新建只到待命；缺新旧 session ID 区别、第一条 native 最终答复。 |
 | `/detach` `/workspace detach` | 已选会话/运行中/未知执行→slash 或 workspace 卡确认退出→旧队列按原规则处理→重新选目录→新输入及 final；旧执行未知保留证据 | `private_detach_assembled_test.go` 两种入口；旧图下载晚到的 SDK picker 复选已测；需真实 active carrier 终态、重接及平台最终答复贯通。 |
 | `/stop` | 活跃→停止→native interrupt 精确 receipt→状态/原卡反馈→再输入同 session 正常回答；无 active、未知发送要正确反馈不误报成功 | X 有真实 SDK 到 wrapper interrupt 与下一 turn/start，仍需 stop 后 actual final 内容及 unknown/拒绝/重试组合。 |
@@ -127,12 +180,12 @@
 5. **发送中 stop/steer/二次输入**：原 core queue/command 与 `private_work_runner.go` 的 per-owner input lane + native journal 证据；`private_assembled_execution_journey_test.go` 覆盖受控 native Codex/OpenCode 的用户输入、图片、reaction steer、stop、下一条、重启；真实模型本次只覆盖非中断顺序双轮，未覆盖真实 Codex 的 steer、stop、工具执行和确认请求。
 6. **确认与输入结果**：`processor_native.go:20–49,246–261` 用真实 frame written 与 request resolved 分开更新；`journal_native_outcomes*` 相关结果匹配、checkpoint 原子提交；native request 真机承载和卡片失败后非 status 重放尚欠 SDK e2e。
 7. **展示、diff、preview**：private core 与旧 core 共用输出/reducer；`privatePublisher`/`private_preview*` 承接 block、最终结果、文件预览/重试。`processor_native_test.go` Codex/Claude final 模拟协议回放，真实 Codex 两轮验证纯文本最终消息；真实工具、diff、自动预览及外部文件内容完整性未验证。
-8. **历史、目录、恢复**：history 走原 picker + native `thread.history.read` 结果，`/use` 在 `private_thread_policy.go` 过滤已归属 team/其他私聊的 session，launch 前 registry 再校验；`private_clean_restart_sdk_journey_test.go` 覆盖受控 native 的重启/原 session、队列、未发 prompt。真实 OAuth 进程跨 daemon 重启后续聊、真实旧个人历史迁移、混合全权限进程与 unknown 结果对账尚未在此次运行验证。
+8. **历史、目录、恢复**：history 走原 picker + native `thread.history.read` 结果，`/use` 入口在 `private_thread_policy.go` 过滤已归属 team/其他私聊的 session，launch 前 registry 再校验；`private_clean_restart_sdk_journey_test.go` 覆盖受控 native 的重启/原 session、队列、未发 prompt。真实 OAuth 进程跨 daemon 重启后续聊、真实旧个人历史迁移、混合全权限进程与 unknown 结果对账尚未在此次运行验证。
 9. **图片/文件**：SDK 输入异步 staging 后绑定原消息；`private_sdk_staging_order_test.go` 覆盖 /new 与 /detach 期间迟到图片及 manifest 清理；`private_assembled_sendfile_journey_test.go` 覆盖文件选择与受控 SDK/文件上传，非实际外部飞书。
 10. **明确排除项**：cron、VS Code 接管和 bendtomywill 按用户要求不恢复；不应把旧代码仍存在当成 private 漏接。
 
 
-## 本轮整体验收
+## 前轮实测记录及其证据边界
 
 ### 已落地的根因修正
 
@@ -177,3 +230,65 @@
 
 
 2026-11-25 部署复核：运行代码 `678f491a`，安装事务 `committed`，运行进程 SHA-256 与仓库本次构建一致（`8d9d160ae90ddc9d8815a074d16cb35a726e7df566afdb5ede31c55a27fbf38b`），六个飞书连接均为 connected，配置内容与修复前备份一致。相同 30 秒空闲窗口中，daemon 使用 0.53 CPU 秒，即单核 1.77%，相较前一部署的 11.8% 明显下降；该采样不代表执行模型任务时的 CPU 上限。证据 `/tmp/private-perf-live-ready.json`、`/tmp/private-perf-live-idle-cpu.json`。真实飞书业务消息未人工合成发送；前述 SDK 旅程的平台端仍是受控网关，真实 Codex 调用已单独实跑。
+
+
+## 本轮整体验收
+
+当前状态：下述连续旅程、最终全仓普通测试、相关组件整包 race、真实 Codex 探针和 Windows 构建均已通过；部署与现场状态核验仍在进行中，尚不写成上线完成。
+
+### 根因和统一修正
+
+1. 中断停机后旧 carrier 留在 draining，原目标仍在却被旧入口报为未接管。现在用精确物理退出证明完成已有退休意图，保留业务未知证据；下一输入或明确选择沿原目录和会话恢复，不预先创建闲置替代进程。
+2. 选择器把旧 ready 快照当成本次成功。目录／已有会话／Git／Worktree 和异步完成统一按本次结果及可用实例判定；旧 snapshot 不再覆盖真实失败。
+3. detach 已发 kill 的旧实例仍能被重选，迟到 stop 再清掉新绑定。停止中的候选投影从同一持久 outbox 恢复，显式 attach 与公共候选统一排除旧实例。
+4. 平台菜单没有原始 chat ID，私人入口遗漏填入已经核实的目的地；现在只从 authenticated p2p binding 补足，保留原 SDK 事实和顶层新卡语义。
+5. MCP 拒绝只显示错误，事件丢失顶层命令关联使控制队列卡在 sending。公共错误构造器保留原 CommandID，原生 RequestID 和帧证明结算该失败，失败后重试及普通对话均继续。
+6. 一批事件中的 live delta 拒绝使后续持久 final 丢失。现在每条仍独立认证，live 拒绝不阻断之后事件；持久事件提交失败仍停止该批并保留重放次序。
+7. 新会话首轮已落实到真实线程后，自动继续仍比较启动前的路由，立即清掉刚安排的续轮。现在只在同实例、同执行线程及 follow-execution 策略下提升为原线程续接，其他导航仍取消。
+8. 宿主库 v1 reader 会丢弃新物理退出证据字段。事务迁移至 v2，既有载体 JSON、凭据 hash 与凭据文件保持原样；旧 reader 拒绝新版本，私人 journal 仍为 schema 9。
+
+9. 停止 worker 取消了已经进入 publisher 收据投影的上下文，导致 core 已变而提交取消。现在调度停止与在途事务上下文在唯一 runner 边界分开，逐项检查停止信号；关闭超时保留存储，已开始收据结算完成后才排空。
+
+10. 同一取消窗口还可在 SDK、关闭通知和 ownership lease 出现。统一 `beginProjection` 在锁和 authority 后判断取消，本地投影一旦开始即完成提交；未开始仍拒绝。registry 普通／scoped／维护 lease 获取可取消，callback 与 scoped session 绑定的栅栏持续至提交。对应竞争测试证明取消不会提前释放转移锁，SQLite 获取等待仍遵守调用期限。
+
+### 连续旅程证据
+
+本轮新增连续旅程的业务最终答复均匹配 `FinalSourceBody` 和原 `ReplyToMessageID`；统一 fixture 答复文字本身不作为下一轮已经完成的证据。数据库、receipt 和 runtime 状态只在用户序列结束后核对或用于失败诊断。
+
+| 合同 | 新鲜执行的实际链及代码证据 | 结果与范围 |
+|---|---|---|
+| U01、U04 | `TestPrivateSDKUnboundHiExistingWorkspaceNewSessionJourney`：首条 hi 引导→已有目录/历史→新建→成功即发送→两个对应 final | 定向 race 通过；旧 source 不重放，新 thread 独立。 |
+| U02 | `TestPrivateSDKUnattachedMediaRequiresResend`：未接管图片／富文本→引导→选择→新文本 final | 定向 race 通过；富文本 staging 使用受控 parser callback，不计为真实飞书客户端解析验证。 |
+| U03、U18 | `TestPrivateSDKPickerNewWorkspaceRealCodex`：冷 SDK 入口、真实模型列表选择、保存反馈后立即两轮 | 真实 Codex 0.171 + 隔离 OAuth 账户配置；平台为受控 gateway。原生默认模型、Plan 对话和 full access 写／读文件分别执行。 |
+| U05、U06 | `TestPrivateSDKUserGraphWorkspaceAToBAndBack`：A final→B final→A 原 session final；菜单旅程另验 `/use` 及旧 aliases→普通对话 | 定向 race 通过；事后核确切 cwd、session 与各源输入各一次。`/use` 是打开卡片，旧版不定义 `/use 任意ID` 文本参数。 |
+| U07、U08 | `TestPrivateSDKTextClosesUnattachedPicker`；`TestPrivateSDKCancelledAuthenticatedHelloCannotReplaceNextWorkspace` | 定向 race 通过；旧按钮不可使用，已认证旧 hello 延迟到第二次 ready 后才放行，新输入有对应 final。 |
+| U09、U11 | `TestPrivateSDKBusyNewThenStopThenNew`：真实 busy→new 拒绝→stop→THINKING 移除→new→final | 定向 race 通过；停止 ACK 不充当执行终态。 |
+| U10 | `TestPrivateSDKDeclineApprovalThenNew`：原生审批→可见 decline 按钮→原生确认→new→final | 定向 race 通过；实际 native response 为 decline。 |
+| U12–U14 | `TestPrivateSDKDelayedImageDiscardedAcrossRouteCommands`：下载延迟→new/detach/stop→迟到下载结束→连续两轮 final | 三支定向 race 通过；原图片不进入新目标。旧 cleanup 局部测试另保留 managed 删除、foreign 保留断言，不再要求重用已停止实例。 |
+| U15、U16 | `TestPrivateSDKUserGraphSettingsThenBusyAndNextTurn`：未绑定设置→选择→首轮→忙态菜单/设置→原轮结束→下一轮 | 定向 race 通过；真实原生请求核 model、reasoning、full access 与 plan。不是所有 provider 配置的笛卡尔积。 |
+| U17、U24 | `TestPrivateSDKUserGraphBackendsAndInvalidProfileRecovery`：Codex→Claude→OpenCode→坏 Profile 明确失败→修复→final→Codex final | 定向 race 通过；真实 wrapper、受控 native；默认 Profile 与 OpenCode 无效输入修正，不冒充三个外部商业后端的账户实测。 |
+| U19 | `TestPrivateSDKCleanShutdownThenDirectMessageRecovery`：冷启动完成→正常关闭→同库新 App→两轮 | 定向 race 通过；事后核原 session 未改变。这里指 daemon 正常重启，不是模拟整台宿主机重启。 |
+| U19 异常退出核验 | `TestPrivateSDKInterruptedShutdownThenDirectMessageRecovery`、`TestPrivateSDKInterruptedShutdownThenSameWorkspaceNewSession` | 定向 race 通过；实际原生检查挂起、停机期限到达、旧进程退出，再验证直接输入／先 list 两条不同入口。 |
+| U20 | `TestPrivateSDKInterruptedUnknownTurnCanDetachAndStartNew`：原任务已接收无终态→退出中断→detach→新建→连续两个 final | 定向 race 通过；旧输入恰一次、旧队列在 detached 记录、旧 kill 已应用，不补造任务完成。 |
+| U21、U22 | `TestPrivateSDKUserWorkflowHistoryGoalAndContinuation`：冷启动→native final/diff/fileChange→preview URL→history 详情→goal 读写清除→compact→review final/退出→sendfile→系统入口/受控 autostart→MCP 失败重试→普通 final | 定向 race 通过；SDK upload 实际调用并去重，preview provider 与平台为受控服务。打开 upgrade 页不等于执行安装。 |
+| U23 | `TestPrivateSDKUserGraphMenuEntrancesAndContinuation`：首次 hi→平台菜单→五分组/返回/旧 token→选目录→各 slash 页面及六个会话 aliases→每次下一条对应 final | 定向 race 通过；导航不新增卡，不以本地 publication 已登记作为点击前提。客户端视觉仍需真实飞书验收。 |
+| U25 | `TestPrivateSDKUserGraphAutomationAndNextMessage`：新会话失败→自动继续→AutoWhip→停止短语→关闭→下一条 | 定向 race 通过；原时钟运行，自动来源各一次，只有一次 thread/start 且所有后续 turn 在原 session；不同线程、实例和保留原选择分支有负例。 |
+| U26 | `TestPrivateSDKColdQueueReactionStopJourney`：非队首图文重复点赞、另一文字鼓掌、撤回、steerall、stop、下一轮 | 定向 race 通过；精确两次 steer、一次 shell、图片原配对，撤回项不发送。 |
+
+### 证据边界与最终检查
+
+本轮表中的连续旅程替换平台网络和外部 native 服务，不替换私人 session／claim／队列的业务状态；接管、选择、启动、设置、停止均由 SDK 动作完成。原有 `private_assembled_*`、`TestPrivateSDKCleanRestartNewThreadReadyTwoTurns` 等包含人工装配的测试继续只算组件补充，不因名称含 SDK 被提升为完整用户链。真实飞书客户端的显示、外部文档服务及实际安装升级没有被本轮测试冒充验证。Git/Worktree 的工作区创建、取消、失败与当前操作结果由原有核心测试补充，未在这里声称运行过真实远程 Git 服务。
+
+取消边界另有确定性证据：HostReceipt、SDK ApplyIngress、owner lifecycle 的真实 reducer 在变更 core 后阻塞，取消调用上下文再释放；checkpoint 与 applied／receipt 同 revision 提交，下一操作可继续，重放不再调用 reducer。预取消分支 core／DB 均不变；平台 publisher 写入后被阻塞，stopWorkers 会等待收据应用，未领取的 effect 不执行。原有 callback 认证／receipt 等待超时测试证明不产生迟到后台动作。
+
+最终统一检查已有新鲜结果：
+
+- `go test ./... -count=1` 通过，daemon 包 197.687 秒，日志 `/tmp/private-final-all-v3.log`。
+- `GOOS=windows GOARCH=amd64 go build -buildvcs=false ./...` 通过，日志 `/tmp/private-final-windows-v3.log`。此工作区 Go VCS stamping 探测失败，显式关闭 stamping，不跳过代码构建。
+- 最终真实 Codex 三组独立探针通过：模型列表／选择两轮 18.312 秒；原生默认模型加 full access 写文件、读取核对及第三轮 24.957 秒；Plan 两轮对话 22.465 秒。分别见 `/tmp/private-final-real-model-v3.log`、`/tmp/private-final-real-tools-v3.log`、`/tmp/private-final-real-plan-v3.log`。
+- 写文件探针与 Plan 对话分开执行。一次把两种环境变量叠加的实验未得到预期的第三轮 `BOREAL`，不能把要求 Plan 模式执行改动的测试配置算成有效写入证明；测试现显式拒绝这种组合，并在失败时打印已看到的对应 final，避免将不同答复误报为根本无回复。
+- `scripts/check/pre-commit.sh` 已执行通过；测试路径提示属于该脚本既有非阻断检查，未跳过 guardrail。
+
+- 最终相关组件整包 race：`go test -race ./internal/app/daemon/... ./internal/app/privatechat ./internal/core/orchestrator ./internal/app/wrapper/... ./internal/adapter/codex ./internal/adapter/feishu -count=1` 通过，41 个有测试包，daemon 包 443.593 秒，日志 `/tmp/private-final-race-v3.log`。全仓普通测试共 122 个有测试包，无失败。
+
+代码已具备部署条件；实际安装身份、恢复状态和空闲 CPU 在部署完成后补记。

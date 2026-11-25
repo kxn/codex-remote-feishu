@@ -9,13 +9,16 @@ import (
 	"time"
 )
 
-func (r *privateWorkRunner) runOwnerDeadlines(ctx context.Context) error {
+func (r *privateWorkRunner) runOwnerDeadlines(ctx, stop context.Context) error {
 	for offset := 0; ; offset += 128 {
 		owners, err := r.journal.DeadlineOwnersPage(ctx, 128, offset)
 		if err != nil {
 			return err
 		}
 		for _, owner := range owners {
+			if stop.Err() != nil {
+				return stop.Err()
+			}
 			if _, err = r.ingress.privatePublicationBindingFor(ctx, owner.Owner, owner.Generation); err != nil {
 				continue
 			}
@@ -26,8 +29,14 @@ func (r *privateWorkRunner) runOwnerDeadlines(ctx context.Context) error {
 			if checkpointErr == nil && len(checkpoint.Core.QueuedQueueItemIDs) > 0 && checkpoint.Core.ActiveQueueItemID == "" && retiredCheckpointHasTarget(checkpoint.Core) && r.native != nil {
 				proven, proofErr := r.processor.QueuedRecoveryProven(ctx, owner.Owner, owner.Generation)
 				if proofErr == nil && proven {
+					if stop.Err() != nil {
+						return stop.Err()
+					}
 					_, _ = r.prepareRetiredRuntime(ctx, owner.Owner, owner.Generation)
 				}
+			}
+			if stop.Err() != nil {
+				return stop.Err()
 			}
 			now := time.Now().UTC().Truncate(time.Second)
 			if _, err = r.processor.ApplyOwnerDeadline(ctx, owner.Owner, owner.Generation, fmt.Sprintf("tick:%d", now.Unix()), now); err != nil {

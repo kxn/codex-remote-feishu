@@ -14,6 +14,9 @@ func (p *Processor) ApplyCodexContracts(ctx context.Context, o Owner, generation
 	defer unlockReference()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}
@@ -28,6 +31,10 @@ func (p *Processor) ApplyCodexContracts(ctx context.Context, o Owner, generation
 	}
 	var out []EffectRecord
 	err := p.withSurfaceExecutionGuard(o.SurfaceID, guard, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
 		var e error
 		out, e = p.applyCodexContractsLocked(ctx, o, generation, version, profiles, stillCurrent)
 		return e

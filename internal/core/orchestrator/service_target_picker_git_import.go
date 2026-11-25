@@ -39,11 +39,11 @@ func (s *Service) CompleteTargetPickerGitImport(surfaceSessionID, pickerID, work
 	record.GitFinalPath = workspaceKey
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
 	filtered := filterPickerFollowupEvents(events)
-	if targetPickerNewThreadReady(surface, workspaceKey) {
+	if s.targetPickerOperationReady(surface, workspaceKey, "", events) {
 		status := targetPickerGitImportSuccessStatus(workspaceKey)
 		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 	}
-	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
+	if targetPickerStartedPending(surface, events) && surface.PendingHeadless.PrepareNewThread &&
 		pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == workspaceKey {
 		status := targetPickerGitImportPostCloneProcessingStatus(strings.TrimSpace(record.GitRepoURL), workspaceKey)
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingGitImport, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)

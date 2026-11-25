@@ -439,31 +439,35 @@ func (r *Registry) WithLease(ctx context.Context, v Registration, commit func() 
 	if commit == nil {
 		return fmt.Errorf("lease callback required")
 	}
-	return r.withLeaseTx(ctx, v, func(_ *sql.Tx) error { return commit() })
+	return r.withLeaseTx(ctx, v, func(_ context.Context, _ *sql.Tx) error { return commit() })
 }
 
-func (r *Registry) withLeaseTx(ctx context.Context, v Registration, commit func(*sql.Tx) error) error {
+func (r *Registry) withLeaseTx(ctx context.Context, v Registration, commit func(context.Context, *sql.Tx) error) error {
 	if err := v.validate(); err != nil {
 		return err
 	}
 	if commit == nil {
 		return fmt.Errorf("lease callback required")
 	}
-	tx, err := r.db.BeginTx(ctx, nil)
+	fence, err := r.beginLocalFence(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer fence.close()
+	tx := fence.tx
 	c, o := v.Carrier, v.Owner
 	var count int
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM carriers WHERE instance_id=? AND incarnation=? AND backend=? AND namespace=? AND generation=? AND app=? AND owner_id=? AND epoch=? AND stopped=0`, c.InstanceID, c.Incarnation, c.Backend, c.Namespace, c.Generation, o.Application, o.ID, o.Epoch).Scan(&count)
+	err = tx.QueryRowContext(fence.ctx, `SELECT count(*) FROM carriers WHERE instance_id=? AND incarnation=? AND backend=? AND namespace=? AND generation=? AND app=? AND owner_id=? AND epoch=? AND stopped=0`, c.InstanceID, c.Incarnation, c.Backend, c.Namespace, c.Generation, o.Application, o.ID, o.Epoch).Scan(&count)
 	if err != nil {
 		return err
 	}
 	if count != 1 {
 		return ErrConflict
 	}
-	if err = commit(tx); err != nil {
+	if err = fence.enter(); err != nil {
+		return err
+	}
+	if err = commit(fence.ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -525,7 +529,7 @@ func (r *Registry) ReserveSession(ctx context.Context, reg Registration, session
 	if !canonical(session) {
 		return ErrConflict
 	}
-	return r.withLeaseTx(ctx, reg, func(tx *sql.Tx) error { return reserveSessionTx(ctx, tx, reg, session) })
+	return r.withLeaseTx(ctx, reg, func(local context.Context, tx *sql.Tx) error { return reserveSessionTx(local, tx, reg, session) })
 }
 func reserveSessionTx(ctx context.Context, tx *sql.Tx, reg Registration, session string) error {
 	if err := checkMaintenanceTx(ctx, tx, reg.Carrier.Backend); err != nil {

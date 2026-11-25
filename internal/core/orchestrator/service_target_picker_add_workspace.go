@@ -565,10 +565,10 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 func (s *Service) finishPrivateLocalDirectory(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, record *activeTargetPickerRecord, finalPath string) []eventcontract.Event {
 	events := s.enterTargetPickerNewThread(surface, finalPath)
 	filtered := filterPickerFollowupEvents(events)
-	if targetPickerNewThreadReady(surface, finalPath) {
+	if s.targetPickerOperationReady(surface, finalPath, "", events) {
 		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "工作区已经准备完成，下一条文本会直接开启新会话。", false, filtered)
 	}
-	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
+	if targetPickerStartedPending(surface, events) && surface.PendingHeadless.PrepareNewThread &&
 		pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == normalizeWorkspaceClaimKey(finalPath) {
 		status := targetPickerLocalDirectoryProcessingStatus(finalPath)
 		processing := s.startTargetPickerProcessingWithSections(

@@ -54,18 +54,24 @@ func testPrivateRealCodexTwoTurns(t *testing.T, ctx context.Context, r *applicat
 			}
 		}
 		click := platformingress.HumanInteractionEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", EventID: "real-model-select", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, ChatID: "private-chat", MessageID: card.MessageID, Kind: "card", Values: value, Form: map[string]any{"command_args_model_preset": model}, ReceivedAt: time.Now()}
-		if _, err := r.hook.ReceiveInteractionResponse(ctx, click); err != nil {
+		reply, err := r.hook.ReceiveInteractionResponse(ctx, click)
+		if err != nil {
 			t.Fatal(err)
 		}
+		// A user continues on the saved feedback, not a settings database read.
 		for {
-			settings, err := app.readPrivateBotSettings("gateway", "app")
-			if err == nil && settings.Record.PromptOverride.Model == model {
+			visible := strings.Contains(string(reply.RawBody), "已更新飞书临时模型覆盖")
+			for _, op := range gateway.snapshotOperations()[before:] {
+				body, _ := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
+				visible = visible || strings.Contains(string(body), "已更新飞书临时模型覆盖")
+			}
+			if visible {
 				break
 			}
 			select {
 			case <-ctx.Done():
-				t.Fatal("model selection did not persist")
-			case <-time.After(100 * time.Millisecond):
+				t.Fatal("model selection never displayed saved feedback")
+			case <-time.After(20 * time.Millisecond):
 			}
 		}
 	}
@@ -78,15 +84,51 @@ func testPrivateRealCodexTwoTurns(t *testing.T, ctx context.Context, r *applicat
 	if os.Getenv("PRIVATE_REAL_CODEX_TOOLS") == "1" {
 		prompts = append(prompts, "请使用工具在当前工作目录创建文件 uat-proof.txt，文件内容恰为 PRIVATE_UAT_OK。再实际读取这个文件核对内容。完成后只回复 BOREAL。")
 	}
-	var session, previousTurn string
+	type observedInput struct {
+		id   string
+		from int
+	}
+	var observed []observedInput
+	seenFinal := map[string]bool{}
+	// Drive the whole conversation by the visible reply. Durable evidence is
+	// checked only after all human inputs; it must never pace the next message.
 	for i, prompt := range prompts {
-		before = len(gateway.snapshotOperations())
+		from := len(gateway.snapshotOperations())
 		raw.EventID = fmt.Sprintf("real-two-turn-%d", i+1)
 		raw.MessageID = raw.EventID
 		raw.RawContent = fmt.Sprintf(`{"text":%q}`, prompt)
 		if err := r.hook.Receive(ctx, raw); err != nil {
 			t.Fatalf("turn %d SDK admission: %v", i+1, err)
 		}
+		observed = append(observed, observedInput{raw.EventID, from})
+		for {
+			displayed := false
+			for _, op := range gateway.snapshotOperations()[from:] {
+				if op.MessageID != "" && op.ReplyToMessageID == raw.MessageID && !seenFinal[op.MessageID] && strings.EqualFold(strings.TrimSpace(op.FinalSourceBody()), "BOREAL") {
+					seenFinal[op.MessageID] = true
+					displayed = true
+					break
+				}
+			}
+			if displayed {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				for _, op := range gateway.snapshotOperations()[from:] {
+					if body := op.FinalSourceBody(); body != "" {
+						t.Logf("observed final source=%q message=%q body=%.500q", op.ReplyToMessageID, op.MessageID, body)
+					}
+				}
+				t.Fatalf("turn %d had no corresponding visible BOREAL reply", i+1)
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
+	var session, previousTurn string
+	for i, input := range observed {
+		before = input.from
+		raw.EventID = input.id
 		for {
 			var command string
 			e := db.QueryRowContext(ctx, `SELECT d.command_id FROM dispatch d JOIN dispatch_input di ON di.dispatch_id=d.id JOIN ingress i ON i.seq=di.seq WHERE i.event_id=?`, raw.EventID).Scan(&command)

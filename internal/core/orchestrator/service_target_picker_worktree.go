@@ -148,13 +148,13 @@ func (s *Service) CompleteTargetPickerWorktreeCreate(surfaceSessionID, pickerID,
 	pendingText := s.takePendingTextInput(surface)
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
 	filtered := filterPickerFollowupEvents(events)
-	if targetPickerNewThreadReady(surface, workspaceKey) {
+	if s.targetPickerOperationReady(surface, workspaceKey, "", events) {
 		status := targetPickerWorktreeCreateSuccessStatus(workspaceKey)
 		result := s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 		return append(result, s.replayPendingTextInput(surface, pendingText)...)
 	}
 	restorePendingTextInput(surface, pendingText)
-	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
+	if targetPickerStartedPending(surface, events) && surface.PendingHeadless.PrepareNewThread &&
 		pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == workspaceKey {
 		status := targetPickerWorktreeCreatePostCreateProcessingStatus(strings.TrimSpace(record.WorktreeBranchName), workspaceKey)
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingWorktreeCreate, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)

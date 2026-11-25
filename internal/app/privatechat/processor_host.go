@@ -44,6 +44,11 @@ func (p *Processor) applyHostReceipt(ctx context.Context, o Owner, generation in
 	defer unlockReference()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}

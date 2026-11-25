@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"runtime"
+	"strings"
 	"sync/atomic"
 )
 
@@ -90,7 +92,35 @@ func (s Snapshot) JSON() json.RawMessage { raw, _ := json.Marshal(s); return raw
 // does not manufacture cmd.Wait or a requested stop. Complete group/job
 // inspection is still required independently for descendants.
 func (s *Scope) ObserveRootExit(ctx context.Context) error {
+	// Linux scope snapshots historically contain only /proc start ticks, not
+	// the boot-qualified identity expected by WaitProcessExit. Comparing the
+	// two would incorrectly classify a live process as exited.
+	if runtime.GOOS == "linux" {
+		return fmt.Errorf("Linux scope exit requires frozen carrier boot identity")
+	}
 	if err := WaitProcessExit(ctx, ProcessIdentity{Platform: s.Inspect().Platform, PID: s.pid, StartIdentity: s.identity}); err != nil {
+		return err
+	}
+	s.exitVerified.Store(true)
+	return nil
+}
+
+// ObserveRootExitWithCarrier reconstructs the Linux boot component omitted
+// from historical scope snapshots from the exact wrapper identity. The scope
+// still requires a separate complete, empty group/job inspection afterward.
+func (s *Scope) ObserveRootExitWithCarrier(ctx context.Context, carrier ProcessIdentity) error {
+	if s == nil || carrier.Platform != runtime.GOOS || carrier.StartIdentity == "" {
+		return fmt.Errorf("carrier identity required")
+	}
+	identity := s.identity
+	if runtime.GOOS == "linux" {
+		boot, _, ok := strings.Cut(carrier.StartIdentity, ":")
+		if !ok || boot == "" {
+			return fmt.Errorf("carrier boot identity required")
+		}
+		identity = boot + ":" + identity
+	}
+	if err := WaitProcessExit(ctx, ProcessIdentity{Platform: carrier.Platform, PID: s.pid, StartIdentity: identity}); err != nil {
 		return err
 	}
 	s.exitVerified.Store(true)

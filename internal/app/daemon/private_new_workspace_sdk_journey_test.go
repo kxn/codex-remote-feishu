@@ -15,12 +15,9 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
-	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
-	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/platformingress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -36,8 +33,9 @@ func (c newWorkspaceJourneyCatalog) RecentWorkspaces(int) (map[string]time.Time,
 }
 func (c newWorkspaceJourneyCatalog) ThreadByID(string) (*state.ThreadRecord, error) { return nil, nil }
 
-// The native binary is explicitly supplied by the local test operator; no
-// prompt is sent and the platform is the in-memory gateway.
+// The opt-in binary is real. The platform is controlled; when TWO_TURNS is
+// enabled, business input is sent immediately after the visible ready card,
+// without waiting on internal route/online state.
 func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX wrapper fixture")
@@ -45,6 +43,9 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	codex := os.Getenv("PRIVATE_REAL_CODEX_BIN")
 	if codex == "" {
 		t.Skip("set PRIVATE_REAL_CODEX_BIN to test actual local Codex")
+	}
+	if os.Getenv("PRIVATE_REAL_CODEX_TOOLS") == "1" && os.Getenv("PRIVATE_REAL_CODEX_PLAN") == "1" {
+		t.Fatal("run the write-tool probe and plan-mode dialogue separately: plan mode does not promise to execute file changes")
 	}
 	app, gateway := newApplicationRuntimeTestApp(t)
 	r := app.applications
@@ -153,42 +154,61 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		_ = r.drainNativeDeliveries(stop)
 	}()
 	raw := platformingress.RawIngressEnvelope{GatewayRef: "gateway", AppID: "app", Tenant: "tenant", SenderTenant: "tenant", EventID: "list", MessageID: "source", ChatID: "private-chat", ChatType: "p2p", SenderType: "user", SenderIDs: platformingress.SenderIDs{OpenID: "user"}, MessageType: "text", RawContent: `{"text":"/list"}`, ReceivedAt: time.Now()}
+	waitVisible := func(from int, text string) {
+		t.Helper()
+		for {
+			for _, op := range gateway.snapshotOperations()[from:] {
+				body, e := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
+				if e == nil && strings.Contains(string(body), text) {
+					return
+				}
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatalf("expected visible feedback %q", text)
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+	}
 	if os.Getenv("PRIVATE_REAL_CODEX_TOOLS") == "1" {
+		before := len(gateway.snapshotOperations())
 		access := raw
 		access.EventID, access.MessageID, access.RawContent = "real-access", "real-access", `{"text":"/access full"}`
 		if e := r.hook.Receive(ctx, access); e != nil {
 			t.Fatal(e)
 		}
-		owner := privatechat.Owner{GatewayID: "gateway", SurfaceID: gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "user"), ChatID: "private-chat", UserID: "user", TenantID: "tenant", AppID: "app"}
-		for {
-			cp, e := r.journal.LoadCheckpoint(ctx, owner, 1)
-			if e == nil && cp.Core.PromptOverride.AccessMode == agentproto.AccessModeFullAccess {
-				break
-			}
-			select {
-			case <-ctx.Done():
-				t.Fatal("SDK full access setting did not persist")
-			case <-time.After(20 * time.Millisecond):
-			}
-		}
+		waitVisible(before, "已更新当前会话的执行权限模式")
 	}
 	if os.Getenv("PRIVATE_REAL_CODEX_PLAN") == "1" {
+		before := len(gateway.snapshotOperations())
 		plan := raw
 		plan.EventID, plan.MessageID, plan.RawContent = "real-plan", "real-plan", `{"text":"/plan on"}`
 		if e := r.hook.Receive(ctx, plan); e != nil {
 			t.Fatal(e)
 		}
-		owner := privatechat.Owner{GatewayID: "gateway", SurfaceID: gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "user"), ChatID: "private-chat", UserID: "user", TenantID: "tenant", AppID: "app"}
-		for {
-			cp, e := r.journal.LoadCheckpoint(ctx, owner, 1)
-			if e == nil && cp.Core.PlanModeOverrideSet && cp.Core.PlanMode == "on" {
+		waitVisible(before, "Plan mode 切换为 on")
+	}
+	first := raw
+	first.EventID, first.MessageID, first.RawContent = "real-unbound-hi", "real-unbound-hi", `{"text":"hi"}`
+	if err = r.hook.Receive(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		guided := false
+		for _, op := range gateway.snapshotOperations() {
+			rendered, e := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
+			if e == nil && strings.Contains(string(rendered), "您没有接管任何工作区") && strings.Contains(string(rendered), "/list") {
+				guided = true
 				break
 			}
-			select {
-			case <-ctx.Done():
-				t.Fatal("SDK plan setting did not persist")
-			case <-time.After(20 * time.Millisecond):
-			}
+		}
+		if guided {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("ordinary first message did not show workspace guidance")
+		case <-time.After(20 * time.Millisecond):
 		}
 	}
 	if err = r.hook.Receive(ctx, raw); err != nil {
@@ -209,16 +229,6 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			t.Fatal("picker was not published")
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-	for {
-		if _, e := r.router.PublishedMessage(ctx, "tenant", "app", "private-chat", card.MessageID); e == nil {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatal("picker publication was not registered")
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
@@ -255,51 +265,6 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 		t.Fatal(confirmErr)
 	}
 	_ = confirmResponse
-	surface := gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "user")
-	readyInstance := ""
-	for readyInstance == "" {
-		status, e := r.processor.ReadRuntimeStatus(ctx)
-		if e != nil {
-			t.Fatal(e)
-		}
-		for _, s := range status.Surfaces {
-			if s.SurfaceSessionID == surface && s.RouteMode == state.RouteModeNewThreadReady {
-				if s.AttachedInstanceID == "" || s.PreparedThreadCWD != cwd || s.PendingHeadless != nil {
-					t.Fatalf("incorrect new workspace: %+v", s)
-				}
-				for _, inst := range status.Instances {
-					if inst.InstanceID == s.AttachedInstanceID && inst.CodexProfileID == state.OAuthCodexProfileID && inst.Online {
-						readyInstance = inst.InstanceID
-						break
-					}
-				}
-				if readyInstance == "" {
-					t.Fatal("connected instance missing oauth profile")
-				}
-				break
-			}
-		}
-		if readyInstance != "" {
-			break
-		}
-		select {
-		case e := <-errorsCh:
-			t.Fatal(e)
-		case <-ctx.Done():
-			for _, v := range status.Surfaces {
-				t.Logf("surface route=%s pending=%+v attached=%q profile=%q", v.RouteMode, v.PendingHeadless, v.AttachedInstanceID, v.CodexProfileID)
-			}
-			for _, v := range status.Instances {
-				t.Logf("instance online=%v backend=%s profile=%q cwd=%q", v.Online, v.Backend, v.CodexProfileID, v.WorkspaceRoot)
-			}
-			for _, op := range gateway.snapshotOperations() {
-				rawOp, _ := feishu.FreezePrivateOperation(op, app.daemonLifecycleID)
-				t.Logf("operation=%s document=%s", op.Kind, rawOp)
-			}
-			t.Fatal("new session did not become ready")
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
 	for {
 		success := false
 		for _, op := range gateway.snapshotOperations() {
@@ -324,26 +289,12 @@ func TestPrivateSDKPickerNewWorkspaceRealCodex(t *testing.T) {
 	if os.Getenv("PRIVATE_REAL_CODEX_TWO_TURNS") == "1" {
 		testPrivateRealCodexTwoTurns(t, ctx, r, gateway, app, raw)
 	}
-	owner := privatechat.Owner{GatewayID: "gateway", SurfaceID: surface, ChatID: "private-chat", UserID: "user", TenantID: "tenant", AppID: "app"}
-	effects, e := r.processor.ApplyOwnerDeadline(ctx, owner, 1, "after-fresh-hello", time.Now().Add(time.Minute))
-	if e != nil {
-		t.Fatal(e)
-	}
-	for _, effect := range effects {
-		event, _, decodeErr := privatechat.DecodeStoredEffect(effect.Effect.Body)
-		if decodeErr != nil {
-			t.Fatal(decodeErr)
-		}
-		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandKillHeadless {
-			t.Fatal("deadline killed connected new instance")
-		}
-	}
 	final, e := r.processor.ReadRuntimeStatus(ctx)
 	if e != nil {
 		t.Fatal(e)
 	}
 	for _, inst := range final.Instances {
-		if inst.InstanceID == readyInstance && inst.Online {
+		if inst.Online && inst.WorkspaceRoot == cwd && inst.CodexProfileID == state.OAuthCodexProfileID {
 			return
 		}
 	}

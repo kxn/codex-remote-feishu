@@ -96,6 +96,9 @@ func TestMCPOAuthLoginErrorEmitsSystemError(t *testing.T) {
 	if len(result.Events) != 1 || result.Events[0].Kind != agentproto.EventSystemError || result.Events[0].Problem == nil {
 		t.Fatalf("expected system error event, got %#v", result.Events)
 	}
+	if result.Events[0].CommandID != "cmd-oauth-1" || result.Events[0].RequestID != "relay-mcp-oauth-login-0" {
+		t.Fatalf("error lost exact command/request correlation: %+v", result.Events[0])
+	}
 	if result.Events[0].Problem.Code != "mcp_oauth_login_failed" || !strings.Contains(result.Events[0].Problem.Details, "streamable HTTP") {
 		t.Fatalf("unexpected problem: %#v", result.Events[0].Problem)
 	}

@@ -52,6 +52,11 @@ func (p *Processor) ApplyNativeConnected(ctx context.Context, l *NativeLease, co
 	}
 	var out []EffectRecord
 	err := l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		var err error
 		out, err = p.applyNativeConnectedLocked(ctx, l, connectionID, "", 0)
 		return err
@@ -81,6 +86,11 @@ func (p *Processor) ApplyAuthenticatedNativeHello(ctx context.Context, l *Native
 	helloHash := hex.EncodeToString(digest[:])
 	var out []EffectRecord
 	err = l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		if len(profiles) == 1 {
 			p.app.Service().SetPrivateNativeProfiles(l.surface.SurfaceID, profiles[0])
 		}

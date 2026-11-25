@@ -14,6 +14,11 @@ func (p *Processor) RefreshBotSettings(ctx context.Context, o Owner, generation 
 	defer unlockReference()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}

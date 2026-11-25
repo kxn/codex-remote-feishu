@@ -27,7 +27,7 @@ func (targetPickerWorkspaceCreatePathPickerConsumer) PathPickerConfirmed(s *Serv
 		return notice(surface, "workspace_create_invalid", "目录路径无效，请重新选择。")
 	}
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
-	if targetPickerNewThreadReady(surface, workspaceKey) {
+	if s.targetPickerOperationReady(surface, workspaceKey, "", events) {
 		s.clearTargetPickerRuntime(surface)
 	}
 	return events

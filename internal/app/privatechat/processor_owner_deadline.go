@@ -42,6 +42,11 @@ func (p *Processor) ApplyOwnerDeadline(ctx context.Context, o Owner, generation 
 	defer unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}
@@ -95,6 +100,11 @@ func (p *Processor) ApplyOwnerLaunchExit(ctx context.Context, o Owner, generatio
 	defer unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return nil, ErrProcessorPoisoned
 	}

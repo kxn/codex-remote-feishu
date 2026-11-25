@@ -19,6 +19,11 @@ func (p *Processor) ApplyProfileCatalog(ctx context.Context, catalog ProfileCata
 	defer unlockReference()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	projectionCtx, projectionErr := beginProjection(ctx)
+	if projectionErr != nil {
+		return projectionErr
+	}
+	ctx = projectionCtx
 	if p.poisoned {
 		return ErrProcessorPoisoned
 	}

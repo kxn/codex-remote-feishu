@@ -12,6 +12,16 @@ import (
 )
 
 func TestNativeOAuthTranslatorRequiresPersistedRequestProof(t *testing.T) {
+	for _, tc := range []struct{ name, response, outcome string }{
+		{"accepted", `{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent"}}`, "accepted"},
+		{"rejected", `{"id":"relay-mcp-oauth-login-0","error":{"message":"OAuth is unavailable"}}`, "failed"},
+		{"empty URL", `{"id":"relay-mcp-oauth-login-0","result":{}}`, "failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) { testNativeOAuthTranslatorRequestProof(t, tc.response, tc.outcome) })
+	}
+}
+
+func testNativeOAuthTranslatorRequestProof(t *testing.T, response, outcome string) {
 	ctx := t.Context()
 	j, err := OpenJournal(filepath.Join(t.TempDir(), "db"))
 	if err != nil {
@@ -37,7 +47,7 @@ func TestNativeOAuthTranslatorRequiresPersistedRequestProof(t *testing.T) {
 	if _, err = tr.TranslateCommand(cmd); err != nil {
 		t.Fatal(err)
 	}
-	result, err := tr.ObserveServer([]byte(`{"id":"relay-mcp-oauth-login-0","result":{"authorization_url":"https://auth.example/consent"}}`))
+	result, err := tr.ObserveServer([]byte(response))
 	if err != nil || len(result.Events) != 1 {
 		t.Fatalf("response: %+v %v", result, err)
 	}
@@ -64,7 +74,7 @@ func TestNativeOAuthTranslatorRequiresPersistedRequestProof(t *testing.T) {
 	if err = lease.ResolveNativeDispatch(ctx, NativeEventRef{"inc", 1, hash}); err != nil {
 		t.Fatal(err)
 	}
-	if state, _ := j.DispatchState(ctx, dispatch.ID); state != "accepted" {
+	if state, _ := j.DispatchState(ctx, dispatch.ID); state != outcome {
 		t.Fatalf("native response did not resolve unknown write: %s", state)
 	}
 }

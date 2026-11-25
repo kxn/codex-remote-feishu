@@ -25,6 +25,11 @@ func (p *Processor) ApplyNativeDisconnect(ctx context.Context, l *NativeLease, c
 	}
 	ref := disconnectRef{Incarnation: l.native.CarrierIncarnation, ConnectionID: connectionID}
 	err = l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		var revision int64
 		e := p.journal.db.QueryRowContext(ctx, `SELECT revision FROM private_disconnect_applied WHERE incarnation=? AND connection_id=?`, ref.Incarnation, ref.ConnectionID).Scan(&revision)
 		if e == nil {

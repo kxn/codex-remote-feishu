@@ -39,6 +39,11 @@ func (p *Processor) ApplyLiveNative(ctx context.Context, l *NativeLease, event a
 	}
 	ref := liveEffectRef{Incarnation: event.Live.CarrierIncarnation, Sequence: int64(event.Live.Sequence), Hash: hash}
 	err = l.with(ctx, func() error {
+		ctx, projectionErr := beginProjection(ctx)
+		if projectionErr != nil {
+			return projectionErr
+		}
+
 		var oldHash string
 		var revision int64
 		e := p.journal.db.QueryRowContext(ctx, `SELECT payload_hash,revision FROM private_live_applied WHERE incarnation=? AND sequence=?`, ref.Incarnation, ref.Sequence).Scan(&oldHash, &revision)

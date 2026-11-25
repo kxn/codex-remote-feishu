@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -44,6 +45,15 @@ func TestPrivateHostStoreProtectsCarrierAcrossReopen(t *testing.T) {
 		t.Fatal("legacy takeover accepted")
 	}
 	h.PrivateNativeProtocolVersion = 1
+	// Reopen the existing v1 schema, including its exact opaque record and
+	// credential hash. Migration must not decode/rewrite either payload.
+	var recordBefore, credentialBefore []byte
+	if err = s.db.QueryRow(`SELECT record,credential_hash FROM carriers WHERE instance='instance'`).Scan(&recordBefore, &credentialBefore); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec(`PRAGMA user_version=1`); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +62,14 @@ func TestPrivateHostStoreProtectsCarrierAcrossReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	var version int
+	if err = s.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 2 {
+		t.Fatalf("host schema version %d: %v", version, err)
+	}
+	var recordAfter, credentialAfter []byte
+	if err = s.db.QueryRow(`SELECT record,credential_hash FROM carriers WHERE instance='instance'`).Scan(&recordAfter, &credentialAfter); err != nil || !bytes.Equal(recordBefore, recordAfter) || !bytes.Equal(credentialBefore, credentialAfter) {
+		t.Fatalf("migration changed carrier evidence or credentials: %v", err)
+	}
 	if err = s.authorize(h, secret); err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +89,24 @@ func TestPrivateHostStoreProtectsCarrierAcrossReopen(t *testing.T) {
 	}
 	if _, err = s.prepare(ctx, rec); err == nil {
 		t.Fatal("duplicate carrier accepted")
+	}
+}
+
+func TestPrivateHostStoreRejectsNewerVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "host.db")
+	s, err := openPrivateNativeHostStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec(`PRAGMA user_version=3`); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if unexpected, err := openPrivateNativeHostStore(path); err == nil {
+		unexpected.Close()
+		t.Fatal("newer carrier evidence version was opened by an older reader")
 	}
 }
 

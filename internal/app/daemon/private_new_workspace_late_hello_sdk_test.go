@@ -145,8 +145,9 @@ func TestPrivateSDKCancelledAuthenticatedHelloCannotReplaceNextWorkspace(t *test
 			t.Fatal(e)
 		}
 	}
-	selectWorkspace := func(prefix, skip string) string {
+	selectWorkspace := func(prefix, skip string, awaitReady bool) string {
 		t.Helper()
+		before := len(gateway.snapshotOperations())
 		send(prefix+"-list", "/list")
 		var card feishu.Operation
 		for card.MessageID == "" {
@@ -167,16 +168,6 @@ func TestPrivateSDKCancelledAuthenticatedHelloCannotReplaceNextWorkspace(t *test
 			select {
 			case <-ctx.Done():
 				t.Fatal("picker not published")
-			case <-time.After(20 * time.Millisecond):
-			}
-		}
-		for {
-			if _, e := r.router.PublishedMessage(ctx, "tenant", "app", "private-chat", card.MessageID); e == nil {
-				break
-			}
-			select {
-			case <-ctx.Done():
-				t.Fatal("picker not registered")
 			case <-time.After(20 * time.Millisecond):
 			}
 		}
@@ -207,12 +198,17 @@ func TestPrivateSDKCancelledAuthenticatedHelloCannotReplaceNextWorkspace(t *test
 		if click.Values == nil {
 			t.Fatal("missing confirm")
 		}
-		if _, e = r.hook.ReceiveInteractionResponse(ctx, click); e != nil {
+		response, e := r.hook.ReceiveInteractionResponse(ctx, click)
+		if e != nil {
 			t.Fatal(e)
+		}
+		if awaitReady && !strings.Contains(string(response.RawBody), "已进入新会话待命") {
+			u := sdkJourneyUser{t: t, ctx: ctx, gateway: gateway, errors: errorsCh, cwd: cwd}
+			u.waitVisible(app, before, "已进入新会话待命")
 		}
 		return card.MessageID
 	}
-	firstCard := selectWorkspace("first", "")
+	firstCard := selectWorkspace("first", "", false)
 	var old capturedHello
 	select {
 	case old = <-captured:
@@ -222,67 +218,20 @@ func TestPrivateSDKCancelledAuthenticatedHelloCannotReplaceNextWorkspace(t *test
 	if !old.meta.PrivateAuthenticated || old.meta.ConnectionID == 0 {
 		t.Fatal("first hello lacked authentication")
 	}
-	surface := gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "user")
+	u := sdkJourneyUser{t: t, ctx: ctx, gateway: gateway, errors: errorsCh, cwd: cwd}
+	before := len(gateway.snapshotOperations())
 	send("detach", "/detach")
-	for {
-		status, e := r.processor.ReadRuntimeStatus(ctx)
-		if e != nil {
-			t.Fatal(e)
-		}
-		detached := false
-		for _, s := range status.Surfaces {
-			if s.SurfaceSessionID == surface && s.PendingHeadless == nil && s.AttachedInstanceID == "" {
-				detached = true
-			}
-		}
-		if detached {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatal("detach not applied")
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
-	selectWorkspace("second", firstCard)
-	var next string
-	for next == "" {
-		status, e := r.processor.ReadRuntimeStatus(ctx)
-		if e != nil {
-			t.Fatal(e)
-		}
-		for _, s := range status.Surfaces {
-			if s.SurfaceSessionID == surface && s.RouteMode == state.RouteModeNewThreadReady && s.AttachedInstanceID != "" && s.AttachedInstanceID != old.hello.Instance.InstanceID {
-				next = s.AttachedInstanceID
-			}
-		}
-		if next != "" {
-			break
-		}
-		select {
-		case e := <-errorsCh:
-			t.Fatal(e)
-		case <-ctx.Done():
-			t.Fatal("second carrier not ready")
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
+	u.waitVisible(app, before, "已取消")
+	selectWorkspace("second", firstCard, true)
 	releaseOnce.Do(func() { close(release) })
 	select {
 	case <-lateDone:
 	case <-ctx.Done():
 		t.Fatal("old authenticated callback was not executed")
 	}
-	status, e := r.processor.ReadRuntimeStatus(ctx)
-	if e != nil {
-		t.Fatal(e)
-	}
-	for _, s := range status.Surfaces {
-		if s.SurfaceSessionID == surface && (s.AttachedInstanceID != next || s.PendingHeadless != nil) {
-			t.Fatalf("late hello changed new session: %+v", s)
-		}
-	}
+	before = len(gateway.snapshotOperations())
 	send("after-late", "hi")
+	u.waitFinal(app, before, "after-late", "done")
 	for {
 		data, e := os.ReadFile(trace)
 		if e == nil && strings.Contains(string(data), `"method":"turn/start"`) {
@@ -294,6 +243,16 @@ func TestPrivateSDKCancelledAuthenticatedHelloCannotReplaceNextWorkspace(t *test
 		case <-ctx.Done():
 			t.Fatal("new session did not accept input")
 		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	status, err := r.processor.ReadRuntimeStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	surface := gatewaypkg.SurfaceIDForInbound("gateway", "", "p2p", "user")
+	for _, s := range status.Surfaces {
+		if s.SurfaceSessionID == surface && (s.AttachedInstanceID == "" || s.AttachedInstanceID == old.hello.Instance.InstanceID || s.PendingHeadless != nil) {
+			t.Fatalf("late hello changed the new session: %+v", s)
 		}
 	}
 }

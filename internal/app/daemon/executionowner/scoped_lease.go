@@ -42,8 +42,8 @@ func (r *Registry) WithScopedLease(ctx context.Context, reg Registration, commit
 	if commit == nil {
 		return fmt.Errorf("lease callback required")
 	}
-	return r.withLeaseTx(ctx, reg, func(tx *sql.Tx) error {
-		lease := &Lease{registration: reg, open: true, ctx: ctx, tx: tx}
+	return r.withLeaseTx(ctx, reg, func(local context.Context, tx *sql.Tx) error {
+		lease := &Lease{registration: reg, open: true, ctx: local, tx: tx}
 		defer func() { lease.mu.Lock(); lease.open = false; lease.mu.Unlock() }()
 		return commit(lease)
 	})

@@ -35,7 +35,15 @@ func (c *Coordinator) observeUnknown(ctx context.Context, v Record) error {
 		if err == nil {
 			defer scope.Close()
 			wait, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-			err = scope.ObserveRootExit(wait)
+			if step.Scope.Platform == "linux" {
+				if v.HostBootIdentity == "" {
+					err = fmt.Errorf("installer boot identity unavailable")
+				} else {
+					err = scope.ObserveRootExitWithCarrier(wait, hostinventory.ProcessIdentity{Platform: step.Scope.Platform, StartIdentity: v.HostBootIdentity + ":" + step.Scope.RootIdentity})
+				}
+			} else {
+				err = scope.ObserveRootExit(wait)
+			}
 			cancel()
 			if err == nil {
 				snapshot := scope.Inspect()

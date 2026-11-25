@@ -13,7 +13,7 @@ type surfaceInstanceCompatibility struct {
 }
 
 func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) surfaceInstanceCompatibility {
-	if inst == nil {
+	if inst == nil || s.privateInstanceStopping(inst.InstanceID) {
 		return surfaceInstanceCompatibility{}
 	}
 	observed := state.ObservedInstanceBackendContract(inst)
