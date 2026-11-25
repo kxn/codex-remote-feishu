@@ -355,3 +355,7 @@ reader fence 已有实际旧代码证明：从修复前 `cb7a0a45` 导出完整�
 - 真正的 ephemeral API 差异已修复并单独验证：临时 child 的 read(true)／Goal 请求不能套用普通持久线程的成功结果；关闭检查核 read(false) 真 idle 与精确 unsupported Goal 及本地两帧证明，不把任意 error 当空闲。
 
 最终清理后的统一检查：`go test -json ./... -count=1` 通过，122 个有测试包、daemon 213.6 秒（`/tmp/private-review-final-all-v3.jsonl`）；Codex adapter、privatechat、executionowner、wrapper／hostinventory／runtimejournal 六包整包 race 通过（`/tmp/private-review-final-components-race-v3.log`）；Windows 全仓生产构建通过（`/tmp/private-review-final-windows-v3.log`）。提交前完整 pre-commit 含文件长度 gate 通过，测试路径提示为既有非阻断项。真实飞书客户端视觉效果仍不是受控平台与真实模型探针的覆盖范围。
+
+core/control、orchestrator、nativeinspection 三包整包 race 也通过（`/tmp/private-review-final-core-race.log`）。审阅修复提交 `a1ab1439` 已按 safe-push 推送，并用 local-upgrade 部署到单一 stable／codex-remote.service：事务 committed，版本 `local-06b0938e7997`，实际 PID `2560238`。进程 `/proc/2560238/exe`、安装二进制与升级 artifact 的 SHA-256 均为 `06b0938e7997752cd5891ab5516558c4256122680237af11ea2d5ccbbb27a902`。
+
+现场 healthz=ok、六 gateway connected、团队运行时可用，私人读取无错误，原 parent 的 pinned／normal 导航保留且无 active／queued／pending launch。实际聊天 journal 为 schema 10，宿主库仍为2，配置 SHA 与升级前相同；没有手改业务数据库或发送伪造真人消息。升级前保留14个数据库各自一致快照及配置，定位 `/tmp/private-review-predeploy-location.json`；它们不是跨库原子快照，旧v9二进制回退须配合对应数据快照，不能强行降低版本。现场证据 `/tmp/private-review-upgrade.log`、`/tmp/private-review-deployed-runtime.json`、`/tmp/private-review-deployed-daemon.log`，新进程日志无 poison、panic、fatal 或失败。构建产生的两份 shim 文件仅恢复生成改动。
