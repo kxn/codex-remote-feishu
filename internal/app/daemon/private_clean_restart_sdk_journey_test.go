@@ -24,6 +24,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/privatechat"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/platformingress"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -245,7 +246,15 @@ func testPrivateSDKCleanShutdownRestoresSelectedSession(t *testing.T, queuedAtSh
 	}
 	wait("staged image", func() bool {
 		cp, e := r.journal.LoadCheckpoint(ctx, o, epoch)
-		return e == nil && len(cp.Core.StagedImages) > 0
+		if e != nil {
+			return false
+		}
+		for _, staged := range cp.Core.StagedImages {
+			if staged != nil && staged.SourceMessageID == "restart-image" && staged.State == state.ImageStaged {
+				return true
+			}
+		}
+		return false
 	})
 	if frozenUnstarted {
 		if err = r.stopWorkers(ctx); err != nil {
@@ -256,13 +265,26 @@ func testPrivateSDKCleanShutdownRestoresSelectedSession(t *testing.T, queuedAtSh
 		if e != nil {
 			t.Fatal(e)
 		}
+		entries, e := r.journal.Pending(ctx, o, epoch, "input", 0, 1000)
+		if e != nil {
+			t.Fatal(e)
+		}
 		var seq int64
-		for _, item := range page {
-			if item.Owner == o && item.Generation == epoch && item.Lane == "input" {
-				seq = item.Sequence
+		for _, entry := range entries {
+			if entry.Ingress.EventID == "frozen-before-shutdown" {
+				seq = entry.Sequence
 			}
 		}
-		if seq == 0 {
+		foundPending := false
+		for _, item := range page {
+			if item.Owner == o && item.Generation == epoch && item.Lane == "input" {
+				if item.Sequence < seq {
+					t.Fatalf("earlier input %d remains pending before frozen input %d", item.Sequence, seq)
+				}
+				foundPending = foundPending || item.Sequence == seq
+			}
+		}
+		if seq == 0 || !foundPending {
 			t.Fatal("missing durable frozen input")
 		}
 		effects, e := r.processor.ApplyIngress(ctx, o, epoch, seq)
